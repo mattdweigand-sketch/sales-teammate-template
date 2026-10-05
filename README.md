@@ -3,24 +3,33 @@
 A reusable sales agent system with five workspaces, 18 named workflows, one-pass onboarding and fictional examples.
 Salesforce holds records. Gmail, Calendar and transcripts provide evidence. Exact approval and native readback govern external writes.
 
-Start with [onboarding](_core/onboarding/CONTEXT.md). The template ships unconfigured. Local setup creates a separate demo or configured workspace.
+The template ships unconfigured. Onboarding makes a separate copy with your settings and leaves this template reusable.
 The [build specification](_core/template-spec.md) defines scope and acceptance. The [adapter guide](_core/onboarding/adapters.md) explains live prerequisites and mapping.
 
-## Quick start
+## Get started
 
-Use Python 3.12. Keep environments, answers and run artifacts outside the repository.
+Open this repository with a coding agent that can read files and run local commands. Give it this request.
 
-```bash
-python3.12 -m venv /absolute/sales-venv
-/absolute/sales-venv/bin/python -m pip install -r _core/requirements.txt
-cp _core/onboarding/answers.example.json /absolute/answers.json
-# Edit the answer file once, then instantiate at an absent destination.
-/absolute/sales-venv/bin/python -B _core/scripts/onboard.py setup --answers /absolute/answers.json --destination /absolute/my-sales-workspace
-/absolute/sales-venv/bin/python -B _core/scripts/onboard.py check --workspace /absolute/my-sales-workspace
+```text
+Help me set up this Sales Teammate template.
+Read AGENTS.md and _core/onboarding/CONTEXT.md.
+Ask whether I want a fictional demo or a workspace for my company.
+Collect the remaining setup answers together and explain unfamiliar fields.
+Create a separate workspace folder, prepare Python, and run setup and check.
+Keep my answers and run outputs outside the template and the new workspace.
+Show me the result and the remaining steps before live use.
 ```
 
-Omit --answers for the flat interactive questionnaire. Use demo mode for reserved domains and fictional IDs.
-Configured mode saves actual setup values but does not verify connectors, install agents or activate automations. Follow the adapter guide before live use.
+Choose **demo** to explore the workflows with fictional settings. Choose **configured** to supply your company, identity, product, sales targets and integration mappings.
+The agent uses the [questionnaire](_core/onboarding/questionnaire.md) and saves the answers for setup. You do not need to edit JSON by hand.
+
+You receive a separate folder containing the five workspace definitions, your settings and 18 workflow pointer files.
+A successful local check reports 18 routes and an empty errors list. It reports `external_ready` as false because this check only validates local setup.
+
+For live use, follow the [adapter guide](_core/onboarding/adapters.md) to verify connections and load the workflows in your agent runtime.
+Creating actual teammates and enabling schedules are separate deployment steps. The included runtime instructions target Perplexity Computer.
+
+If you prefer terminal setup, the [onboarding guide](_core/onboarding/CONTEXT.md#terminal-demo) provides a runnable demo and explains each step.
 
 ## Workspaces
 
@@ -38,11 +47,12 @@ Run artifacts, customer material and credentials stay outside Git. All example d
 
 ## Verification
 
-Run the regression suite in the prepared environment from the checkout.
+For maintainers, run these commands from the template checkout after preparing the Python environment in the onboarding guide.
+The rehearsal folder must not already exist.
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s _core/tests
-python -B _core/scripts/rehearse.py --scratch /absolute/absent-sales-rehearsal
+PYTHONDONTWRITEBYTECODE=1 "$HOME/.local/share/sales-teammate/venv/bin/python" -B -m unittest discover -s _core/tests
+"$HOME/.local/share/sales-teammate/venv/bin/python" -B _core/scripts/rehearse.py --scratch "$HOME/sales-workspaces/rehearsal"
 ```
 
 The rehearsal configures a scratch workspace, follows every named route and material branch, executes helpers and local connector doubles, and writes its report outside Git.

@@ -6,7 +6,8 @@ Example Product is a fictional seller product. It is separate from the agent run
 
 ## Local prerequisites
 
-Python 3.12, PyYAML and pypdf. Install _core/requirements.txt in an environment outside the repository.
+The coding agent prepares Python 3.12, PyYAML and pypdf for local setup and helpers. The [terminal demo](CONTEXT.md#terminal-demo) shows the equivalent manual steps.
+Install _core/requirements.txt in an environment outside the template and configured workspace.
 PDF production also needs headless Chromium. Licensed DejaVu fonts are bundled with hashes, so no proprietary font service or download is needed.
 For page inspection use pdftoppm or another PDF rasterizer and inspect both pages. Missing optional audio or PDF tooling is a prerequisite gap.
 Helpers run from any working directory with explicit saved-evidence paths and the documented policy options.

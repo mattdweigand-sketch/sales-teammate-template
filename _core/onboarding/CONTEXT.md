@@ -1,6 +1,7 @@
 # Onboarding
 
-Instantiate a separate reusable Sales workspace from this template. Setup remains local and preserves template files.
+Create a separate Sales workspace from this template. Setup remains local and preserves template files.
+For guided setup, use the request in the root README with a coding agent that can read this repository and execute commands.
 
 ## Inputs
 
@@ -12,9 +13,9 @@ Instantiate a separate reusable Sales workspace from this template. Setup remain
 
 ## Process
 
-1. Use supplied persistent choices. Ask remaining questions from questionnaire.md together. Keep per-run inputs at workflow entry.
-2. Save the answer file outside Git. Choose an absent external destination and an external artifact directory. Use demo mode for fictional data.
-3. Run setup with the prepared Python. It validates before copying, applies canonical values and mappings, and creates all 18 skill pointers.
+1. Explain demo and configured mode, then collect remaining questions from questionnaire.md together. Explain unfamiliar IDs and mappings. Keep per-run inputs at workflow entry.
+2. Save personal answers outside both folders. Choose a destination folder that does not exist and a separate folder for run outputs. Use demo mode for fictional data.
+3. Prepare Python 3.12 and _core/requirements.txt outside both folders. Run setup to validate answers, copy the template, apply settings and create all 18 workflow pointers.
 4. Run check against the new destination. The mode must be demo or configured and all routes and helpers must resolve.
 5. Follow adapters.md for actual tool verification and deployment. Review product evidence, schema, schedules and approval rules with the operator.
 
@@ -39,13 +40,27 @@ Review derived product wording and note style with the operator before buyer use
 | Configured workspace | Operator-selected external destination | Entry maps, policy, product guidance, helpers and skill pointers |
 | Setup receipt | `_core/onboarding/status.json` in the configured workspace | Demo or configured mode and pending verification |
 
-## Commands
+## Terminal demo
 
-Use Python 3.12 with the packages from _core/requirements.txt. From the template checkout
+This optional example creates a fictional workspace at `~/sales-workspaces/demo`. Open a terminal in the template checkout first.
+Python 3.12 must be available as `python3.12`. If it is missing, ask your coding agent to prepare the required Python runtime before continuing.
+The Python environment holds the packages needed by the setup tool and helpers. It lives under your home folder, outside the repository.
 
 ```bash
-python -B _core/scripts/onboard.py setup --answers /absolute/answers.json --destination /absolute/new-sales-workspace
-python -B _core/scripts/onboard.py check --workspace /absolute/new-sales-workspace
+python3.12 -m venv "$HOME/.local/share/sales-teammate/venv"
+"$HOME/.local/share/sales-teammate/venv/bin/python" -m pip install -r _core/requirements.txt
 ```
 
-For interactive one-pass setup, omit --answers. To inspect the unconfigured template, use check --allow-template.
+Run setup using the included fictional answers. The destination must not already exist. The setup tool creates the parent folder if needed.
+
+```bash
+"$HOME/.local/share/sales-teammate/venv/bin/python" -B _core/scripts/onboard.py setup --answers _core/onboarding/answers.example.json --destination "$HOME/sales-workspaces/demo"
+"$HOME/.local/share/sales-teammate/venv/bin/python" -B _core/scripts/onboard.py check --workspace "$HOME/sales-workspaces/demo"
+```
+
+Success reports `mode` as `demo`, `routes` as `18` and `errors` as `[]`. `external_ready` remains `false` because no live connections were checked.
+Setup creates local configuration and pointer files. It does not create teammates in Perplexity Computer or activate schedules.
+
+For company setup, the guided agent collects actual values and saves a JSON answer file outside both folders. Pass its path with `--answers` and use a new destination.
+Omitting `--answers` starts the terminal questionnaire. Its list and mapping answers require JSON, so guided setup is easier when those formats are unfamiliar.
+Use `check --allow-template` only to inspect this unconfigured template. Follow adapters.md to verify and deploy a configured workspace.
