@@ -264,8 +264,8 @@ def main(argv=None):
     if scratch.exists() or ROOT==scratch or ROOT in scratch.parents:
         parser.error('scratch must be absent and outside the repository')
     before=snapshot(ROOT);scratch.mkdir(parents=True)
-    answers=json.loads((ROOT/'_core/onboarding/answers.example.json').read_text());answers['artifact_dir']=str(scratch/'artifacts')
-    onboard.instantiate(answers,scratch/'workspace')
+    answers=json.loads((ROOT/'_core/tests/fixtures/onboarding/answers.fixture.json').read_text());answers['artifact_dir']=str(scratch/'artifacts')
+    onboard.instantiate(answers,scratch/'workspace',simulation=True)
     assert onboard.check(scratch/'workspace')==0
     # Run generic regression tests against an unchanged template copy, separately from adopter settings.
     regression=scratch/'regression'

@@ -1,16 +1,8 @@
 {
-  "mode": {
-    "question": "Demo or configured workspace?",
-    "type": "string",
-    "required": true,
-    "default": "demo",
-    "targets": []
-  },
   "company_name": {
     "question": "Company name?",
     "type": "string",
     "required": true,
-    "default": "Example Seller",
     "targets": [
       "template.company_name"
     ]
@@ -19,7 +11,6 @@
     "question": "Sales operator display name?",
     "type": "string",
     "required": true,
-    "default": "Sales Operator",
     "targets": [
       "template.owner_name"
     ]
@@ -28,7 +19,6 @@
     "question": "Sales operator email?",
     "type": "string",
     "required": true,
-    "default": "rep@seller.example",
     "targets": [
       "prospecting.identity.owner_email",
       "momentum.attendee_email"
@@ -38,7 +28,6 @@
     "question": "Verified Salesforce User ID?",
     "type": "string",
     "required": true,
-    "default": "005000000000001AAA",
     "targets": [
       "prospecting.identity.sfdc_user_id"
     ]
@@ -47,7 +36,6 @@
     "question": "Local IANA timezone?",
     "type": "string",
     "required": true,
-    "default": "America/Los_Angeles",
     "targets": [
       "prospecting.identity.timezone",
       "momentum.display_tz"
@@ -57,10 +45,6 @@
     "question": "Internal email domains as a JSON list?",
     "type": "list",
     "required": true,
-    "default": [
-      "seller.example",
-      "seller-tools.example"
-    ],
     "targets": [
       "tooling.internal_domains"
     ]
@@ -69,7 +53,6 @@
     "question": "Salesforce HTTPS origin?",
     "type": "string",
     "required": true,
-    "default": "https://crm.example.invalid",
     "targets": [
       "salesforce.instance_url"
     ]
@@ -78,14 +61,12 @@
     "question": "Note initials?",
     "type": "string",
     "required": true,
-    "default": "SR",
     "targets": []
   },
   "product_name": {
     "question": "Product name?",
     "type": "string",
     "required": true,
-    "default": "Example Product",
     "targets": [
       "template.product_name"
     ]
@@ -94,7 +75,6 @@
     "question": "One supported value statement?",
     "type": "string",
     "required": true,
-    "default": "Example Product helps a team coordinate a recurring business workflow.",
     "targets": [
       "template.product_value"
     ]
@@ -103,7 +83,6 @@
     "question": "Approved product sources and claim limits?",
     "type": "string",
     "required": true,
-    "default": "Fictional demonstration only. No verified product claim.",
     "targets": [
       "template.product_evidence"
     ]
@@ -112,7 +91,6 @@
     "question": "Product evidence review date, ISO?",
     "type": "string",
     "required": true,
-    "default": "2026-10-04",
     "targets": [
       "template.product_review_date"
     ]
@@ -121,7 +99,6 @@
     "question": "Territory, industries, personas and exclusions?",
     "type": "string",
     "required": true,
-    "default": "Business services with a recurring team workflow, named owner and measurable evaluation. Demo only.",
     "targets": [
       "template.icp"
     ]
@@ -130,7 +107,6 @@
     "question": "Quarter targets as a JSON map?",
     "type": "object",
     "required": true,
-    "default": {},
     "targets": [
       "forecast.targets"
     ]
@@ -139,7 +115,6 @@
     "question": "Default quarterly target?",
     "type": "number",
     "required": true,
-    "default": 250000,
     "targets": [
       "forecast.target_default"
     ]
@@ -148,7 +123,6 @@
     "question": "CRM revenue field API name?",
     "type": "string",
     "required": true,
-    "default": "ARR__c",
     "targets": [
       "forecast.amount_field"
     ]
@@ -157,7 +131,6 @@
     "question": "Read-only warehouse name?",
     "type": "string",
     "required": true,
-    "default": "EXAMPLE_READONLY_WH",
     "targets": [
       "pilot_usage.warehouse",
       "prospecting.warehouse.name"
@@ -167,7 +140,6 @@
     "question": "Timezone used by warehouse date columns?",
     "type": "string",
     "required": true,
-    "default": "America/Los_Angeles",
     "targets": [
       "template.warehouse_timezone"
     ]
@@ -176,7 +148,6 @@
     "question": "Approved operations channel ID?",
     "type": "string",
     "required": true,
-    "default": "C0000000001",
     "targets": [
       "close.ops_channel"
     ]
@@ -185,10 +156,6 @@
     "question": "Approved operations user IDs as JSON list?",
     "type": "list",
     "required": true,
-    "default": [
-      "U0000000001",
-      "U0000000002"
-    ],
     "targets": [
       "close.ops_owners"
     ]
@@ -197,7 +164,6 @@
     "question": "Approved deal desk channel ID?",
     "type": "string",
     "required": true,
-    "default": "C0000000002",
     "targets": [
       "close.deal_desk_channel"
     ]
@@ -206,7 +172,6 @@
     "question": "Absolute external directory for run artifacts?",
     "type": "string",
     "required": true,
-    "default": "/private/tmp/sales-demo-artifacts",
     "targets": [
       "pilot_usage.pdf.output_dir"
     ]

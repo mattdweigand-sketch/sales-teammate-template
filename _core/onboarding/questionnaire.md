@@ -2,11 +2,10 @@
 
 Ask the remaining persistent questions in one pass. Reuse existing answers. Per-run Account names, deals, events and evidence belong at task entry.
 
-Demo values are fictional. Supply actual values for configured mode. No credentials or customer evidence belong in the answer file.
+Collect actual company settings. Required questions have no fictional defaults. No credentials or customer evidence belong in the answer file.
 
 | Answer | Question | Canonical target |
 |---|---|---|
-| `mode` | Demo or configured workspace? | Derived note patterns, greeting or setup state |
 | `company_name` | Company name? | template.company_name |
 | `owner_name` | Sales operator display name? | template.owner_name |
 | `owner_email` | Sales operator email? | prospecting.identity.owner_email, momentum.attendee_email |
@@ -32,5 +31,5 @@ Demo values are fictional. Supply actual values for configured mode. No credenti
 | `crm_field_map` | CRM sample-to-actual API names as a JSON map? | Mapped API names in policy, scripts and references |
 | `warehouse_table_map` | Warehouse sample-to-actual table names as JSON map? | Mapped API names in policy, scripts and references |
 
-The CLI schema is `questions.json`. Example answers are `answers.example.json`. Full field and table names are in `adapter-schema.json`.
+The CLI schema is `questions.json`. Full field and table names are in `adapter-schema.json`. The agent saves the collected answers outside both workspace folders.
 Validate all values, instantiate at an absent separate destination, then run check. Setup does not create agents, grant permissions or activate schedules.

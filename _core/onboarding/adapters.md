@@ -6,7 +6,7 @@ Example Product is a fictional seller product. It is separate from the agent run
 
 ## Local prerequisites
 
-The coding agent prepares Python 3.12, PyYAML and pypdf for local setup and helpers. The [terminal demo](CONTEXT.md#terminal-demo) shows the equivalent manual steps.
+The coding agent prepares Python 3.12, PyYAML and pypdf for local setup and helpers. The [terminal setup](CONTEXT.md#terminal-setup) shows the equivalent manual steps.
 Install _core/requirements.txt in an environment outside the template and configured workspace.
 PDF production also needs headless Chromium. Licensed DejaVu fonts are bundled with hashes, so no proprietary font service or download is needed.
 For page inspection use pdftoppm or another PDF rasterizer and inspect both pages. Missing optional audio or PDF tooling is a prerequisite gap.
@@ -41,6 +41,7 @@ Document actual verified settings and approval evidence in the runtime thread or
 
 ## Release and maintenance
 
-The template ships unconfigured with fictional examples. Local demo mode is suitable for the rehearsal.
+The template ships unconfigured. Onboarding collects actual company settings and derives the configured state without a mode question.
+The scratch rehearsal alone reads fictional answers from `_core/tests/fixtures/onboarding/answers.fixture.json` and creates a local simulated workspace.
 The release CI runs the full regression suite and scratch rehearsal. New adopters should repeat the rehearsal after changing schema, policy or helpers.
 Systems owns implementation. Domain owners and the operator retain product, policy, criteria and forecast decisions. Source standing merge permissions never transfer.

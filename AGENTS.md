@@ -6,7 +6,8 @@ External writes require the selected contract's approval and readback gates. Rea
 ## Setup gate
 
 Read `policy.template.mode` before a routine run. Unconfigured mode routes to `_core/onboarding/CONTEXT.md`.
-Demo mode permits local simulation only. Configured mode still needs actual adapter, identity, schema and permission verification before external actions.
+Normal onboarding creates a configured workspace. It still needs actual adapter, identity, schema and permission verification before external actions.
+The scratch rehearsal alone uses demo state for fictional connector data and permits local simulation only.
 Read the selected contract explicitly. Routing and folders do not install a skill or prove it was loaded.
 
 ## Entry routing

@@ -6,7 +6,7 @@ The source checkout is unchanged. The template has independent Git history. Sour
 ## Audience and destination
 
 A sales operator adapting the system to their company, territory, product, and connected tools.
-Durable local home is the requested Repo directory. GitHub name is sales-teammate-template under the source repository owner, private by default.
+Durable local home is a sales-teammate-template checkout under the operator's repository folder. GitHub name is sales-teammate-template, private by default.
 Git and the verified GitHub revision provide recovery. Scratch and run evidence remain outside both repositories.
 
 ## Map and ownership
@@ -34,11 +34,13 @@ Default automatic date moves, unattended writes, merges and schedule activation 
 
 ## Onboarding
 
-One flat questionnaire collects only persistent setup. A JSON answer file has typed examples and maps each answer to canonical policy or product references.
+One flat questionnaire collects 24 persistent company settings. Required questions have no fictional defaults and there is no mode choice.
+A saved JSON answer file maps each answer to canonical policy or product references. The agent collects actual settings and saves the file outside both workspaces.
 Identity, timezone, internal domains, CRM URL, notes, product messaging, ICP, quarterly targets, warehouse, operation routing and adapter mappings are configurable.
 Configuration creates a fresh workspace at an absent external destination, excludes Git history, preserves the source template, and commits no customer material.
 Validate all answers before copying. Reject unknown answers, invalid types, paths, identity conflicts and invalid mappings without partial destinations.
-Repeat setup refuses overwrites. Check and status commands distinguish template, demo and configured states and list pending live integration checks.
+Repeat setup refuses overwrites. Normal setup derives configured state and rejects reserved identity and CRM domains. Live integration checks remain pending.
+Only the scratch rehearsal opts into simulation with fictional answers stored under `_core/tests/fixtures/onboarding/`. Check distinguishes these internal states.
 Generate portable skill pointers for all named routes. Pointers do not install agents, grant permissions or activate schedules.
 
 ## Verification
@@ -57,6 +59,6 @@ Live CRM, mail, warehouse, runtime permissions, notification delivery and activa
 
 ## Deliverables
 
-The complete sanitized repository, this specification, onboarding questionnaire and CLI, mapped answer example, product and ICP guidance, adapter guide,
-portable skill pointers, deterministic workflow rehearsal, regression tests, scratch report and verified GitHub publication.
+The complete sanitized repository, this specification, onboarding questionnaire and CLI, typed company answer schema, product and ICP guidance, adapter guide,
+portable skill pointers, fictional test fixtures, deterministic workflow rehearsal, regression tests, scratch report and verified GitHub publication.
 Build and simulation are already authorized by the request. Runtime external writes still require the selected workflow's exact approval.

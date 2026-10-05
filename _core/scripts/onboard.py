@@ -36,7 +36,7 @@ def nested_set(document, key, value):
     current[parts[-1]] = value
 
 
-def validate(answers, root=ROOT):
+def validate(answers, root=ROOT, *, simulation=False):
     schema = read_schema(root)
     if not isinstance(answers, dict):
         raise ValueError('answers must be a JSON object')
@@ -57,8 +57,8 @@ def validate(answers, root=ROOT):
         if isinstance(value, str) and ('{{' in value or '\x00' in value):
             raise ValueError(f'{key} contains a placeholder or invalid byte')
         values[key] = value
-    if values['mode'] not in ('demo','configured'):
-        raise ValueError('mode must be demo or configured')
+    # The rehearsal opts into fictional fixtures. Mode is never an onboarding answer.
+    values['mode'] = 'demo' if simulation else 'configured'
     if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', values['owner_email']):
         raise ValueError('owner_email must be an email address')
     if not re.fullmatch(r'005[A-Za-z0-9]{15}', values['owner_id']):
@@ -98,8 +98,11 @@ def validate(answers, root=ROOT):
         effective = {old:selected.get(old,old) for old in mapping[key]}
         if len(set(effective.values())) != len(effective):
             raise ValueError(f'{key} collides with an unmapped field or table')
-    if values['mode'] == 'configured' and (url.hostname.endswith(('.invalid','.example','.test')) or '.example' in values['owner_email']):
-        raise ValueError('configured mode requires actual identity and CRM origin; use demo for fictional setup')
+    reserved_examples = ('example.com','example.net','example.org')
+    domains = (url.hostname,values['owner_email'].split('@')[1].lower())
+    if not simulation and any(domain.endswith(('.invalid','.example','.test')) or domain in reserved_examples or
+                              any(domain.endswith('.'+example) for example in reserved_examples) for domain in domains):
+        raise ValueError('setup requires your company email and Salesforce origin, not reserved example domains')
     output = Path(values['artifact_dir']).expanduser()
     if not output.is_absolute():
         raise ValueError('artifact_dir must be an absolute path outside the workspace')
@@ -110,7 +113,8 @@ def collect_questionnaire(root=ROOT):
     answers = {}
     for key, spec in read_schema(root).items():
         default = spec.get('default')
-        value = input(f"{spec['question']} [{json.dumps(default)}] ").strip()
+        hint = f" [{json.dumps(default)}]" if default is not None else ''
+        value = input(f"{spec['question']}{hint} ").strip()
         if not value:
             if default is not None:
                 answers[key] = default
@@ -124,8 +128,8 @@ def routes(root):
                       (root/'AGENTS.md').read_text(),re.M)
 
 
-def instantiate(answers, destination, root=ROOT):
-    values = validate(answers,root)
+def instantiate(answers, destination, root=ROOT, *, simulation=False):
+    values = validate(answers,root,simulation=simulation)
     destination = Path(destination).expanduser()
     # Reject symlink ancestors, overlaps and any existing destination before creating anything.
     if any(p.is_symlink() for p in (destination,*destination.parents)):

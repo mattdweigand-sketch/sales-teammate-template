@@ -13,15 +13,15 @@ Open this repository with a coding agent that can read files and run local comma
 ```text
 Help me set up this Sales Teammate template.
 Read AGENTS.md and _core/onboarding/CONTEXT.md.
-Ask whether I want a fictional demo or a workspace for my company.
+Set up a workspace for my company using my actual settings.
 Collect the remaining setup answers together and explain unfamiliar fields.
 Create a separate workspace folder, prepare Python, and run setup and check.
 Keep my answers and run outputs outside the template and the new workspace.
 Show me the result and the remaining steps before live use.
 ```
 
-Choose **demo** to explore the workflows with fictional settings. Choose **configured** to supply your company, identity, product, sales targets and integration mappings.
-The agent uses the [questionnaire](_core/onboarding/questionnaire.md) and saves the answers for setup. You do not need to edit JSON by hand.
+The agent collects your company, identity, product, sales targets and integration mappings through the [questionnaire](_core/onboarding/questionnaire.md).
+It reuses settings you have already supplied and saves the remaining answers for setup. You do not need to edit JSON by hand.
 
 You receive a separate folder containing the five workspace definitions, your settings and 18 workflow pointer files.
 A successful local check reports 18 routes and an empty errors list. It reports `external_ready` as false because this check only validates local setup.
@@ -29,7 +29,7 @@ A successful local check reports 18 routes and an empty errors list. It reports 
 For live use, follow the [adapter guide](_core/onboarding/adapters.md) to verify connections and load the workflows in your agent runtime.
 Creating actual teammates and enabling schedules are separate deployment steps. The included runtime instructions target Perplexity Computer.
 
-If you prefer terminal setup, the [onboarding guide](_core/onboarding/CONTEXT.md#terminal-demo) provides a runnable demo and explains each step.
+If you prefer terminal setup, the [onboarding guide](_core/onboarding/CONTEXT.md#terminal-setup) explains the equivalent steps using your own settings.
 
 ## Workspaces
 
@@ -67,14 +67,14 @@ sales-teammate-template/
 ├── README.md
 ├── workspaces/             Five responsibility boundaries and scoped workflow contracts
 ├── _core/
-│   ├── onboarding/         Questionnaire, example answers, adapter schema and guide
+│   ├── onboarding/         Company questionnaire, adapter schema and guide
 │   ├── assets/fonts/       Licensed bundled PDF fonts
 │   ├── scripts/            Shared helpers, onboarding and rehearsal
-│   ├── policy.yaml         Demo settings and helper registry
+│   ├── policy.yaml         Unconfigured sample settings and helper registry
 │   ├── rules.md            Canonical approval, evidence and write rules
 │   ├── template-spec.md    Build specification
 │   ├── NOTICE.md           Provenance and retained notices
-│   └── tests/              Synthetic regression tests
+│   └── tests/              Regression tests and fictional rehearsal fixtures
 └── .github/                CI
 ```
 
