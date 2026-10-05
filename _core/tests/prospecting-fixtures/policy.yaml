@@ -1,0 +1,76 @@
+# prospect policy. Chosen values. Workflows read this file at run start and never restate it.
+
+identity:
+  owner_email: rep@seller.example
+  sfdc_user_id: 005000000000001AAA
+  timezone: America/Los_Angeles
+
+approval:
+  # Each write needs its own numbered proposal and explicit approval in the thread, showing the exact fields. Approval for one never covers another. Each stage contract's Propose step names the fields.
+  unattended_writes: false          # a scheduled run proposes, never writes
+  readback_required: true           # every write is re-read from the system after it lands
+  never: [send email, create Opportunity, change deal stage or amount]
+
+salesforce:
+  open_opportunity: IsClosed = false
+
+scan:
+  # signal-scan. Public evidence for a named account.
+  quote_min_words: 5
+  max_signals_per_account: 3
+  warm_engagement:                      # route warm_engaged and stop. Another rep has a live thread.
+    # window is outreach.activity_lookback_days
+    task_subject_markers: ["Re:", "Email: << Re:"]       # case-insensitive. Second form is how the Salesforce email sync writes inbound replies
+    task_owner: not identity.sfdc_user_id   # only Tasks owned by someone other than Operator count. Operator's own threads, Events, and invites never stop a scan
+    ignored_owner_ids: ["005000000000002AAA"]   # Unify Integration User. Its sequence steps log as "Re:" Tasks. Drop before listing or checking. Never blocks.
+
+warehouse:
+  # Snowflake reads. Research Adoption. Read-only, async, fetch after status success.
+  name: EXAMPLE_READONLY_WH
+  data_lag_days: 1                   # dim_*_daily tables are complete through today minus this, identity.timezone. That date is date_pt in every query
+  forbidden: [user names, user emails, user or seat counts, query content, activity timing]   # never selected, never reported, never in a file
+
+user_scan:
+  # signal-user-scan. Org-level Example Product adoption facts for a Operator-owned Account with no open Opportunity.
+  statements:                                    # the adoption fact outreach may state, keyed by bundle.adoption. Wording per talk-track.md Claim boundaries. none_found has no claim.
+    org_adopted: Example Product is already adopted at the organization.
+    individuals_only: People at the organization already pay for Example Product individually.
+  adoption_values: [org_adopted, individuals_only, none_found]   # privacy_check.py verifies adoption is one of these and matches the rule below
+  # adoption rule. org_adopted when org_subscribed, individuals_only when only paid_individuals_exist, else none_found
+  bundle_keys:                                   # exact handoff shape. Key: type. Nothing else passes the check.
+    account_name: str
+    salesforce_account_id: str
+    account_domain: str
+    data_through_date: str
+    mapped_org_count: int
+    org_subscribed: bool
+    org_paying: bool
+    org_service_types: list
+    org_platforms: list
+    paid_individuals_exist: bool
+    adoption: str                                # org_adopted | individuals_only | none_found
+
+outreach:
+  # signal-outreach. One Gmail draft from one qualified bundle. Never sends.
+  bundle_checked_max_age_hours: 24   # elapsed time since checked_at (timestamp with offset) at draft time. published_date freshness comes from the signal type's taxonomy freshness_days
+  suppression_days: 30               # per Contact, read on the Account and Contact. A completed Task of a suppressing subtype, any Event, or sent Gmail inside this window blocks. Inside means date >= today - suppression_days
+  suppressing_task_subtypes: [Email, Call]   # LinkedIn connects and generic to-dos are reported, not suppressing
+  activity_lookback_days: 30         # Salesforce Tasks and Events read on the Account and Contact
+  max_drafts_per_run: 1
+  recipient_sources: [existing Salesforce Contact with Email, prior Gmail thread with the person, Apollo verified, Operator supplied in this conversation]   # never infer an address or mislabel its source
+  draft_shape: One verified observation, one relevant Example Product connection, one easy question. A few plain sentences; no self-introduction line such as "I work for Example Product"; no unsupported assumptions or benchmark statistics.
+  lint: optional environment style review   # advisory style review; never overrides approved wording or evidence limits
+
+followup:
+  # signal-followup. One open Salesforce Task after a proven Gmail send. Never creates the completed Email Task, the Gmail sync owns that.
+  due_calendar_days: 7               # default. ActivityDate = Pacific send date + this
+  max_tasks_per_run: 1
+  task:
+    Subject: "Follow up: {gmail_subject}"
+    Status: Not Started
+    Priority: Normal
+    TaskSubtype: Task
+    Description: "Follow up on signal-outreach email. Gmail message {message_id}; thread {thread_id}. signal_type {signal_type}; angle {angle}."   # the two ids let a Salesforce report grade signal types and angles later
+    # WhatId = Account, OwnerId = identity.sfdc_user_id, WhoId = the one matching Contact. Type unset
+  closed_statuses: [Completed, Deferred]
+  # fail-closed conditions are the followup_gate.py docstring checks

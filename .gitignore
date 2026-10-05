@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+.venv/
+.env
+.env.*
+*.local.json
+answers.json
+_core/onboarding/status.json
+_core/onboarding/skill-pointers/

@@ -1,0 +1,33 @@
+{
+  "mode": "demo",
+  "company_name": "Example Seller",
+  "owner_name": "Sales Operator",
+  "owner_email": "rep@seller.example",
+  "owner_id": "005000000000001AAA",
+  "timezone": "America/Los_Angeles",
+  "internal_domains": [
+    "seller.example",
+    "seller-tools.example"
+  ],
+  "crm_url": "https://crm.example.invalid",
+  "note_initials": "SR",
+  "product_name": "Example Product",
+  "product_value": "Example Product helps a team coordinate a recurring business workflow.",
+  "product_evidence": "Fictional demonstration only. No verified product claim.",
+  "product_review_date": "2026-10-04",
+  "icp": "Business services with a recurring team workflow, named owner and measurable evaluation. Demo only.",
+  "quarter_targets": {},
+  "quarter_target_default": 250000,
+  "amount_field": "ARR__c",
+  "warehouse": "EXAMPLE_READONLY_WH",
+  "warehouse_timezone": "America/Los_Angeles",
+  "ops_channel": "C0000000001",
+  "ops_owners": [
+    "U0000000001",
+    "U0000000002"
+  ],
+  "deal_desk_channel": "C0000000002",
+  "artifact_dir": "/private/tmp/sales-demo-artifacts",
+  "crm_field_map": {},
+  "warehouse_table_map": {}
+}

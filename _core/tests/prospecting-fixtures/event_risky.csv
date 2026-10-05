@@ -1,0 +1,16 @@
+First Name,Last Name,Full Name,Email Business,Company Name
+Aster,Vale,Aster Vale,aster.vale@synthetic.example,Synthetic Example
+Briar,Marsh,Briar Marsh,briar@marsh.example,Marsh Synthetic Example
+Privacy,Team,Privacy Team,privacy@anything.example,Synthetic Anything
+Security,Alerts,Security Alerts,security-alerts@anything.example,Synthetic Anything
+Info,Web,Info Web,info+web@anything.example,Synthetic Anything
+No,Reply,No Reply,no.reply@anything.example,Synthetic Anything
+Abuse,Inbox,Abuse Inbox,abuse@anything.example,Synthetic Anything
+Post,Master,Post Master,postmaster@anything.example,Synthetic Anything
+Web,Master,Web Master,webmaster@anything.example,Synthetic Anything
+Support,Team,Support Team,support-emea@anything.example,Synthetic Anything
+Sales,Team,Sales Team,sales.us@anything.example,Synthetic Anything
+Legal,Team,Legal Team,legal@anything.example,Synthetic Anything
+Careers,Team,Careers Team,careers@anything.example,Synthetic Anything
+No,Email,No Email,,Synthetic Anything
+Bad,Format,Bad Format,not-an-email,Synthetic Anything

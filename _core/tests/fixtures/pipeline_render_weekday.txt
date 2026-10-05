@@ -1,0 +1,55 @@
+# Pipeline review · 9/28/26
+
+43 open deals · 18 reviewed · 3 flagged · 2 clear recommendations · 1 question · 0 records written  
+Only the latest next-step entry is shown. Older history stays unchanged. Legacy `Next:` entries appear as stored.
+
+## Top 3 actions today
+
+No supported actions to prioritize today.
+
+## Clear recommendations
+
+1. [Acme Devices](https://crm.example.invalid/lightning/r/Opportunity/006AAA000000001AAA/view)
+
+### Current next steps
+Next: Pat's presentation outcome · Operator · 9/26/26
+
+### Recommended next steps
+9/28/26 SR - Follow up with Pat by 10/2 if he has not replied.
+
+- Task · [Follow-up: Pat's presentation outcome](https://crm.example.invalid/lightning/r/Task/00TAAA000000001AAA/view) · ActivityDate · 2026-09-28 → 2026-10-02
+
+### Evidence
+- 9/25/26 · Gmail · Operator to Pat Lee · "Plan check-in" · Asked whether the plan is moving or should pause until Q1.
+
+2. [Corvid Foods](https://crm.example.invalid/lightning/r/Opportunity/006AAA000000003AAA/view)
+
+### Current next steps
+9/25/26 SR - Hold the 10/1 session.
+Sam confirmed.
+
+### Recommended next steps
+No next-step change.
+
+- Task · [Send Corvid rollout plan and pricing](https://crm.example.invalid/lightning/r/Task/00TAAA000000003AAA/view) · Status · Not Started → Completed
+- New Task · Confirm rollout and order form next steps · ActivityDate 2026-10-01 · Status Not Started · Contact [Sam Rivera](https://crm.example.invalid/lightning/r/Contact/003AAA000000002AAA/view) · Opportunity [Corvid Foods](https://crm.example.invalid/lightning/r/Opportunity/006AAA000000003AAA/view)
+
+### Evidence
+- 9/24/26 · Gmail · Operator to Sam Rivera · [Corvid and Example Product next steps](https://mail.google.com/mail/u/0/#all/1a0d5e) · Order form attached.
+
+Email, Calendar, and Slack evidence is the retrieved set, not full history.
+
+## Needs your input
+
+Q1 · [Beacon Labs](https://crm.example.invalid/lightning/r/Opportunity/006AAA000000002AAA/view) · Deal_Type__c is blank.
+
+I walk these one at a time after the clear recommendations.
+
+## Coverage
+
+Coverage (pipeline-daily) · 18 in scope. Inbox complete.  
+Salesforce Events matched 6/6 eligible.
+
+15 reviewed deals had no trigger · 0 not checked
+
+**Reply with numbers, ranges, all, or skip. all covers the numbered clear recommendations only.**
