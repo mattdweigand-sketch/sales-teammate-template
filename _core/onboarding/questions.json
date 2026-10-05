@@ -130,43 +130,48 @@
   "warehouse": {
     "question": "Read-only warehouse name?",
     "type": "string",
-    "required": true,
+    "required": false,
     "targets": [
       "pilot_usage.warehouse",
       "prospecting.warehouse.name"
-    ]
+    ],
+    "required_when": "warehouse"
   },
   "warehouse_timezone": {
     "question": "Timezone used by warehouse date columns?",
     "type": "string",
-    "required": true,
+    "required": false,
     "targets": [
       "template.warehouse_timezone"
-    ]
+    ],
+    "required_when": "warehouse"
   },
   "ops_channel": {
     "question": "Approved operations channel ID?",
     "type": "string",
-    "required": true,
+    "required": false,
     "targets": [
       "close.ops_channel"
-    ]
+    ],
+    "required_when": "slack"
   },
   "ops_owners": {
     "question": "Approved operations user IDs as JSON list?",
     "type": "list",
-    "required": true,
+    "required": false,
     "targets": [
       "close.ops_owners"
-    ]
+    ],
+    "required_when": "slack"
   },
   "deal_desk_channel": {
     "question": "Approved deal desk channel ID?",
     "type": "string",
-    "required": true,
+    "required": false,
     "targets": [
       "close.deal_desk_channel"
-    ]
+    ],
+    "required_when": "slack"
   },
   "artifact_dir": {
     "question": "Absolute external directory for run artifacts?",
@@ -189,5 +194,13 @@
     "required": false,
     "default": {},
     "targets": []
+  },
+  "integration_setup": {
+    "question": "Review every system in integrations.json and choose configure, defer or not_used. Never include credentials.",
+    "type": "object",
+    "required": true,
+    "targets": [
+      "template.integrations"
+    ]
   }
 }

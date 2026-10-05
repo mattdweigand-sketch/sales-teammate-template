@@ -286,7 +286,7 @@ prospecting:
       # window is outreach.activity_lookback_days
       task_subject_markers: ["Re:", "Email: << Re:"]       # case-insensitive. Second form is how the Salesforce email sync writes inbound replies
       task_owner: not identity.sfdc_user_id   # only Tasks owned by someone other than Operator count. Operator's own threads, Events, and invites never stop a scan
-      ignored_owner_ids: ["005000000000002AAA"]   # Unify Integration User. Its sequence steps log as "Re:" Tasks. Drop before listing or checking. Never blocks.
+      ignored_owner_ids: []            # configure verified integration User IDs through onboarding, including Unify only if used
 
   warehouse:
     # Snowflake reads. Research Adoption. Read-only, async, fetch after status success.
@@ -361,6 +361,7 @@ system_review:
 template:
   mode: unconfigured
   external_ready: false
+  integrations: {}                     # every dependency needs an explicit onboarding choice and separate live verification
   auto_date_move: false
   company_name: Example Seller
   owner_name: Sales Operator

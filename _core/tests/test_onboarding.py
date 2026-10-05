@@ -1,6 +1,7 @@
 """Onboarding portability, invalid-input and no-overwrite checks with disposable copies."""
 import copy
 import hashlib
+import io
 import json
 from pathlib import Path
 import sys
@@ -33,7 +34,10 @@ class OnboardingTests(unittest.TestCase):
         # Syntactically valid company settings for local tests, with no provider calls.
         return {**self.answers,'owner_email':'rep@synthetic-seller.company',
                 'internal_domains':['synthetic-seller.company'],
-                'crm_url':'https://synthetic-seller.my.salesforce.com'}
+                'crm_url':'https://synthetic-seller.my.salesforce.com',
+                'owner_id':'005123456789012ABC','warehouse':'SYNTHETIC_READONLY_WH',
+                'ops_channel':'C1234567890','ops_owners':['U1234567890'],
+                'deal_desk_channel':'C1234567891'}
 
     def test_fixture_is_complete_and_typed(self):
         self.assertEqual(set(self.answers),set(onboard.read_schema()))
@@ -161,18 +165,21 @@ class OnboardingTests(unittest.TestCase):
         expected=self.company_answers()
         responses=[expected[key] if spec['type']=='string' else json.dumps(expected[key])
                    for key,spec in onboard.read_schema().items()]
-        with mock.patch('builtins.input',side_effect=responses) as prompt:
+        responses = responses[:-1]
+        with mock.patch('builtins.input',side_effect=responses) as prompt, \
+                mock.patch.object(onboard,'collect_integrations',return_value=expected['integration_setup']):
             answers=onboard.collect_questionnaire()
-        self.assertEqual(prompt.call_count,24)
+        self.assertEqual(prompt.call_count,len(onboard.read_schema())-1)
         self.assertNotIn('mode',answers)
         self.assertEqual(onboard.validate(answers)['mode'],'configured')
         self.assertEqual(answers,expected)
         self.assertFalse(any('demo' in call.args[0].lower() for call in prompt.call_args_list))
 
     def test_blank_interview_cannot_accept_fictional_defaults(self):
-        with mock.patch('builtins.input',return_value='') as prompt:
+        with mock.patch('builtins.input',return_value='') as prompt, \
+                mock.patch.object(onboard,'collect_integrations',return_value=self.answers['integration_setup']):
             answers=onboard.collect_questionnaire()
-        self.assertEqual(prompt.call_count,24)
+        self.assertEqual(prompt.call_count,len(onboard.read_schema())-1)
         self.assertNotIn('owner_email',answers)
         with self.assertRaisesRegex(ValueError,'missing answers'):
             onboard.instantiate(answers,self.destination)

@@ -5,7 +5,7 @@
 - Run multi-call window mode for every external call today in `policy.momentum.display_tz`.
   External attendees are defined by `policy.tooling.internal_domains`. Preserve all existing read-only brief and source checks.
 - Read Momentum with curl and the authorized runtime credential selected through the org call-transcript skill.
-  Python requests fails through the proxy. If the credential fails to resolve, refresh the current credential listing once and retry the same curl with the same handle.
+  Verify the configured curl and proxy behavior. If the credential fails to resolve, refresh the current credential listing once and retry the same curl with the same handle.
   Never copy handles, secrets, or customer evidence into Git. An unavailable credential is not checked, not absent transcript evidence.
 - If complete Calendar reads find no external calls today, reply in one line and run `pplx automation suppress-run-notification`. Generate no audio.
 

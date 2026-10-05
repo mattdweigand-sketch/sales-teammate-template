@@ -11,7 +11,7 @@ A `Customer_Type__c` in `policy.close.customer_type_stop` has no established clo
 ## Path 1. New annual enterprise contract
 
 Selects when no other path matches. Terms per `policy.close.terms_default`, price book `policy.close.price_books.annual`.
-DocuSign completion sets Closed Won automatically; when `StageName` is already Closed Won, proposal A carries only the remaining fields.
+Verify the configured signature integration and its actual stage effects. When native `StageName` is already Closed Won, proposal A carries only the remaining fields.
 Missing Account UUID: link an existing verified enterprise org through B first, or use A0 when provisioning is needed (`workspaces/pipeline/workflows/close/references/setup-trial.md`).
 Handoff per `policy.close.handoff_when`.
 

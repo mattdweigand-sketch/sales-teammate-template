@@ -10,7 +10,11 @@ Onboarding adapts them to your company, product, sales process, and connected to
 
 1. Open this repository with your AI agent.
 2. Ask it to **set up Sales Teammate for your company**.
-3. Answer the onboarding questions. Your agent creates a separate workspace with your settings.
+3. Answer the company questions and review each system with your agent. It creates a separate workspace with your settings.
+
+Onboarding covers every connector, MCP or API adapter, credential requirement, org skill, downstream system and local tool used by the source.
+You can configure, defer or mark a system unused. Credentials go directly into your runtime secret store. Deferred dependencies keep their affected operations pending.
+Setup leaves schedules inactive and live connection checks pending.
 
 See [onboarding](_core/onboarding/CONTEXT.md) for setup details and the connection checks to complete before live use.
 

@@ -28,5 +28,91 @@
   "deal_desk_channel": "C0000000002",
   "artifact_dir": "/private/tmp/sales-demo-artifacts",
   "crm_field_map": {},
-  "warehouse_table_map": {}
+  "warehouse_table_map": {},
+  "integration_setup": {
+    "runtime": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "credentials": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "salesforce": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "gmail": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "calendar": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "transcripts": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "warehouse": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "org_lookup": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "provisioning": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "slack": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "apollo": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "crm_sync": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "event_invites": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "billing": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "signatures": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "web_research": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "audio": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "local_tools": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "github": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "automations": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "collateral": {
+      "choice": "defer",
+      "reason": "Fictional local rehearsal only. No live connection."
+    }
+  }
 }

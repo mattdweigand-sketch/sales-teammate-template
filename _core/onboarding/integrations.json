@@ -1,0 +1,582 @@
+{
+  "runtime": {
+    "label": "Agent runtime, project, teammates and skill library",
+    "workflows": [
+      "signal-scan",
+      "signal-user-scan",
+      "signal-outreach",
+      "signal-followup",
+      "event-sequence",
+      "sales-call-prep",
+      "interaction-sync",
+      "watch-sync",
+      "pipeline-review",
+      "task-triage-speed-run",
+      "pilot-usage",
+      "customer-review",
+      "close",
+      "deal-coach",
+      "forecast-weekly",
+      "repo-maintenance",
+      "agent-configuration",
+      "system-review"
+    ],
+    "scope": "Every deployed workflow and its thread or sandbox handoff",
+    "source": [
+      "_core/CONVENTIONS.md",
+      "workspaces/systems/workflows/agent-configuration/CONTEXT.md"
+    ],
+    "setup": "Choose Perplexity Computer or an equivalent adapter. Select the project, deployment root and five workspace destinations. Install all 18 generated pointers and required org skills. Map pplx sessions, project tasks, task comments and notification commands. Verify saved tool-call envelopes and session paths used by helpers.",
+    "authentication": "Use the runtime login and approved project membership. Read back per-workspace tools and permissions. Runtime access does not grant workflow write approval.",
+    "verify": "Load every pointer through the supported skill mechanism and show its contract and applicable Inputs. Read actual teammate instructions, project access, routes, task/comment tools and sandbox locations. Keep deployment inactive until authorized.",
+    "settings": {
+      "project": {
+        "question": "Actual runtime project identifier or reference?",
+        "type": "string"
+      },
+      "deployment_root": {
+        "question": "Where will the runtime read the deployed contracts?",
+        "type": "string"
+      },
+      "workspace_destinations": {
+        "question": "Actual thread or teammate reference for each of the five workspaces?",
+        "type": "object",
+        "keys": [
+          "prospecting",
+          "pipeline",
+          "deal-coaching",
+          "forecasting",
+          "systems"
+        ]
+      }
+    }
+  },
+  "credentials": {
+    "label": "Credential store and MCP or API authentication",
+    "workflows": [
+      "signal-scan",
+      "signal-user-scan",
+      "signal-outreach",
+      "signal-followup",
+      "event-sequence",
+      "sales-call-prep",
+      "interaction-sync",
+      "watch-sync",
+      "pipeline-review",
+      "task-triage-speed-run",
+      "pilot-usage",
+      "customer-review",
+      "close",
+      "deal-coach",
+      "forecast-weekly",
+      "repo-maintenance",
+      "agent-configuration",
+      "system-review"
+    ],
+    "scope": "Every authenticated connector, MCP server, API and CLI",
+    "source": [
+      "_core/CONVENTIONS.md",
+      "workspaces/pipeline/workflows/sales-call-prep/references/daily.md"
+    ],
+    "setup": "Inventory each selected native connector, MCP server and direct API or CLI. Configure its real server name, endpoint or launch command in the runtime. An MCP connection needs its actual transport, server configuration, tool allowlist and auth. Do not assume the source shipped an MCP server definition.",
+    "authentication": "Place OAuth grants, API keys, service-account keys and tokens directly in the approved runtime secret store. Do not ask for secret values in chat or answers. Record only the store product name here. For Perplexity, verify credential injection for literal top-level pplx commands. Do not copy source handles.",
+    "verify": "List available tools and make an authorized read using each selected connection. Check identity, scopes, access restrictions, credential expiration and rotation owner. Keep receipts and secret references outside Git.",
+    "settings": {
+      "store": {
+        "question": "Approved runtime credential store product or location name?",
+        "type": "string"
+      }
+    }
+  },
+  "salesforce": {
+    "label": "Salesforce record connector and CRM guide",
+    "workflows": [
+      "signal-scan",
+      "signal-user-scan",
+      "signal-outreach",
+      "signal-followup",
+      "event-sequence",
+      "sales-call-prep",
+      "interaction-sync",
+      "watch-sync",
+      "pipeline-review",
+      "task-triage-speed-run",
+      "pilot-usage",
+      "customer-review",
+      "close",
+      "deal-coach",
+      "forecast-weekly"
+    ],
+    "scope": "All sales workflows",
+    "source": [
+      "_core/rules.md",
+      "workspaces/pipeline/workflows/close/references/fields.md"
+    ],
+    "setup": "Configure salesforce_rest_api or an equivalent connector for the company tenant. Map each custom field by object and review standard objects, field types, record types, stages, picklists, validation rules, Contact Roles, revenue and formula semantics. Supply the organization guide under configured-crm-guide or update its contract route.",
+    "authentication": "Use company OAuth or the approved Salesforce connection. Separate read access from approved record-write permissions.",
+    "verify": "Run get-current-user and compare ID and email with policy. Read owned Accounts and describe Account, Contact, Opportunity, Task, Event, OpportunityContactRole, Pricebook2, Product2 and line items. Check complete query pages and native record readback. Identity maps are unverified until describe matches.",
+    "settings": {
+      "schema_review": {
+        "question": "External reference for the object, field, stage, picklist and validation review?",
+        "type": "string"
+      }
+    }
+  },
+  "gmail": {
+    "label": "Gmail mailbox, drafts and attachments",
+    "workflows": [
+      "signal-outreach",
+      "signal-followup",
+      "event-sequence",
+      "sales-call-prep",
+      "interaction-sync",
+      "pipeline-review",
+      "task-triage-speed-run",
+      "customer-review",
+      "deal-coach",
+      "forecast-weekly"
+    ],
+    "scope": "Mail evidence and approved unsent drafts",
+    "source": [
+      "_core/rules.md",
+      "workspaces/pipeline/workflows/interaction-sync/references/proposals.md"
+    ],
+    "setup": "Connect the actual operator mailbox. Verify search_email, full thread and message retrieval, attachment reads and native draft create/readback. Configure the assistant sender used to recognize internal notes.",
+    "authentication": "Authorize mailbox reads and approved drafts. No Gmail send permission is granted by setup. Apollo campaigns use their separately approved mailbox.",
+    "verify": "Read mailbox identity, search and page known evidence, retrieve a full thread and attachments. Verify exact draft recipient, CC/BCC, thread and body readback with authorized test data.",
+    "settings": {
+      "assistant_email": {
+        "question": "Actual assistant sender address, or the operator address when no assistant sender exists?",
+        "type": "string",
+        "target": "email_voice.computer_sender",
+        "format": "email"
+      }
+    }
+  },
+  "calendar": {
+    "label": "Calendar evidence",
+    "workflows": [
+      "event-sequence",
+      "sales-call-prep",
+      "interaction-sync",
+      "pipeline-review",
+      "task-triage-speed-run",
+      "customer-review",
+      "deal-coach",
+      "forecast-weekly"
+    ],
+    "scope": "Defined event searches only",
+    "source": [
+      "_core/rules.md"
+    ],
+    "setup": "Connect the operator calendar and its shared calendars. Map search_calendar, titles, attendees, event IDs and timestamp fields. Review policy search caps and window splitting.",
+    "authentication": "Use authorized read access. Setup and read-only workflows require no calendar write grant.",
+    "verify": "Read the calendar identity and timezone. Check known event IDs, attendees, supported bounds and cap behavior. Returned events never prove attendance or complete history.",
+    "settings": {
+      "calendar": {
+        "question": "Actual calendar identifier or reference?",
+        "type": "string"
+      }
+    }
+  },
+  "transcripts": {
+    "label": "Momentum transcript API and call-transcript-skill",
+    "workflows": [
+      "sales-call-prep",
+      "interaction-sync",
+      "task-triage-speed-run",
+      "customer-review",
+      "deal-coach"
+    ],
+    "scope": "Call evidence and interaction sweeps",
+    "source": [
+      "_core/rules.md",
+      "workspaces/pipeline/workflows/interaction-sync/references/sweep.md"
+    ],
+    "setup": "Install the actual call-transcript-skill or equivalent org adapter. Supply its endpoint, auth method, response schema, search/retrieval operations and supported rate, page and date-window limits in the runtime. Review policy.momentum against those limits.",
+    "authentication": "Configure the transcript API key or token directly in the runtime store. Verify curl and proxy behavior in this environment. No source credential or handle is reusable.",
+    "verify": "Retrieve an authorized known meeting and verify meeting identity, attendees, host, transcript and 18-character Salesforce Account binding. Exercise windowed and paged sweep reads and report errors as not checked.",
+    "settings": {
+      "adapter_guide": {
+        "question": "External runtime reference for the installed transcript skill and API configuration?",
+        "type": "string"
+      }
+    }
+  },
+  "warehouse": {
+    "label": "Snowflake read-only warehouse and query adapter",
+    "workflows": [
+      "signal-user-scan",
+      "pilot-usage",
+      "customer-review"
+    ],
+    "scope": "Privacy-safe adoption or the selected usage-report branch",
+    "source": [
+      "workspaces/prospecting/workflows/research/scripts/adoption_lookup.sql",
+      "workspaces/pipeline/references/pilot-usage-queries.md"
+    ],
+    "setup": "Configure account, role, database, schema and the chosen warehouse in the connector or MCP server. Map all ten sample tables and their consumed columns. Review joins, organization IDs, snapshot dates, event timezone, task grain and credit-cent billing semantics. A table rename alone does not adapt a different schema.",
+    "authentication": "Use approved OAuth, service account or key-pair authentication in the runtime store. Require read-only warehouse and schema grants.",
+    "verify": "Describe every used table and column, submit read-only async SQL, poll success and fetch all terminal pages. Verify bound org identity, data_through, query markers and privacy-safe adoption output. Different metrics require an approved helper and contract adaptation.",
+    "settings": {
+      "schema_review": {
+        "question": "External reference for table, column, timezone, privacy and metric compatibility?",
+        "type": "string"
+      }
+    }
+  },
+  "org_lookup": {
+    "label": "ADMIN organization lookup connector",
+    "workflows": [
+      "sales-call-prep",
+      "customer-review",
+      "close"
+    ],
+    "scope": "Email-bound organization status reads",
+    "source": [
+      "workspaces/pipeline/references/org-lookup.md",
+      "_core/rules.md"
+    ],
+    "setup": "Configure admin_support_team get_enterprise_org_info or an equivalent read-only tool. Document exact email input, returned fields, enterprise versus self-serve status and customer-ownership evidence.",
+    "authentication": "Provision the internal ADMIN API credential or MCP authentication in the runtime store. Limit this connection to allowed organization lookup reads.",
+    "verify": "Read an authorized known result and verify ownership and subscription semantics. A UUID, membership or HTTP 404 never proves a customer-owned self-serve organization.",
+    "settings": {
+      "tool_name": {
+        "question": "Actual compatible organization lookup tool name?",
+        "type": "string",
+        "target": "tooling.org_lookup_tool",
+        "format": "tool"
+      }
+    }
+  },
+  "provisioning": {
+    "label": "Salesforce to ADMIN provisioning flow",
+    "workflows": [
+      "close"
+    ],
+    "scope": "Close proposal A0 only",
+    "source": [
+      "workspaces/pipeline/workflows/close/references/setup-trial.md"
+    ],
+    "setup": "Have the responsible administrator configure the company provisioning flow and downstream ADMIN integration. Replace the sample flow, tier, payload, success fields and restoration fields. Review trial_days, polling limits, invite emails and every downstream effect. Defer A0 if provisioning is not deployed.",
+    "authentication": "Authorize the CRM flow and downstream service identity separately. The agent never invents ADMIN credentials or manually writes system-owned success fields.",
+    "verify": "Inspect actual deployed flow metadata and service ownership. Use separately authorized test evidence to verify success, errors, timeout reconciliation, invite effects and independent restoration. Never fire provisioning merely to check setup.",
+    "settings": {
+      "flow_name": {
+        "question": "Actual deployed provisioning flow name?",
+        "type": "string",
+        "target": "close.setup_trial.flow_name",
+        "format": "tool"
+      },
+      "tier": {
+        "question": "Actual default provisioning tier?",
+        "type": "string",
+        "target": "close.setup_trial.tier_default"
+      },
+      "payload": {
+        "question": "Reviewed compatible provisioning payload?",
+        "type": "object",
+        "target": "close.setup_trial.payload",
+        "policy_shape": true
+      },
+      "success_fields": {
+        "question": "Reviewed compatible success fields?",
+        "type": "object",
+        "target": "close.setup_trial.success_fields",
+        "policy_shape": true
+      },
+      "restore_after": {
+        "question": "Reviewed restoration field list?",
+        "type": "list",
+        "target": "close.setup_trial.restore_after"
+      }
+    }
+  },
+  "slack": {
+    "label": "Slack evidence and operations handoffs",
+    "workflows": [
+      "pipeline-review",
+      "task-triage-speed-run",
+      "forecast-weekly",
+      "close"
+    ],
+    "scope": "Read-only evidence plus approved close handoff posts",
+    "source": [
+      "_core/slack-evidence.md",
+      "workspaces/pipeline/workflows/close/references/paths.md"
+    ],
+    "setup": "Connect slack_direct or an equivalent tool. Verify workspace, Slack Connect channels, DM access, channel/user IDs and ops/deal-desk membership. Map slack_search_users and slack_search_public_and_private. Review supported watch coverage.",
+    "authentication": "Use approved Slack OAuth or app credentials in the runtime. Reading evidence and approved handoff posting need distinct scopes.",
+    "verify": "Read exact user emails, complete cursors and intended channel membership. Review ops IDs from company answers. Native post receipts are required after any separately approved handoff.",
+    "settings": {}
+  },
+  "apollo": {
+    "label": "Apollo enrichment and event campaigns",
+    "workflows": [
+      "signal-outreach",
+      "event-sequence"
+    ],
+    "scope": "Verified recipient lookup or approved enrichment and real campaign sends",
+    "source": [
+      "workspaces/prospecting/workflows/event-sequence/references/prep.md",
+      "workspaces/prospecting/workflows/event-sequence/references/sequence.md",
+      "workspaces/prospecting/workflows/event-sequence/references/readback.md"
+    ],
+    "setup": "Connect the company Apollo account. Map contact search, people bulk match and waterfall, contacts bulk create, sequences create/update, mailbox index, campaign add/approve/show, message search and get_content. Verify sender mailbox and native copy, schedule and stop-on-reply capabilities. LinkedIn touches remain manual tasks.",
+    "authentication": "Configure native OAuth or the required Apollo API key directly in the runtime. Review credits and CRM sync. Every enrichment spend and enrollment retains its exact approval gate.",
+    "verify": "Read account, sender ID/address/provider, existing contact ownership, sequence templates and stop-on-reply. Inspect native copy and campaign/message readback capabilities without spending credits or enrolling anyone for setup.",
+    "settings": {
+      "sender_mailbox": {
+        "question": "Actual approved Apollo sending mailbox ID or reference?",
+        "type": "string"
+      }
+    }
+  },
+  "crm_sync": {
+    "label": "Gmail, Apollo and Unify Salesforce sync",
+    "workflows": [
+      "signal-scan",
+      "signal-user-scan",
+      "signal-followup",
+      "event-sequence",
+      "interaction-sync",
+      "pipeline-review",
+      "task-triage-speed-run"
+    ],
+    "scope": "System-managed email Tasks, Contact sync and integration-owner exclusions",
+    "source": [
+      "_core/policy.yaml",
+      "workspaces/prospecting/workflows/followup/references/execution.md"
+    ],
+    "setup": "Identify each actual email and enrollment sync into Salesforce, including Unify if used. Review Task subtype, inbound subject markers, dedupe, Contact ownership and push status. Supply only verified integration User IDs to ignore during warm-engagement checks. An empty list means no ignored users.",
+    "authentication": "Use existing authorized integration service accounts. No separate Unify key is required unless the chosen adapter actually calls its API.",
+    "verify": "Read service-user identities and representative native sync results. Do not infer completed CRM sync from a Gmail send or Apollo enrollment count.",
+    "settings": {
+      "ignored_owner_ids": {
+        "question": "Verified Salesforce integration User IDs to ignore, or []?",
+        "type": "list",
+        "target": "prospecting.scan.warm_engagement.ignored_owner_ids",
+        "allow_empty": true,
+        "format": "salesforce_user_list"
+      }
+    }
+  },
+  "event_invites": {
+    "label": "Event application invite export",
+    "workflows": [
+      "event-sequence"
+    ],
+    "scope": "Optional exact-email invite exclusion when an export is supplied",
+    "source": [
+      "workspaces/prospecting/workflows/event-sequence/references/prep.md"
+    ],
+    "setup": "Choose the actual event application and an authorized invite export or adapter. Keep each campaign list outside Git. Record not_used when no invite system is used and preserve the explicit no-export-checked limitation.",
+    "authentication": "A manual export needs no new API key. If a connector or MCP server is chosen, authenticate it through the runtime store.",
+    "verify": "Check complete export scope, exact email matching and unavailable-export reporting. Missing evidence does not become a false no-invite result.",
+    "settings": {}
+  },
+  "billing": {
+    "label": "NetSuite, Stripe and commercial catalog",
+    "workflows": [
+      "close"
+    ],
+    "scope": "Downstream billing status and manual operations handoffs",
+    "source": [
+      "workspaces/pipeline/workflows/close/references/fields.md",
+      "workspaces/pipeline/workflows/close/references/paths.md"
+    ],
+    "setup": "Choose actual billing/ERP systems and a CRM-status or operations-evidence route. Configure terms, price books, product tiers, credits and annualized pilot pricing. Verify NetSuite sync fields, errors and bypass meaning. Identify the owner of Stripe self-serve cancellation and invoices.",
+    "authentication": "The source uses CRM fields and ops replies, not direct NetSuite or Stripe API calls. No new API key is required for that route. Authenticate a direct connector only if explicitly chosen and adapted.",
+    "verify": "Read actual price books, Product2 and line-item formulas, currency and signed terms. Verify downstream status and ops ownership. The agent does not cancel billing, issue invoices or edit line items during setup.",
+    "settings": {
+      "terms": {
+        "question": "Reviewed default commercial terms?",
+        "type": "object",
+        "target": "close.terms_default",
+        "policy_shape": true
+      },
+      "price_books": {
+        "question": "Actual compatible price-book names and approved list prices?",
+        "type": "object",
+        "target": "close.price_books",
+        "policy_shape": true
+      },
+      "credits": {
+        "question": "Actual compatible credit and bonus products and units?",
+        "type": "object",
+        "target": "close.credits",
+        "policy_shape": true
+      }
+    }
+  },
+  "signatures": {
+    "label": "DocuSign, Ironclad and signed agreement evidence",
+    "workflows": [
+      "close"
+    ],
+    "scope": "Close signature gate and stage side effects",
+    "source": [
+      "workspaces/pipeline/workflows/close/references/evidence.md",
+      "workspaces/pipeline/workflows/close/references/fields.md",
+      "workspaces/pipeline/workflows/close/references/paths.md"
+    ],
+    "setup": "Choose actual signature providers and evidence via mapped CRM fields, supplied signed agreements or an approved adapter. Review signature-date semantics and whether completion actually changes StageName. Configure accepted evidence and field mappings before closing.",
+    "authentication": "The existing CRM and user-supplied evidence route needs no direct DocuSign or Ironclad key. Store provider credentials only when a direct connector is selected.",
+    "verify": "Read signature evidence and the actual CRM automation. Never assume signature completion sets Closed Won in this company or manually type a system-owned signature status.",
+    "settings": {
+      "evidence_route": {
+        "question": "Actual signature evidence route and documented stage side effects?",
+        "type": "string"
+      }
+    }
+  },
+  "web_research": {
+    "label": "Public web search and source retrieval",
+    "workflows": [
+      "signal-scan",
+      "sales-call-prep"
+    ],
+    "scope": "Dated public evidence only",
+    "source": [
+      "workspaces/prospecting/workflows/research/references/buying-signals.md",
+      "workspaces/pipeline/workflows/sales-call-prep/references/collect.md"
+    ],
+    "setup": "Choose the runtime web search and page-fetch tools or an equivalent search API/MCP connection. Verify fetched page text, source URLs, dates and supporting quotations. Public mentions do not substitute for warehouse adoption evidence.",
+    "authentication": "Built-in runtime search may need no extra key. Store any separately chosen search API credential in the runtime store.",
+    "verify": "Retrieve a known public page and preserve source text, URL and date evidence. A search snippet or blocked page never proves the required source passage.",
+    "settings": {}
+  },
+  "audio": {
+    "label": "Media speech skill and audio tooling",
+    "workflows": [
+      "sales-call-prep"
+    ],
+    "scope": "Scheduled daily full-summary audio only",
+    "source": [
+      "workspaces/pipeline/workflows/sales-call-prep/references/daily.md"
+    ],
+    "setup": "Install the actual media skill and speech guide. Choose a supported voice and provider. Verify input limits, ordered chunk joining, MP3 output and playback. Prepare FFmpeg or the media skill equivalent if joining is required. Deferred audio leaves the written brief available with its stated audio gap.",
+    "authentication": "Configure the actual speech provider credential through the runtime store if required. A sample voice name is not proof the provider is available.",
+    "verify": "Load the speech guide and inspect supported voice/output capabilities. With authorized test text, verify full-section narration, joined playback, ending and downloadable thread attachment.",
+    "settings": {
+      "voice": {
+        "question": "Actual supported speech voice?",
+        "type": "string",
+        "target": "call_prep.audio.voice"
+      }
+    }
+  },
+  "local_tools": {
+    "label": "Local Python helpers and PDF tooling",
+    "workflows": [
+      "signal-scan",
+      "signal-user-scan",
+      "signal-outreach",
+      "signal-followup",
+      "event-sequence",
+      "sales-call-prep",
+      "interaction-sync",
+      "watch-sync",
+      "pipeline-review",
+      "task-triage-speed-run",
+      "pilot-usage",
+      "customer-review",
+      "close",
+      "deal-coach",
+      "forecast-weekly",
+      "repo-maintenance",
+      "agent-configuration",
+      "system-review"
+    ],
+    "scope": "Python prerequisites for local helpers. Chromium, fonts and rasterizer only for pilot PDF production.",
+    "source": [
+      "_core/requirements.txt",
+      "_core/scripts/interfaces.md",
+      "workspaces/pipeline/workflows/pilot-usage/references/pdf-format.md"
+    ],
+    "setup": "Prepare Python 3.12+, pinned PyYAML and pypdf outside both folders. Install headless Chromium or Playwright Chromium and pdftoppm or an equivalent rasterizer. Verify bundled DejaVu fonts and hashes. Local simulation needs these tools but no proprietary font service.",
+    "authentication": "Local tools need no API key. Package or browser installation follows the local environment policy.",
+    "verify": "Run the scratch rehearsal, inspect both PDF pages and verify fonts, metadata, page count, output location and helper execution from another working directory.",
+    "settings": {
+      "environment": {
+        "question": "External Python environment and PDF renderer reference?",
+        "type": "string"
+      }
+    }
+  },
+  "github": {
+    "label": "Git, GitHub repository, PRs and CI",
+    "workflows": [
+      "repo-maintenance",
+      "agent-configuration"
+    ],
+    "scope": "Authorized repository maintenance and deployment",
+    "source": [
+      "workspaces/systems/workflows/repo-maintenance/CONTEXT.md",
+      ".github/workflows/tests.yml"
+    ],
+    "setup": "Choose the adopter repository, remotes, default branch, deployed revision, CI and any required deployment target. The source or template remote is not the company deployment. Review branch protection, required checks and project-library read permissions.",
+    "authentication": "Use approved GitHub OAuth, app or CLI login, or a token directly in the secret store. Grant only the authorized repository access. Source merge permission does not transfer.",
+    "verify": "Read actual repo identity, current user and permissions, remote revision and required CI checks. Merging and deploying need exact authorization after a concrete diff is ready.",
+    "settings": {
+      "repository": {
+        "question": "Actual adopter GitHub repository reference?",
+        "type": "string"
+      }
+    }
+  },
+  "automations": {
+    "label": "Schedules, connector watches and notification delivery",
+    "workflows": [
+      "signal-scan",
+      "signal-user-scan",
+      "signal-outreach",
+      "signal-followup",
+      "event-sequence",
+      "sales-call-prep",
+      "interaction-sync",
+      "watch-sync",
+      "pipeline-review",
+      "task-triage-speed-run",
+      "pilot-usage",
+      "customer-review",
+      "close",
+      "deal-coach",
+      "forecast-weekly",
+      "repo-maintenance",
+      "agent-configuration",
+      "system-review"
+    ],
+    "scope": "Only explicitly deployed schedules or watches",
+    "source": [
+      "_core/policy.yaml",
+      "_core/CONVENTIONS.md",
+      "workspaces/pipeline/workflows/watch-sync/references/reconcile.md"
+    ],
+    "setup": "Review every policy schedule and watch, its workflow/branch, time, timezone, owner, thread and delivery. Include call prep, Coach branches, customer review, watch sync, call sweep, triage, nudges, daily/Friday pipeline, forecast, pace, manager update and system review. Save the actual plan outside Git. Setup never activates it.",
+    "authentication": "Use authorized runtime scheduler, watch and notification access. Read back actual permissions. Worker messaging, Slack watch gaps and direct-operator automation restrictions must be verified in this environment.",
+    "verify": "Inspect duplicates, schedules, connector events, thread routes, delivery and notification/suppression capabilities. Create or activate only the exact authorized plan, then read back settings and delivery evidence.",
+    "settings": {
+      "plan": {
+        "question": "External reference for the reviewed complete schedule, watch and notification plan?",
+        "type": "string"
+      }
+    }
+  },
+  "collateral": {
+    "label": "Approved product guidance and sales collateral",
+    "workflows": [
+      "signal-outreach",
+      "interaction-sync"
+    ],
+    "scope": "Buyer wording and optional attachments",
+    "source": [
+      "_core/collateral/approved-material.md",
+      "workspaces/prospecting/workflows/outreach/references/talk-track.md"
+    ],
+    "setup": "Replace fictional product guidance with dated company-approved claims and limits. Supply only approved seller collateral and verify runtime attachment access. Source-company PDFs, videos and claims remain excluded.",
+    "authentication": "Local approved materials need no new key. Use the existing authorized mailbox or storage adapter if runtime retrieval requires one.",
+    "verify": "Review actual product evidence, expiry and claim boundaries, approved attachment names and draft attachment readback. Setup wording is not buyer-use approval.",
+    "settings": {}
+  }
+}

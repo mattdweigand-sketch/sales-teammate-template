@@ -44,13 +44,16 @@ class ProspectingMigration(unittest.TestCase):
             self.assertIn(f"{step + 1}. After approval ", process)
             self.assertIn("Recheck owner, open Opportunities and duplicates", process)
 
-    def test_nested_policy_matches_verbatim_live_fixture(self):
+    def test_nested_policy_preserves_source_except_explicit_template_permissions_and_exclusions(self):
         live = yaml.safe_load((ROOT / "_core/tests/prospecting-fixtures/policy.yaml").read_text())
         current = prospect_common.load_policy()
         current.pop("event")
         self.assertEqual(current["approval"]["never"],
                          ["send email outside rules#event_sequence", "create Opportunity", "change deal stage or amount"])
         current["approval"]["never"] = live["approval"]["never"]
+        # The fixture models a fictional sync user. A fresh template excludes nobody.
+        self.assertEqual(current["scan"]["warm_engagement"]["ignored_owner_ids"], [])
+        live["scan"]["warm_engagement"]["ignored_owner_ids"] = []
         self.assertEqual(current, live)
 
     def test_tools_registered_at_actual_paths(self):

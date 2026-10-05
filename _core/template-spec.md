@@ -34,12 +34,14 @@ Default automatic date moves, unattended writes, merges and schedule activation 
 
 ## Onboarding
 
-One flat questionnaire collects 24 persistent company settings. Required questions have no fictional defaults and there is no mode choice.
+A company questionnaire and guided integration interview cover persistent settings and all 21 external and local surfaces. Required questions have no fictional defaults.
+Every integration needs configure, defer or not_used with the declared settings or a reason. Credential values stay in the runtime secret store. There is no mode choice.
 A saved JSON answer file maps each answer to canonical policy or product references. The agent collects actual settings and saves the file outside both workspaces.
 Identity, timezone, internal domains, CRM URL, notes, product messaging, ICP, quarterly targets, warehouse, operation routing and adapter mappings are configurable.
 Configuration creates a fresh workspace at an absent external destination, excludes Git history, preserves the source template, and commits no customer material.
 Validate all answers before copying. Reject unknown answers, invalid types, paths, identity conflicts and invalid mappings without partial destinations.
-Repeat setup refuses overwrites. Normal setup derives configured state and rejects reserved identity and CRM domains. Live integration checks remain pending.
+Repeat setup refuses overwrites. Normal setup derives configured state and rejects reserved identity and CRM domains.
+All 21 live integration checks remain pending. Deferred capabilities hold their dependent operations.
 Only the scratch rehearsal opts into simulation with fictional answers stored under `_core/tests/fixtures/onboarding/`. Check distinguishes these internal states.
 Generate portable skill pointers for all named routes. Pointers do not install agents, grant permissions or activate schedules.
 

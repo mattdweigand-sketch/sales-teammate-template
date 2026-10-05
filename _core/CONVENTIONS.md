@@ -123,7 +123,8 @@ Workspace references and helpers live beside workflows when they serve only that
 
 ## Platform limits
 
-These observed limits constrain deployment proposals. Read actual settings and report unavailable evidence rather than assuming a command succeeded.
+These observations came from the source Perplexity runtime. Verify them in the adopter environment before using them to constrain deployment proposals.
+Read actual settings and report unavailable evidence rather than assuming a command succeeded.
 
 1. Automation edit scope. Edits, pauses, and deletes worked in direct Operator turns. Agent Mail turns and automation wakes failed with `RUN_AUTOMATION_SCOPE_VIOLATION`.
    Use the automation screen outside a direct Operator turn.
