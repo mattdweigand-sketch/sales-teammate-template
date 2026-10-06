@@ -7,6 +7,10 @@ Resume from the last `next_cursor`, never page one. Retry a failed page once wit
 `<userId>` comes from `rules#run_start`.
 
 1. Opportunities. Record the original open count.
+   Find active deal threads by Account name with `pplx project sessions list --search` in the current project.
+   Verify the exact title `<Account> deal` for that Opportunity's Account, the same title check used in Task triage. Keep the verified session id and link.
+   An ambiguous title or unavailable search is needs-input, not proof that no deal thread exists. Hold proposals on that record until ownership is verified.
+   Verify the thread belongs to the resolved Opportunity. An Account title alone never assigns a Task among several possible Opportunities.
    On weekdays, also select `<policy.forecast.amount_field>` for Top 3 ranking, deduplicating it with the other fields.
    ```sql
    SELECT Id, Name, StageName, Amount, CloseDate, Next_Steps__c, ForecastCategoryName, Account.Name, AccountId,

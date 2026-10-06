@@ -29,6 +29,9 @@ The `momentum` policy block must also supply `sweep` settings with `page_size` a
    Read transcript next steps and open Tasks on that Opportunity. Draft completion, buyer-stated date move, or new follow-up proposals only.
 3. Find the current project's deal thread by Account name with `pplx project sessions list --search`.
    If one is verified, send it with `pplx session send` the meeting marker, title, date, and Task proposals.
+   On confirmed failure with no delivery, retry once with `pplx tm mail send <deal-thread session id>`. Record which command delivered. Never claim delivery without a successful send.
+An ambiguous send needs native reconciliation or stays needs-input. Never blindly retry a missing or delayed response.
+   Failed or ambiguous routing stays needs-input.
    Request the interaction-sync skill for this meeting and its lettered proposals there. Explicitly say no writes until Operator approves.
    Otherwise use `pplx automation notify-source --message` with the same evidence for Pipeline. If routing is unavailable, report it, never claim delivery.
 4. Reply with one line per unlogged or identity-unverified call, naming Account, title, time, and destination or blocker.

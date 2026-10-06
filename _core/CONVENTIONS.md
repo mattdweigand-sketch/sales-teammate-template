@@ -143,3 +143,5 @@ Read actual settings and report unavailable evidence rather than assuming a comm
 5. Teammate instructions. `pplx tm new --description` did not save. The Edit teammate Description field holds standing instructions. Role is the short title. Readback can lag seconds.
 6. Credential injection. Credentials inject only for literal top-level `pplx` commands, not sourced scripts or loops.
 7. Slack watch coverage. Slack watches miss app and bot messages. Watches on Operator's DMs never fire.
+8. Session send. Verify the included Perplexity adapter's session delivery and teammate mail in the adopter environment.
+   Try session send once, then teammate mail once only on confirmed no delivery. Reconcile ambiguous outcomes before retrying and record the successful transport.

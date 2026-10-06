@@ -28,7 +28,7 @@
     ],
     "setup": "Choose Perplexity Computer or an equivalent adapter. Select the project, deployment root and five workspace destinations. Install all 18 generated pointers and required org skills. Map pplx sessions, project tasks, task comments and notification commands. Verify saved tool-call envelopes and session paths used by helpers.",
     "authentication": "Use the runtime login and approved project membership. Read back per-workspace tools and permissions. Runtime access does not grant workflow write approval.",
-    "verify": "Load every pointer through the supported skill mechanism and show its contract and applicable Inputs. Read actual teammate instructions, project access, routes, task/comment tools and sandbox locations. Keep deployment inactive until authorized.",
+    "verify": "Load every pointer through the supported skill mechanism and show its contract and applicable Inputs. Read actual teammate instructions, project access, routes, task/comment tools and sandbox locations. Keep deployment inactive until authorized. Verify current-project deal-thread discovery, record linkage, successful native delivery receipts and confirmed-failure fallback. Reconcile ambiguous outcomes before retrying.",
     "settings": {
       "project": {
         "question": "Actual runtime project identifier or reference?",
@@ -555,7 +555,7 @@
     ],
     "setup": "Review every policy schedule and watch, its workflow/branch, time, timezone, owner, thread and delivery. Include call prep, Coach branches, customer review, watch sync, call sweep, triage, nudges, daily/Friday pipeline, forecast, pace, manager update and system review. Save the actual plan outside Git. Setup never activates it.",
     "authentication": "Use authorized runtime scheduler, watch and notification access. Read back actual permissions. Worker messaging, Slack watch gaps and direct-operator automation restrictions must be verified in this environment.",
-    "verify": "Inspect duplicates, schedules, connector events, thread routes, delivery and notification/suppression capabilities. Create or activate only the exact authorized plan, then read back settings and delivery evidence.",
+    "verify": "Inspect duplicates, schedules, connector events, thread routes, delivery and notification/suppression capabilities. Create or activate only the exact authorized plan, then read back settings and delivery evidence. Verify scheduled-run session delivery and any fallback without treating an ambiguous response as failed delivery.",
     "settings": {
       "plan": {
         "question": "External reference for the reviewed complete schedule, watch and notification plan?",

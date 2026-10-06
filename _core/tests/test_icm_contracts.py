@@ -447,13 +447,13 @@ class FridayMeasurementContracts(unittest.TestCase):
         cls.contract = sections((cls.workflow / "CONTEXT.md").read_text())
         cls.coach = sections((workflow_path("deal-coach") / "references/report-format.md").read_text())
 
-    def test_platform_limits_name_all_seven_observed_constraints(self):
+    def test_platform_limits_name_all_eight_observed_constraints(self):
         conventions = (CORE / "CONVENTIONS.md").read_text()
         limits = sections(conventions)["Platform limits"]
         names = ("Automation edit scope", "Automation delivery", "Dedicated threads", "Worker messaging",
-                 "Teammate instructions", "Credential injection", "Slack watch coverage")
+                 "Teammate instructions", "Credential injection", "Slack watch coverage", "Session send")
         numbered = [line for line in limits if re.match(r"^\d+\. ", line)]
-        self.assertEqual(len(numbered), 7)
+        self.assertEqual(len(numbered), 8)
         for number, name in enumerate(names, 1):
             self.assertTrue(numbered[number - 1].startswith(f"{number}. {name}."))
         text = "\n".join(limits)
@@ -578,16 +578,16 @@ class AuditFindingContracts(unittest.TestCase):
         directory = workflow_path("task-triage-speed-run")
         text = (directory / "CONTEXT.md").read_text()
         frontmatter = yaml.safe_load(text.split("---\n", 2)[1])
-        self.assertEqual(frontmatter["next"], "pipeline-review for remaining pipeline-owned Tasks")
+        self.assertEqual(frontmatter["next"], "verified deal threads for routed Tasks, pipeline-review for remaining pipeline-owned Tasks")
         _, outputs = table_rows(sections(text)["Outputs"])
-        handoffs = [row for row in outputs if row[0] == "Pipeline-owned Task handoff"]
+        handoffs = [row for row in outputs if row[0] == "Owned Task handoff"]
         self.assertEqual(len(handoffs), 1)
-        self.assertEqual(handoffs[0][1], "Run thread")
+        self.assertEqual(handoffs[0][1], "Run thread and verified deal thread")
         for expected in ("Remaining owned rows", "ambiguous candidates with reasons", "pipeline-review",
                          '`references/writes.md` "Close"'):
             self.assertIn(expected, handoffs[0][2])
         close = "\n".join(sections((directory / "references" / "writes.md").read_text())["Close"])
-        self.assertIn("List owned rows as handoffs to pipeline-review", close)
+        self.assertIn("verified deal-thread or pipeline-review destination", close)
 
     def test_root_systems_summary_includes_improvement_tasks(self):
         _, routes = table_rows(sections((ROOT / "CONTEXT.md").read_text())["Task routing"])
@@ -946,9 +946,11 @@ class CanonicalHomes(unittest.TestCase):
         grouping = (workflow / "references" / "grouping.md").read_text()
         collect = (workflow / "references" / "collect.md").read_text()
         for text, policy_reference in ((contract, "`pipeline.stages`"),
-                                       (grouping, "policy.pipeline.stages"), (collect, "policy.pipeline.stages")):
+                                       (grouping, "policy.pipeline.stages")):
             self.assertIn("rules#followup_task", text)
             self.assertIn(policy_reference, text)
+        self.assertIn('`references/grouping.md` "Pipeline ownership"', collect)
+        self.assertIn("rules#followup_task", collect)
         self.assertLess(grouping.index("## Pipeline ownership"), grouping.index("## Other Tasks"))
         for expected in ("open Opportunity", "`StageName`", "Opportunity or its Account", "Subject",
                          "ActivityDate", "Next_Steps__c", "ambiguous candidates", "Pipeline review owns",
@@ -961,7 +963,7 @@ class CanonicalHomes(unittest.TestCase):
         references = workflow_path("task-triage-speed-run") / "references"
         walk = (references / "walk.md").read_text()
         drafts = (references / "drafts.md").read_text()
-        for expected in ("`Pipeline review owns` first", "one unnumbered line per Task",
+        for expected in ("`Routed to deal threads` first", "Then show `Pipeline review owns`", "one unnumbered line per Task",
                          "linking the Task and its Opportunity", "unnumbered draft-only rows",
                          "no Task approval stage", "Exclude pipeline-owned Tasks from every date move or completion map"):
             self.assertIn(expected, walk)
@@ -974,7 +976,7 @@ class CanonicalHomes(unittest.TestCase):
         for expected in ("get no Task write in triage", "Recheck ownership immediately before a Task write",
                          "does not authorize a date move, completion, or Task note", "Report the helper's actual result",
                          "fresh Opportunity and Task records", "verified pipeline ownership or an explicit user deferral",
-                         "not as completed or user-deferred Tasks", "Any other remaining row without an explicit deferral"):
+                         "not as completed or user-deferred", "Any other remaining row without an explicit deferral"):
             self.assertIn(expected, writes)
 
     def test_auto_date_move_rule_uses_approved_wording_and_scheduled_exception(self):

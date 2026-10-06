@@ -2,7 +2,7 @@
 cadence: [daily, one-off]
 reads: _core/policy.yaml (salesforce, pipeline, followup, email_voice, tooling, momentum), _core/rules.md, references/, Salesforce, Gmail, Calendar, Slack, Momentum, project deal threads
 writes: Salesforce Task and Contact fields, Contact creates, unsent Gmail drafts, on approval or rules#auto_date_move
-next: pipeline-review for remaining pipeline-owned Tasks
+next: verified deal threads for routed Tasks, pipeline-review for remaining pipeline-owned Tasks
 ---
 
 # Task Triage Speed Run
@@ -59,7 +59,7 @@ are evidence.
 | Group coverage, before the step 5 question | Every pending row across all groups appears exactly once as proposed or blocked, the displayed count matches, and there is one main-pass approval question. Instruction-level, not tool-enforced |
 | Draft basis, before the full proposal | Each draft continues the prior email read in `references/collect.md` "Gather evidence" item 6. None is drafted from Task notes alone |
 | Recycle, before steps 7 and 8 | Recycle stays needs-input until `approved` with its number. `all` never covers it, and no active Contact is offered Recycle |
-| Ownership, before steps 5, 7, and 8 | Current-action Tasks under `rules#followup_task` for open Opportunities in `policy.pipeline.stages` get no date move or completion proposal or write. Ambiguous candidates stay pipeline-owned |
+| Ownership, before steps 5, 7, and 8 | Active-deal-thread Tasks and current-action Tasks under `rules#followup_task` in `policy.pipeline.stages` get no local Task proposal or write. Ambiguous candidates stay held |
 | Dates, before steps 5, 7, and 8 | Every date to be written appears in a map Operator approved, except qualifying next-business-day moves under `rules#auto_date_move`. Pipeline-owned Tasks never qualify |
 | Readback, after steps 5, 7, and 8 | Every changed record is read back, including `Description`, before `Verified in Salesforce` or `Auto-moved`. Every new draft is read back before `Draft ready` |
 | Closeout, before the step 9 summary | `closeout_check` passes on a fresh query, or every remaining row has verified pipeline ownership or an explicit user deferral with its reason |
@@ -75,5 +75,5 @@ are evidence.
 | Salesforce updates | Task and Contact records, after approval or pre-approval under `rules#auto_date_move` | Per `references/writes.md` "Auto date moves" or "Writes", read back. Salesforce holds the updated queue |
 | Receipts | Run thread | One combined receipt for the approved pass and one remaining batch |
 | Close summary | Run thread | Per `references/writes.md` "Close", ending `No emails sent.` |
-| Pipeline-owned Task handoff | Run thread | Remaining owned rows and ambiguous candidates with reasons, for pipeline-review per `references/writes.md` "Close" |
+| Owned Task handoff | Run thread and verified deal thread | Remaining owned rows and ambiguous candidates with reasons. Owner, destination and actual delivery per `references/writes.md` "Close". Pipeline-owned rows go to pipeline-review |
 | Saved results | Sandbox | Query and helper outputs, never Project Files |

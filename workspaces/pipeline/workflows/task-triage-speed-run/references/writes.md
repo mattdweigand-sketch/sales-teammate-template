@@ -22,8 +22,9 @@ Never label an unverified write `Auto-moved`, never automatically retry it, and 
 
 ## Writes
 
-Pipeline-owned current-action Tasks and ambiguous candidates per `references/grouping.md` get no Task write in triage.
-Recheck ownership immediately before a Task write. If it is now pipeline-owned or ambiguous, skip it and add it to `Pipeline review owns` with its Opportunity link.
+Apply `references/grouping.md` "Pipeline ownership" before every write. Active-deal-thread Tasks, Pipeline-owned current-action Tasks and ambiguous candidates get no Task write in triage.
+Recheck ownership immediately before a Task write. If it is now owned elsewhere or ambiguous, skip it and place it in the appropriate ownership group with its Opportunity link.
+Never take ownership after failed delivery.
 An approved Gmail draft for such a Task does not authorize a date move, completion, or Task note.
 
 Apply approvals to the full proposal per `references/walk.md` "Section walk", never one approval per group or per draft and date map.
@@ -48,7 +49,7 @@ Before the close summary, re-run the `workspaces/pipeline/workflows/task-triage-
 Then run `policy.tooling.scripts.closeout_check <saved JSON> --as-of <run start with local offset>`; it exits nonzero when any open Task is still due today, overdue, or undated.
 Report the helper's actual result, including a nonzero result when owned Tasks remain. Recheck their ownership on fresh Opportunity and Task records.
 The triage run is complete only when the check passes or every remaining row has verified pipeline ownership or an explicit user deferral with its reason recorded.
-List owned rows as handoffs to pipeline-review, not as completed or user-deferred Tasks. Keep ambiguous candidates in that handoff with the reason.
+List each owned row with its verified deal-thread or pipeline-review destination and actual delivery or blocker, not as completed or user-deferred. Keep ambiguous candidates held with the reason.
 Report the final query result in the close summary. Any other remaining row without an explicit deferral needs a decision before close.
 
 List: drafts created (unsent), Tasks completed, Tasks moved, Contacts recycled, CRM corrections applied, Tasks left for manual follow-through with reasons. End with `No emails sent.`

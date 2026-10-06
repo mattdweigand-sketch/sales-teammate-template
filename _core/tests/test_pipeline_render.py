@@ -157,6 +157,67 @@ class Render(unittest.TestCase):
     def test_weekday_report_matches_expected_output(self):
         self.assertEqual(self.ok("report", base()), EXPECTED.read_text())
 
+    def test_routed_section_counts_separately_and_marks_top_priority(self):
+        data = base()
+        data["deals"] = [row for row in data["deals"] if row["id"] != BIO]
+        data["blocks"] = [row for row in data["blocks"] if row["deal"] != BIO]
+        data["routed"] = [{"deal": BIO, "name": "Acme Devices", "thread_url": "https://example.test/deal",
+                           "reason": "Current action belongs to the deal thread"}]
+        data["today_actions"] = [{"deal": BIO, "name": "Acme Devices", "kind": "due", "date": "2026-09-28",
+                                  "reason": "Review the overdue follow-up", "evidence": [
+                                      {"source": "Salesforce", "date": "9/28/26", "who": "Operator",
+                                       "title": "Open Task", "fact": "Follow-up is due today"}]}]
+        out = self.ok("report", data)
+        self.assertIn("18 reviewed · 2 flagged · 1 clear recommendation", out)
+        self.assertIn("## Routed to deal threads\n\n1 routed · counted separately", out)
+        self.assertIn("[Acme Devices](https://example.test/deal) · Current action belongs to the deal thread", out)
+        self.assertIn("in deal thread · Review the overdue follow-up", out)
+        self.assertIn("15 reviewed deals had no trigger", out)
+        self.assertNotIn("1. [Acme Devices]", out)
+
+    def test_routed_records_reject_local_proposals_and_double_counts(self):
+        data = base()
+        data["routed"] = [{"deal": BIO, "name": "Acme Devices", "thread_url": "https://example.test/deal",
+                           "reason": "Owned elsewhere"}]
+        self.fails("report", data, "routed deals must be counted separately")
+        data["deals"] = [row for row in data["deals"] if row["id"] != BIO]
+        self.fails("report", data, "routed deal is owned elsewhere; propose nothing here")
+
+    def test_routed_rows_require_unique_ids_links_and_complete_counts(self):
+        data = base()
+        row = {"deal": CARY, "name": "Delta Labs", "thread_url": "https://example.test/deal", "reason": "Owned elsewhere"}
+        data["routed"] = [row, copy.deepcopy(row)]
+        self.fails("report", data, "routed: each deal appears once")
+        data["routed"] = [row]
+        row["thread_url"] = ""
+        self.fails("report", data, "routed needs an https deal-thread link")
+        row["thread_url"] = "https://example.test/deal"
+        data["counts"]["reviewed"] = 3
+        self.fails("report", data, "plus routed 1")
+
+    def test_malformed_routed_rows_reject_without_output(self):
+        for routed in (None, {}, [None], [{"deal": []}], [{"deal": "bad"}]):
+            with self.subTest(routed=routed):
+                data = base()
+                data["routed"] = routed
+                result = self.call("report", data)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+                self.assertNotIn("Traceback", result.stderr)
+        for link in ("https://", "https://bad link", "https://user:secret@example.test", "https://["):
+            with self.subTest(link=link):
+                data = base()
+                data["routed"] = [{"deal": CARY, "name": "Account", "reason": "Owned elsewhere", "thread_url": link}]
+                self.fails("report", data, "routed needs an https deal-thread link")
+
+    def test_routed_friday_records_reject_letters(self):
+        data = friday(base())
+        data["routed"] = [{"deal": data["friday"]["letters"][0]["deal"], "name": "Acme Devices",
+                           "thread_url": "https://example.test/deal", "reason": "Owned elsewhere"}]
+        result = self.call("report", data)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("routed deal is owned elsewhere; propose nothing here", result.stderr)
+
     def test_html_entities_decode_for_display_and_writes_stay_exact(self):
         out = self.ok("report", base())
         self.assertIn("Next: Pat's presentation outcome", out)
