@@ -195,6 +195,25 @@
     "default": {},
     "targets": []
   },
+  "event_house_owner_ids": {
+    "question": "Verified Salesforce house-owner User IDs allowed for explicitly marked event rows, or [] to disable?",
+    "type": "list",
+    "required": false,
+    "default": [],
+    "allow_empty": true,
+    "targets": [
+      "prospecting.event.outreach_owner_scope.house_owner_ids"
+    ]
+  },
+  "event_include_missing_account": {
+    "question": "Allow explicitly marked event rows when a complete Salesforce lookup finds no Account? Default false.",
+    "type": "boolean",
+    "required": false,
+    "default": false,
+    "targets": [
+      "prospecting.event.outreach_owner_scope.include_missing_account"
+    ]
+  },
   "integration_setup": {
     "question": "Review every system in integrations.json and choose configure, defer or not_used. Never include credentials.",
     "type": "object",

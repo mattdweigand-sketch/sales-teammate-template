@@ -6,6 +6,13 @@ Record every proposal, label, and status in the run file that report-format desc
 
 ## Every run
 
+For an Opportunity owned by an active deal thread, send that thread the flag, evidence, and recommended fix. Ask it to merge with any open proposal on the same record.
+Propose nothing on that record in this run. Try `pplx session send` once. On confirmed failure with no delivery, retry once with `pplx tm mail send <deal-thread session id>`.
+Record which command delivered. Failed or ambiguous routing is needs-input. Never claim delivery without a successful send.
+An ambiguous send needs native reconciliation or stays needs-input. Never blindly retry a missing or delayed response.
+Keep the verified destination session ID, link and successful native delivery receipt in the run evidence. Report the exact blocker when delivery is unresolved.
+Keep these rows in report-format's "Routed to deal threads" section, not local approval blocks, questions, or Friday letters.
+
 For each deal flagged by `hygiene_check` or by `new_activity` (`workspaces/pipeline/workflows/pipeline-review/references/triggers.md`), show a numbered clear recommendation, a question, or both.
 Next-step entries per `rules#next_steps` and `rules#next_steps_format`. Apply `rules#next_steps_review` before date-based proposals.
 Build each next-step proposal from the deal's thread record in `workspaces/pipeline/workflows/pipeline-review/references/collect.md` item 4,
@@ -48,6 +55,9 @@ Labels Q1, Q2 in report order. After the numbered blocks are applied, skipped, o
 - Never reuse a label for a different or revised proposal in the run. A revised block takes the next unused number and the old one is marked superseded. Approval never transfers to a new label.
 
 ## Friday
+
+Apply "Every run" deal-thread routing before Friday record proposals. Send the flag, evidence, and recommended fix to its owner and ask it to merge any open proposal.
+Propose nothing on that record here, including Friday qualification changes. Keep the qualification finding read-only and route it with the same transport and delivery gates.
 
 Friday, add the rollup, the delta, and lettered record proposals, one record each:
 - CloseDate move per `rules#close_date_basis`.

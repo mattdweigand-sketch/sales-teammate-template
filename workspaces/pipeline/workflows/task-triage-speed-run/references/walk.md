@@ -14,7 +14,9 @@ One message, all groups in the order of `references/grouping.md`, every Task lis
 Otherwise state the verified `Auto-moved` count and any pending automatic writes. Never claim nothing changed after an automatic write. Other pending rows use this line format.
 `n\. [Account · FirstName](<policy.salesforce.record_url>) · <action or date> · <reason>`
 
-Show `Pipeline review owns` first with one unnumbered line per Task, linking the Task and its Opportunity. No date move or completion proposal appears in that group.
+Show `Routed to deal threads` first with unnumbered Task, Opportunity and destination links, the owner and actual delivery or blocker.
+These rows have no local Task or draft proposal and are excluded from every approval map. A routed Task remains open in Salesforce.
+Then show `Pipeline review owns` with one unnumbered line per Task, linking the Task and its Opportunity. No date move or completion proposal appears in that group.
 For ambiguous matches, link the candidate Opportunities and state the ambiguity. These Tasks have no Task write and are not counted in numbered approval maps.
 Include eligible owned drafts in that ownership group as unnumbered draft-only rows identified by Task link, with their full draft blocks. Do not duplicate them in another group.
 Number only the other Tasks continuously across the remaining groups. The readout is the full proposal, not a preview before separate group approvals.

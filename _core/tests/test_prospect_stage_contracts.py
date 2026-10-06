@@ -10,26 +10,27 @@ import unittest
 from pathlib import Path
 
 import yaml
-from test_skill_contracts import SKILL_PATHS, layout_entries
+from test_skill_contracts import SKILL_PATHS, layout_entries, reference_consumers
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "_core"
 WORKFLOWS = ROOT / "workspaces/prospecting/workflows"
-STAGES = WORKFLOWS
-STAGE_ORDER = ("research", "outreach", "followup")
-EXPECTED_STAGES = set(STAGE_ORDER)
-EXPECTED_WORKFLOWS = EXPECTED_STAGES | {"event-sequence"}
+STAGES = WORKFLOWS / 'signal-prospecting'
+STAGE_ORDER = ('01-research', '02-outreach', '03-followup')
+EVENT_STAGES = ('01-list-prep', '02-sequence-plan', '03-launch')
+EXPECTED_STAGES = set(STAGE_ORDER) | set(EVENT_STAGES)
+EXPECTED_WORKFLOWS = {'signal-prospecting', 'event-sequence'}
 HEADINGS = ("## Inputs", "## Process", "## Checkpoints", "## Audit", "## Outputs")
 ALLOWED_HEADINGS = set(HEADINGS) | {"## Checkpoints", "## Audit"}
 
 
 def stage_contracts():
     """Stage contracts only; the blank starter in _core/templates is not a stage."""
-    return sorted(WORKFLOWS.rglob("CONTEXT.md"))
+    return sorted(WORKFLOWS.glob("*/*/CONTEXT.md"))
 
 
 def stage_sources():
-    return stage_contracts() + sorted(WORKFLOWS.rglob("references/*.md"))
+    return stage_contracts() + [WORKFLOWS / "event-sequence/CONTEXT.md"] + sorted(WORKFLOWS.rglob("references/*.md"))
 
 
 def section(text, heading):
@@ -56,19 +57,19 @@ class StageContractTests(unittest.TestCase):
         self.pol = yaml.safe_load((CORE / "policy.yaml").read_text())
         self.files = stage_contracts()
         self.sources = stage_sources()
-        self.assertEqual({f.parent.name for f in self.files}, EXPECTED_WORKFLOWS)
+        self.assertEqual({f.parent.name for f in self.files}, EXPECTED_STAGES)
         self.assertEqual({p.name for p in layout_entries(WORKFLOWS)}, EXPECTED_WORKFLOWS)
 
     def test_signal_pipeline_order_is_declared_in_workspace_context(self):
-        text = (ROOT / "workspaces/prospecting/CONTEXT.md").read_text()
+        text = (STAGES / "CONTEXT.md").read_text()
         pipeline = section(text, "## Pipeline")
-        routes = re.findall(r"workflows/([a-z-]+)/CONTEXT.md", pipeline)
+        routes = re.findall(r"`([a-z0-9-]+)/CONTEXT.md`", pipeline)
         self.assertEqual(routes, list(STAGE_ORDER))
 
     def test_every_qualified_signal_has_a_fenced_bundle_for_operators_choice(self):
-        buying = (WORKFLOWS / "research/references/buying-signals.md").read_text()
-        intake = (WORKFLOWS / "outreach/references/execution.md").read_text()
-        contract = (WORKFLOWS / "outreach/CONTEXT.md").read_text()
+        buying = (STAGES / "01-research/references/buying-signals.md").read_text()
+        intake = (STAGES / "02-outreach/references/execution.md").read_text()
+        contract = (STAGES / "02-outreach/CONTEXT.md").read_text()
         self.assertIn("separate fenced json block for every qualified signal", buying)
         self.assertIn("not only the recommended signal", buying)
         self.assertIn("even when its item carries a fit objection", buying)
@@ -84,13 +85,16 @@ class StageContractTests(unittest.TestCase):
         for f in self.files:
             entries = {p.name for p in layout_entries(f.parent)}
             self.assertIn("CONTEXT.md", entries, f.parent.name)
-            self.assertIn("references", entries, f.parent.name)
-            self.assertTrue(list((f.parent / "references").glob("*.md")))
+            if 'references' in entries:
+                self.assertTrue(list((f.parent / 'references').glob('*.md')))
+            if 'scripts' in entries:
+                self.assertTrue(list((f.parent / 'scripts').iterdir()))
             self.assertLessEqual(entries, {"CONTEXT.md", "scripts", "references"}, f"{f.parent.name}: {sorted(entries)}")
 
     def test_title_matches_stage_folder(self):
         for f in self.files:
-            titles = {"research": "Research", "outreach": "Outreach", "followup": "Follow-up", "event-sequence": "Event Sequence"}
+            titles = {'01-research': 'Research', '02-outreach': 'Outreach', '03-followup': 'Follow-up',
+                      '01-list-prep': 'List Prep', '02-sequence-plan': 'Sequence Plan', '03-launch': 'Launch'}
             title = f"# {titles[f.parent.name]}"
             self.assertEqual(f.read_text().split("---\n", 2)[2].strip().splitlines()[0], title, str(f))
 
@@ -104,10 +108,9 @@ class StageContractTests(unittest.TestCase):
             self.assertIn("| Artifact | Location | Format |", section(text, "## Outputs"))
 
     def test_contracts_load_their_stage_reference(self):
-        for f in self.files:
-            for ref in (f.parent / "references").glob("*.md"):
-                scope = f.parent if f.parent.name == "event-sequence" else ROOT
-                self.assertIn(f"`{ref.relative_to(scope).as_posix()}`", section(f.read_text(), "## Inputs"))
+        contracts = self.files + [WORKFLOWS / 'event-sequence/CONTEXT.md']
+        for ref in WORKFLOWS.rglob('references/*.md'):
+            self.assertTrue(reference_consumers(ref, contracts), str(ref))
 
     def test_policy_keys_resolve(self):
         missing = []
@@ -129,7 +132,8 @@ class StageContractTests(unittest.TestCase):
         missing = []
         for f in self.sources:
             folders = (CORE / "scripts", ROOT / "workspaces/prospecting/scripts",
-                       f.parent / "scripts" if f.name == "CONTEXT.md" else f.parent.parent / "scripts")
+                       f.parent / "scripts" if f.name == "CONTEXT.md" else f.parent.parent / "scripts",
+                       WORKFLOWS / 'event-sequence/scripts', WORKFLOWS / 'event-sequence/01-list-prep/scripts')
             present = {p.name for folder in folders for p in folder.glob("*") if p.is_file()}
             for s in sorted(set(SCRIPT_NAME.findall(f.read_text()))):
                 if s not in present:
@@ -137,12 +141,17 @@ class StageContractTests(unittest.TestCase):
         self.assertEqual(missing, [], f"stage contract names scripts absent from its workflow, workspace or core scripts/: {missing}")
 
     def test_agents_routes_to_every_stage_contract(self):
-        agents = (ROOT / "AGENTS.md").read_text()
+        agents = (ROOT / 'AGENTS.md').read_text()
+        event = (WORKFLOWS / 'event-sequence/CONTEXT.md').read_text()
         for f in self.files:
-            rel = f.relative_to(ROOT).as_posix()
-            self.assertIn(f"`{rel}`", agents, f"AGENTS.md does not route to {rel}")
-            skill = next(name for name, path in SKILL_PATHS.items() if path == f.parent)
-            self.assertIn(f"`{skill}`", agents)
+            if f.parent.name in STAGE_ORDER:
+                rel = f.relative_to(ROOT).as_posix()
+                self.assertIn(f'`{rel}`', agents, f'AGENTS.md does not route to {rel}')
+                skill = next(name for name, path in SKILL_PATHS.items() if path == f.parent)
+                self.assertIn(f'`{skill}`', agents)
+            else:
+                self.assertIn(f'`{f.parent.name}/CONTEXT.md`', section(event, '## Pipeline'))
+                self.assertNotIn(f'`{f.relative_to(ROOT)}`', agents)
 
     def test_named_skills_are_routed(self):
         """Every sibling skill a stage contract hands off to appears in the AGENTS.md route table."""
@@ -155,14 +164,12 @@ class StageContractTests(unittest.TestCase):
         self.assertEqual(unrouted, [], f"stage contract hands off to skills AGENTS.md does not route: {unrouted}")
 
     def test_handoffs_point_forward(self):
-        """Signal handoffs follow the order declared in the workspace pipeline."""
         for f in self.files:
-            if f.parent.name not in EXPECTED_STAGES:
+            if f.parent.name not in STAGE_ORDER:
                 continue
-            for target in re.findall(r"workflows/([a-z-]+)/", section(f.read_text(), "## Outputs")):
+            for target in re.findall(r'workflows/signal-prospecting/([a-z0-9-]+)/', section(f.read_text(), '## Outputs')):
                 self.assertGreater(STAGE_ORDER.index(target), STAGE_ORDER.index(f.parent.name),
-                                   f"{f.parent.name} hands off backward to {target}")
-
+                                   f'{f.parent.name} hands off backward to {target}')
 
     def test_context_and_reference_size_limits(self):
         for f in ROOT.rglob("CONTEXT.md"):
@@ -177,7 +184,7 @@ class StageContractTests(unittest.TestCase):
             if "## Checkpoints" in text:
                 for n in re.findall(r"^\| (\d+) \|", section(text, "## Checkpoints"), re.M):
                     self.assertIn(n, steps, str(f))
-            if f.parent.name == "outreach":
+            if f.parent.name == "02-outreach":
                 self.assertIn("## Checkpoints", text)
                 self.assertIn("| Check | Pass Condition |", section(text, "## Audit"))
                 self.assertIn("Run the Audit", section(text, "## Process"))

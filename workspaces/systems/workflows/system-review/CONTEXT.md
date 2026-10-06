@@ -48,7 +48,7 @@ None. Improvement task recording needs no approval pause. Repairs and policy dec
 | Drift, before report | Schedules and prompts were compared with the canonical intended configuration, or the comparison is not checked |
 | Dedupe, before tasks | Open and declined improvement tasks were checked. A match gets only new evidence as a comment, never a duplicate task |
 | Tasks, after recording | Each new proposal is read back as one open, unassigned task labeled improvement, with evidence, owner, exact fix, effort S, M, or L, and verification |
-| Report, before output | At most 3 new proposals rank impact. Friday keeps its scorecard of seven lines or fewer, then the top-five backlog with age and proposed closures. No-new Eval is one line |
+| Report, before output | At most 3 new proposals rank impact. Friday keeps its scorecard of seven lines or fewer, then the top-five backlog with age and proposed closures. No-new Eval is one line only with no new questions. Repeated-correction questions follow the proposals, one per pattern. |
 | Measurement, before Friday output | Seven scorecard lines use sourced counts. Kind rates cover current and prior three reviews, or are not checked. A move needs two consecutive reviews of the same thread |
 | Boundaries, throughout | Only improvement tasks and evidence comments are writes. Never assign or close tasks, apply repairs, change settings, recompute forecasts, set policy, or write customer systems |
 
@@ -56,7 +56,7 @@ None. Improvement task recording needs no approval pause. Repairs and policy dec
 
 | Artifact | Location | Format |
 |---|---|---|
-| Health report | Systems thread, supporting evidence in sandbox | Friday scorecard, Improvement backlog, and at most 3 new ranked proposals. On-demand Eval uses the same evaluation |
+| Health report | Systems thread, supporting evidence in sandbox | Friday scorecard, Improvement backlog, at most 3 new ranked proposals, and repeated-correction questions. On-demand Eval uses the same evaluation |
 | Improvement records | Teammate project tasks | Open, unassigned tasks labeled improvement. Existing matches get new evidence comments only, read back per `references/eval.md` |
 | Repair or policy handoff | Systems thread and proposal task | Evidence, owner, exact fix, effort, and verification. Repairs follow repo-maintenance or agent-configuration, policy goes to the domain teammate and Operator |
-| Quiet receipt | Systems thread | One Eval line when nothing is new. Friday keeps its scorecard and backlog. Suppress only that scheduled run's notification, not future runs |
+| Quiet receipt | Systems thread | One Eval line only with no new proposals or questions. Friday keeps its scorecard and backlog. Suppress only that scheduled run's notification, not future runs |

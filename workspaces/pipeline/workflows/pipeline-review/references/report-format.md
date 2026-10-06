@@ -11,6 +11,13 @@ One reviewed run file per run, in the sandbox, never in Project Files. Its keys 
 It holds the run identity, counts, flagged deals, clear recommendations, questions, Friday additions, each label's status, and each write outcome.
 It is the run's label record, not approval; approval is Operator's reply in the thread per `rules#approval`. If it is lost, rebuild it from the thread before continuing.
 
+## Routed to deal threads
+
+Use `routed` for records owned by active deal threads, one row per Opportunity with `deal`, `name`, `thread_url`, and a one-line `reason`.
+The section lists Account, deal-thread link, and reason. Count routed records separately from local flagged deals, recommendations, questions, and withheld entries.
+Include routed records in reviewed, never in `deals` or local approval labels. A failed delivery is needs-input, recorded in run gaps, never claimed as delivered.
+Keep the transport and successful-send receipt in the sandbox. The list records ownership and destination, not approval or proof of delivery.
+
 ## Top 3 actions today
 
 On the weekday branch, add `today_actions` to the existing run file, empty when there are no supported candidates. Friday output stays unchanged.
@@ -28,6 +35,7 @@ Copy its Salesforce size under the exact field named by `policy.forecast.amount_
 
 The renderer ranks those kinds in the order above, then earlier dates, `policy.forecast.amount_field` descending with blanks last, deal names, IDs, and reasons.
 It keeps the highest-ranked reason per deal and shows at most three deals.
+Top 3 may name a routed deal, marked "in deal thread", without a local proposal.
 It excludes withheld deals and deals affected by coverage gaps. An incomplete process or a coverage gap with unknown scope leaves the section empty.
 Gmail and Calendar IDs resolve against the saved results and their dates must match the candidate date. Salesforce dates and action meaning require review against the saved records.
 Write one short reason per deal with no semicolons, em dashes, or colons. The section uses Priority labels for reading order. Only the proposal labels below it can approve writes.
@@ -82,7 +90,7 @@ If sources disagree with the checker, withhold the affected proposal and identif
 Units are distinct. Open deals is the all-stage Collect count. Reviewed includes `policy.pipeline.stages`, plus `policy.pipeline.early_stages` on Friday. Flagged is unique triggered deals.
 Not checked is per `rules#not_checked_means`. Clear recommendations are numbered blocks, one deal each. Questions are Q labels. Records written counts verified record writes.
 
-Identities the helper checks: reviewed = flagged + no trigger + not checked, and every flagged deal has a clear recommendation, a question, or a withheld entry.
+Identities the helper checks: reviewed = flagged + routed + no trigger + not checked, and every flagged deal has a clear recommendation, a question, or a withheld entry.
 A deal may have both, so clear recommendations plus questions can exceed flagged. At Close, open equals the Collect count.
 
 ## Coverage

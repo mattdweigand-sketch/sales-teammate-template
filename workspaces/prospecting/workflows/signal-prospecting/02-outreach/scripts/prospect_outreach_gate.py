@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check one outreach packet before a Gmail draft proposal. Never sends or proves approval.
 
-Caller: signal-outreach. Usage: python3 workspaces/prospecting/workflows/outreach/scripts/prospect_outreach_gate.py --packet p.json
+Caller: signal-outreach. Usage: python3 workspaces/prospecting/workflows/signal-prospecting/02-outreach/scripts/prospect_outreach_gate.py --packet p.json
 [--core _core] [--now ISO-with-offset]. --now is for tests only.
 
 Policy input requires prospecting.identity.timezone, prospecting.identity.sfdc_user_id, prospecting.outreach.bundle_checked_max_age_hours,
@@ -39,7 +39,7 @@ import sys
 from datetime import date, timedelta, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 import prospect_common  # noqa: E402
 import prospect_account_route  # noqa: E402
 import prospect_privacy_check  # noqa: E402

@@ -11,10 +11,12 @@ Read at the Collect and Evidence steps. Save every result in the sandbox.
    WHERE OwnerId = '<userId>' AND IsClosed = false AND (ActivityDate <= TODAY OR ActivityDate = null) ORDER BY ActivityDate
    ```
 3. One Contact query over the distinct Contact `WhoId` values (Id prefix `003`): `Id, FirstName, LastName, Name, Email, Title, AccountId, Description, Account.Name`.
-   Check pipeline ownership before Contact-based routing. Other Lead-linked Tasks go to Hold. Other Tasks with no Contact go under `CRM corrections needed` only.
+   Apply `references/grouping.md` "Pipeline ownership" before Contact-based routing. Other Lead-linked Tasks go to Hold. Other Tasks with no Contact go under `CRM corrections needed` only.
    A Contact with no email is grouped per `workspaces/pipeline/workflows/task-triage-speed-run/references/grouping.md` (recipient unconfirmed).
 4. Read Opportunities linked by Task `WhatId`, and open Opportunities on Accounts linked by Task `WhatId`.
-   Retrieve `Id, Name, AccountId, IsClosed, StageName, Next_Steps__c`. Scope ownership to open Opportunities whose `StageName` is in `policy.pipeline.stages`.
+   Retrieve `Id, Name, AccountId, Account.Name, IsClosed, StageName, Next_Steps__c`. Apply the ownership order in `references/grouping.md` "Pipeline ownership".
+   Search current project sessions by Account name with `pplx project sessions list --search` and verify the exact `<Account> deal` title before excluding current-action Tasks.
+   An ambiguous title or unavailable search is needs-input. Never infer absence of a deal thread from a failed search.
    Read their open Tasks linked by Opportunity or Account `WhatId`, including future Tasks, with `Id, Subject, ActivityDate, Description, WhatId`.
    Use these records to identify the current-action Task per `rules#followup_task` and `references/grouping.md`. A Contact association alone is not a Task link to the Account.
 5. Report only the Tasks in this run. Never report future-Task counts.

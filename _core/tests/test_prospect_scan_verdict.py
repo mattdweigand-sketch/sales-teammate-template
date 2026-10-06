@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "_core"
-SCRIPTS = ROOT / "workspaces" / "prospecting" / "workflows" / "research" / "scripts"
+SCRIPTS = ROOT / "workspaces" / "prospecting" / "workflows" / "signal-prospecting" / "01-research" / "scripts"
 sys.path.insert(0, str(ROOT / "workspaces/prospecting/scripts"))
 SCRIPT = SCRIPTS / "prospect_scan_verdict.py"
 sys.path.insert(0, str(SCRIPTS))

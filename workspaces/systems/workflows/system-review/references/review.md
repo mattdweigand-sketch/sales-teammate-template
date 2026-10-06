@@ -73,6 +73,8 @@ Keep automation identifiers, user identifiers, customer material, and raw run ev
 Post a scorecard of seven lines or fewer for Friday Review. Add Improvement backlog immediately after it per `references/eval.md` "Friday backlog".
 Use exactly the seven teammate, health, and approvals lines above. Put proposal-kind tables and per-thread delay or stall evidence outside the scorecard and after the backlog.
 Follow with at most 3 new ranked proposals per `references/eval.md` "Proposals and task recording". Use compact lines and evidence links rather than copying run output.
+Then list each repeated-correction question per `references/eval.md` "Signals", one line with both links. Questions are not proposals and wait for no reply.
+They do not count toward the three-proposal cap. Keep a new question visible even with no new proposals. Previously asked patterns do not notify again.
 Each proposal names the issue, supporting evidence, responsible owner, exact requested outcome, proposed fix, and verification criteria. Separate verified failures from uncertain causes.
 Route repo files, tests, and reference defects to repo-maintenance. Route actual pointers, agent instructions, and automation settings to agent-configuration.
 Domain decisions still belong to Pipeline, Forecasting, or Deal Coaching and Operator where required. Systems never substitutes its own sales policy, scores, forecast, or CRM values.

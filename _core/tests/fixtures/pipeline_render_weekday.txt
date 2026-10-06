@@ -7,6 +7,10 @@ Only the latest next-step entry is shown. Older history stays unchanged. Legacy 
 
 No supported actions to prioritize today.
 
+## Routed to deal threads
+
+None.
+
 ## Clear recommendations
 
 1. [Acme Devices](https://crm.example.invalid/lightning/r/Opportunity/006AAA000000001AAA/view)

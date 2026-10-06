@@ -64,19 +64,23 @@ class ProspectingMigration(unittest.TestCase):
             self.assertTrue((ROOT / path).is_file(), path)
 
     def test_routes_name_specific_outputs_and_review_boundaries(self):
-        text = (ROOT / "workspaces/prospecting/CONTEXT.md").read_text()
-        routing, pipeline = text.split("## Task routing\n", 1)[1].split("## Pipeline\n", 1)
-        pipeline = pipeline.split("\n## ", 1)[0]
-        routes = [row.split("|")[1:-1] for row in routing.splitlines() if row.startswith("| ")][1:]
-        self.assertEqual(len(routes), 5)
-        self.assertEqual(len({row[2].strip() for row in routes}), 5)
-        self.assertEqual(len({row[3].strip() for row in routes}), 5)
-        self.assertIn("| Stage | Trigger | Output | Human check | Contract route |", pipeline)
-        stages = [row.split("|")[1:-1] for row in pipeline.splitlines() if row.startswith("| ")][1:]
-        self.assertEqual(len(stages), 3)
-        self.assertTrue(all(len(row) == 5 and all(cell.strip() for cell in row) for row in stages))
-        signal_routes = [row for row in routes if row[1].strip() != "`workflows/event-sequence/CONTEXT.md`"]
-        self.assertEqual({row[1].strip().split(",")[0] for row in signal_routes}, {row[4].strip() for row in stages})
+        text = (ROOT / 'workspaces/prospecting/CONTEXT.md').read_text()
+        routing = text.split('## Task routing\n', 1)[1].split('\n## ', 1)[0]
+        routes = [row.split('|')[1:-1] for row in routing.splitlines() if row.startswith('| ')][1:]
+        self.assertEqual(len(routes), 2)
+        self.assertEqual(len({row[2].strip() for row in routes}), 2)
+        self.assertEqual(len({row[3].strip() for row in routes}), 2)
+        for group in ('signal-prospecting', 'event-sequence'):
+            parent = ROOT / 'workspaces/prospecting/workflows' / group
+            pipeline = (parent / 'CONTEXT.md').read_text().split('## Pipeline\n', 1)[1].split('\n## ', 1)[0]
+            self.assertIn('| Stage | Trigger | Output | Human check | Contract route |', pipeline)
+            stages = [row.split('|')[1:-1] for row in pipeline.splitlines() if row.startswith('| ')][1:]
+            self.assertEqual(len(stages), 3)
+            self.assertTrue(all(len(row) == 5 and all(cell.strip() for cell in row) for row in stages))
+            actual = {(parent / row[4].strip().strip('`')).resolve() for row in stages}
+            self.assertEqual(actual, set(parent.glob('*/CONTEXT.md')))
+            if group == 'signal-prospecting':
+                self.assertEqual(actual, {path / 'CONTEXT.md' for name, path in SKILL_PATHS.items() if name.startswith('signal-')})
 
     def test_inputs_are_specific_and_repo_contracts_have_no_draft_state(self):
         stock = ("Canonical content and rules", "Required executable checks or query", "Current run evidence",

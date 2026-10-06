@@ -4,14 +4,22 @@ Read at the Group step. Every Task in the run lands in exactly one group.
 
 ## Pipeline ownership
 
-Check ownership before the numbered groups or Contact-based routing. Pipeline-review owns the current-action follow-up Task per `rules#followup_task`
+Check ownership before the numbered groups or Contact-based routing, in this order.
+1. An active deal thread owns the Task, so route it. Verify a current project session titled `<Account> deal` for the Opportunity's Account.
+   Report it as owned elsewhere and propose nothing on it here. Failed or ambiguous routing is needs-input, never an automatic move.
+   Account-linked Tasks with multiple possible Opportunities need linkage evidence. A title alone never picks an arbitrary deal.
+2. A current-action Task on an in-scope Opportunity with no deal thread belongs to pipeline-review and is excluded.
+3. Triage owns everything else.
+
+For step 2, pipeline-review owns the current-action follow-up Task per `rules#followup_task`
 for an open Opportunity whose `StageName` is in `policy.pipeline.stages`.
 Match an open Task linked by `WhatId` to that Opportunity or its Account against the current action and due date in `Next_Steps__c`.
 Use the Subject to identify the action and ActivityDate to check its due date. A shared date alone is not a match.
 If multiple Tasks could match, the action or due date is unclear, the dates disagree, or the linkage evidence is incomplete, treat the candidate as ambiguous.
 Put both identified current-action Tasks and ambiguous candidates in `Pipeline review owns`. Include the relevant Opportunity links and an ambiguity reason when needed.
 Do not propose a date move, completion, Push, or Recycle for these Tasks. A clearly distinct action may enter the numbered groups only when the evidence rules out a current-action match.
-At the Draft stage, an owned Task may still receive a follow-up Gmail draft if it meets the Draft email recommended evidence and recipient conditions below.
+Only for a Pipeline-owned current-action Task without an active deal thread, the Draft stage may offer a follow-up Gmail draft.
+It must meet the Draft email recommended evidence and recipient conditions below.
 Recommend that draft only when none of the other numbered group conditions apply. Existing reply, recycle, and hold checks still govern whether a draft is appropriate.
 This is draft-only work. The Task stays in `Pipeline review owns` with no number and no Task write.
 

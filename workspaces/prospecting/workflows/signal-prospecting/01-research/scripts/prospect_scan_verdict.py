@@ -2,7 +2,7 @@
 """Emit the verdict and Next line for one signal-scan run. signal-scan copies both verbatim.
 
 Usage:
-    python3 workspaces/prospecting/workflows/research/scripts/prospect_scan_verdict.py --route <current route> [<gate_output.json> ...]
+    python3 workspaces/prospecting/workflows/signal-prospecting/01-research/scripts/prospect_scan_verdict.py --route <current route> [<gate_output.json> ...]
 
 --route values are scan, active_deal, owned_elsewhere, warm_engaged, outside_named_accounts, and unresolved.
 Missing or unknown values require eligibility checks. Policy input requires no keys.

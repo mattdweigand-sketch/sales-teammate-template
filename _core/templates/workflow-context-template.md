@@ -13,7 +13,7 @@ Keep the finished file at most 80 lines. Definitions, queries, formats, and exam
 
 ## Inputs
 
-<!-- Place under the owning workspace's workflows/<skill>/. Root and workspace routes must reach this contract. -->
+<!-- Place a standalone contract under workflows/<skill>/ or a numbered stage under its workflow parent. Root named routes or the coordinator must reach it. -->
 <!-- Name exact files, policy blocks, rule anchors, and quoted reference sections. Say which branch loads each row. Persistent references first, per-run evidence last. -->
 
 | Source | File/Location | Section/Scope | Why |
@@ -36,7 +36,8 @@ Keep the finished file at most 80 lines. Definitions, queries, formats, and exam
 
 ## Checkpoints
 
-<!-- Keep this section. Use existing approval points, or state None. plus the reason when the workflow runs straight through with no approval pause. -->
+<!-- Keep existing approval points. A stage consuming exact prior approval uses None. plus its producer, same-thread approval evidence and stop-on-change reason. -->
+<!-- Coordinator pipeline tables summarize delegated reviews. Routing overviews have no execution frontmatter or contract tables. -->
 
 | After Step | Agent Presents | Human Decides |
 |---|---|---|

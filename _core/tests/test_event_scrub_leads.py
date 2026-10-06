@@ -9,7 +9,7 @@ from argparse import Namespace
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2] / "workspaces" / "prospecting" / "workflows" / "event-sequence"
+ROOT = Path(__file__).resolve().parents[2] / "workspaces" / "prospecting" / "workflows" / "event-sequence" / "01-list-prep"
 SCRIPT = ROOT / "scripts" / "scrub_leads.py"
 RULES = ROOT / "scripts" / "email_rules.json"
 

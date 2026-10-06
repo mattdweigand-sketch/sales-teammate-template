@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "_core"
 SCRIPTS = ROOT / "workspaces/prospecting/scripts"
 QUERIES = {
-    "adoption_lookup.sql": ROOT / "workspaces/prospecting/workflows/research/scripts/adoption_lookup.sql",
+    "adoption_lookup.sql": ROOT / "workspaces/prospecting/workflows/signal-prospecting/01-research/scripts/adoption_lookup.sql",
 }
 
 

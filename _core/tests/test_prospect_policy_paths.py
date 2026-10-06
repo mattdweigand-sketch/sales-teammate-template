@@ -58,7 +58,7 @@ class PolicyPathTests(unittest.TestCase):
         files += [path for folder in (CORE, ROOT / "workspaces") for path in folder.rglob("*")
                   if path.is_file() and path.suffix in {".py", ".md", ".yaml", ".sql"}]
         self.assertEqual([str(path.relative_to(ROOT)) for path in files if retired in path.read_text()], [])
-        adoption = ROOT / "workspaces/prospecting/workflows/research/references/adoption.md"
+        adoption = ROOT / "workspaces/prospecting/workflows/signal-prospecting/01-research/references/adoption.md"
         self.assertIn("Stop when it is in `policy.tooling.internal_domains`", adoption.read_text())
         self.assertIn("Internal domains are never adoption targets", adoption.read_text())
 

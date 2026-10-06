@@ -8,6 +8,7 @@ Values live in `policy.yaml`. Any other rule one workflow follows lives in that 
 
 <a id="write_protocol"></a>**write_protocol**
 - Fresh read immediately before each write.
+- If that read shows a field or Task the proposal changes now differs from what it displayed, stop and re-propose from the current record. Approval never covers a change made after the proposal.
 - Before a create (Task, Contact, draft, post), rerun the duplicate check that qualified it. On a match stop with `reuse existing`. Approval may be hours old.
 - Write only the approved, displayed change. Read the record back and report the changed fields with its link.
 - A rejected write is reported with the Salesforce message and one corrected proposal.

@@ -1,5 +1,7 @@
 """Regression coverage for migrated recurring-run contracts and safe handoffs."""
 import unittest
+import hashlib
+import re
 from pathlib import Path
 
 from test_icm_contracts import sections
@@ -14,6 +16,52 @@ def reference(skill, name):
 
 
 class RecurringWorkflowContractTests(unittest.TestCase):
+    def test_pipeline_has_one_proposing_owner_and_forecasting_exception(self):
+        text = (ROOT / "workspaces/pipeline/AGENTS.md").read_text()
+        approved = (
+            "Each Opportunity and its Tasks have one proposing owner. An active deal thread owns its Opportunity's next step, fields, and Tasks.\n"
+            "pipeline-review owns other Opportunities in its scope. Task triage owns every remaining due Task. Other runs report such a record as owned elsewhere and propose nothing on it.\n"
+            "Forecasting keeps its approved ForecastCategoryName sync."
+        )
+        self.assertIn(approved, text)
+
+    def test_write_protocol_stops_stale_proposals_without_changing_exceptions(self):
+        text = (ROOT / "_core/rules.md").read_text()
+        bullet = "- If that read shows a field or Task the proposal changes now differs from what it displayed, stop and re-propose from the current record. Approval never covers a change made after the proposal."
+        self.assertEqual(text.count(bullet), 1)
+        self.assertIn("- Fresh read immediately before each write.\n" + bullet, text)
+        for name, digest in (
+            ("auto_date_move", "29fd400a36d7c39402aa452e03f5eb3258e087c05931b4fb6345cca299ebac4d"),
+            ("event_sequence", "5b99ca62d0df4b069c7b867cb2fc8911f6361315ec5f89a2d0005399d5d1331c"),
+        ):
+            block = re.search(r'<a id="' + name + r'"></a>.*?(?=\n<a id=|\Z)', text, re.S).group()
+            self.assertEqual(hashlib.sha256(block.encode()).hexdigest(), digest)
+
+    def test_pipeline_review_routes_to_verified_threads_without_local_proposals(self):
+        collect = reference("pipeline-review", "collect.md")
+        for phrase in ("pplx project sessions list --search", "exact title `<Account> deal`", "same title check used in Task triage"):
+            self.assertIn(phrase, collect)
+        proposals = reference("pipeline-review", "proposals.md")
+        for phrase in ("merge with any open proposal", "Propose nothing", "pplx session send", "pplx tm mail send",
+                       "Record which command delivered", "Never claim delivery without a successful send", "Failed or ambiguous routing is needs-input"):
+            self.assertIn(phrase, proposals)
+        self.assertIn("Propose nothing", "\n".join(sections(proposals)["Friday"]))
+        report = reference("pipeline-review", "report-format.md")
+        self.assertIn("## Routed to deal threads", report)
+        self.assertIn('marked "in deal thread"', report)
+
+    def test_triage_ownership_order_and_customer_deal_thread_first_handoffs(self):
+        grouping = reference("task-triage-speed-run", "grouping.md")
+        phrases = ("1. An active deal thread owns the Task, so route it.",
+                   "2. A current-action Task on an in-scope Opportunity with no deal thread belongs to pipeline-review and is excluded.",
+                   "3. Triage owns everything else.")
+        self.assertLess(grouping.index(phrases[0]), grouping.index(phrases[1]))
+        self.assertLess(grouping.index(phrases[1]), grouping.index(phrases[2]))
+        for name in ("collect.md", "daily.md"):
+            self.assertIn('`references/grouping.md` "Pipeline ownership"', reference("task-triage-speed-run", name))
+        for name in ("collect.md", "proposals.md"):
+            self.assertIn("active deal thread first, otherwise to Pipeline hygiene", reference("customer-review", name))
+
     def test_watch_sync_route_and_propose_only_scope(self):
         self.assertEqual(SKILLS["watch-sync"], "pipeline")
         contract = CONTRACT_PATHS["watch-sync"].read_text()
@@ -52,6 +100,19 @@ class RecurringWorkflowContractTests(unittest.TestCase):
                          "hypothesis label", "evidence limitation", "`voice`", "without music", "without changing playback speed",
                          "configured filename", "ending is not cut off", "explicitly report the audio failure"):
             self.assertIn(expected, text)
+
+    def test_deal_thread_routing_uses_one_mail_fallback_and_verified_delivery(self):
+        for skill, name in (("task-triage-speed-run", "daily.md"), ("interaction-sync", "sweep.md")):
+            with self.subTest(skill=skill):
+                text = reference(skill, name)
+                self.assertIn("`pplx tm mail send <deal-thread session id>`", text)
+                self.assertLess(text.index("`pplx session send`"), text.index("`pplx tm mail send <deal-thread session id>`"))
+                self.assertIn("On confirmed failure with no delivery, retry once", text)
+                self.assertIn("An ambiguous send needs native reconciliation", text)
+                self.assertIn("Record which command delivered", text)
+                self.assertIn("Failed or ambiguous routing", text)
+                self.assertIn("needs-input", text)
+                self.assertIn("Never claim delivery without a successful send", text)
 
     def test_triage_routing_precedes_local_moves_and_preserves_approval(self):
         text = reference("task-triage-speed-run", "daily.md")

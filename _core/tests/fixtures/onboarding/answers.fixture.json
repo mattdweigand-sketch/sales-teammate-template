@@ -114,5 +114,7 @@
       "choice": "defer",
       "reason": "Fictional local rehearsal only. No live connection."
     }
-  }
+  },
+  "event_house_owner_ids": [],
+  "event_include_missing_account": false
 }

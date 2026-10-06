@@ -2,7 +2,7 @@
 """Check one follow-up packet and emit the exact Salesforce Task to propose. signal-followup calls this once per send.
 
 Usage:
-    python3 workspaces/prospecting/workflows/followup/scripts/prospect_followup_gate.py --packet packet.json [--today YYYY-MM-DD]
+    python3 workspaces/prospecting/workflows/signal-prospecting/03-followup/scripts/prospect_followup_gate.py --packet packet.json [--today YYYY-MM-DD]
     --today is for tests. Default is today in identity.timezone.
 
 Policy input requires prospecting.identity.timezone, prospecting.identity.sfdc_user_id,
@@ -47,7 +47,7 @@ from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 import prospect_common  # noqa: E402
 
 CORE = prospect_common.CORE

@@ -20,8 +20,10 @@ Git and the verified GitHub revision provide recovery. Scratch and run evidence 
 | Systems | Repository, configuration and health maintenance | Implements authorized domain changes and verifies actual deployment |
 | Shared core | Policy, shared rules, helpers, onboarding, simulator and tests | One canonical owner per value and rule |
 
-Preserve five workspaces, 18 named routes and 17 contracts. Keep external Salesforce, Gmail draft, thread and sandbox handoffs.
-No invented sequential stages. Named workflows load their contract and scoped Inputs. Onboarding and maintenance do not become routine sales context.
+Preserve five workspaces and 18 named routes. There are 20 execution or coordination contracts and one Signal routing overview.
+Prospecting groups Signal Prospecting and Event Sequence, each with three numbered stages and declared evidence handoffs.
+Named Signal skills enter their stage directly. Event Sequence enters its coordinator. Keep external Salesforce, Gmail draft, thread and sandbox handoffs.
+Every contract loads only its scoped Inputs. Onboarding and maintenance do not become routine sales context.
 
 ## Generalization
 

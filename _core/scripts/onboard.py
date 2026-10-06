@@ -68,7 +68,26 @@ def matches_type(value, spec):
             'list': isinstance(value, list) and (bool(value) or spec.get('allow_empty', False)) and
                     all(isinstance(x, str) and x.strip() for x in value),
             'object': isinstance(value, dict),
+            'boolean': type(value) is bool,
             'number': type(value) in (int, float) and math.isfinite(value) and value >= 0}.get(kind, False)
+
+
+def validate_event_scope(scope, operator_id, *, simulation=False):
+    """Legacy absence disables scope. Actual setup checks configured Salesforce User IDs."""
+    if not isinstance(scope, dict) or set(scope) - {'house_owner_ids', 'include_missing_account'}:
+        raise ValueError('outreach_owner_scope must contain only house_owner_ids and include_missing_account')
+    owners = scope.get('house_owner_ids', [])
+    if not isinstance(owners, list) or any(not isinstance(item, str) for item in owners):
+        raise ValueError('event_house_owner_ids must be a list of Salesforce User IDs')
+    if type(scope.get('include_missing_account', False)) is not bool:
+        raise ValueError('event_include_missing_account must be boolean')
+    if len(owners) != len(set(owners)):
+        raise ValueError('event_house_owner_ids must be distinct')
+    if operator_id in owners:
+        raise ValueError('event_house_owner_ids must exclude the operator')
+    if any(not re.fullmatch(r'005[A-Za-z0-9]{15}', item) or
+           (not simulation and item.startswith('005000000000')) for item in owners):
+        raise ValueError('event_house_owner_ids need actual 18-character Salesforce User IDs')
 
 
 def validate_policy_shape(value, sample, label):
@@ -165,6 +184,9 @@ def validate(answers, root=ROOT, *, simulation=False):
         if isinstance(value, str) and ('{{' in value or '\x00' in value):
             raise ValueError(f'{key} contains a placeholder or invalid byte')
         values[key] = deepcopy(value)
+    validate_event_scope({'house_owner_ids': values['event_house_owner_ids'],
+                          'include_missing_account': values['event_include_missing_account']},
+                         values['owner_id'], simulation=simulation)
     # The rehearsal opts into fictional fixtures. Mode is never an onboarding answer.
     values['mode'] = 'demo' if simulation else 'configured'
     if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', values['owner_email']):
@@ -348,7 +370,7 @@ def instantiate(answers, destination, root=ROOT, *, simulation=False):
             'individuals_only':f"People at the organization already pay for {values['product_name']} individually."}
         policy_file.write_text(yaml.safe_dump(policy,sort_keys=False,allow_unicode=True))
         # Profile values are data, not shell or regular-expression replacement strings.
-        talk = stage/'workspaces/prospecting/workflows/outreach/references/talk-track.md'
+        talk = stage/'workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md'
         text = re.sub(r"review_by: '[0-9-]+'",f"review_by: '{values['product_review_date']}'",talk.read_text())
         talk.write_text(text)
         replacements = {'Example Product': values['product_name'], 'Example Seller': values['company_name'],
@@ -393,6 +415,11 @@ def check(workspace,allow_template=False):
         errors.append('run onboarding before a sales workflow')
     if mode not in ('unconfigured','demo','configured'):
         errors.append('invalid template mode')
+    try:
+        validate_event_scope(policy['prospecting']['event'].get('outreach_owner_scope', {}),
+                             policy['prospecting']['identity']['sfdc_user_id'], simulation=mode == 'demo')
+    except (ValueError, KeyError, TypeError) as exc:
+        errors.append(str(exc))
     route_list = routes(workspace)
     if len(route_list) != 18 or any(not (workspace/path).is_file() for _,path,_ in route_list):
         errors.append('missing workflow routes')

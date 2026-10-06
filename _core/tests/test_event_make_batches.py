@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[2] / "workspaces" / "prospecting" / "workflows" / "event-sequence" / "scripts" / "make_batches.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "workspaces" / "prospecting" / "workflows" / "event-sequence" / "01-list-prep" / "scripts" / "make_batches.py"
 
 
 def run(clean_dir, out, *extra):

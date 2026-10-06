@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "_core"
-SCRIPTS = ROOT / "workspaces" / "prospecting" / "workflows" / "followup" / "scripts"
+SCRIPTS = ROOT / "workspaces" / "prospecting" / "workflows" / "signal-prospecting" / "03-followup" / "scripts"
 sys.path.insert(0, str(ROOT / "workspaces/prospecting/scripts"))
 sys.path.insert(0, str(SCRIPTS))
 import prospect_common  # noqa: E402

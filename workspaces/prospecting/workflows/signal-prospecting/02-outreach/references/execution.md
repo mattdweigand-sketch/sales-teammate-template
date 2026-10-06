@@ -37,8 +37,8 @@ suppress conservatively.
 
 ## Angle
 
-Choose one messaging angle from `workspaces/prospecting/workflows/outreach/references/talk-track.md` for the verified initiative and recipient's evidenced responsibility. State the
-persona/responsibility in ordinary language and give one sentence explaining the connection. Titles are search aids, not proof of ownership or authority. If responsibility is unknown,
+Choose one messaging angle from `workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md` for the verified initiative and recipient's evidenced responsibility.
+State the persona/responsibility in ordinary language and give one sentence explaining the connection. Titles are search aids, not proof of ownership or authority. If responsibility is unknown,
 research it or ask Operator. Do not
 fabricate a rationale.
 

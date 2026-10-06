@@ -7,7 +7,7 @@ Named skills go directly to their contracts through root `AGENTS.md`. Each execu
 
 | Task or event | Workspace | Output and handoff |
 |---|---|---|
-| Research Operator's named accounts, draft outreach or follow-up, or prepare named-account event lists | `workspaces/prospecting/CONTEXT.md` | Named-account reports and unsent drafts, or an approved Apollo sequence. Open-Opportunity contacts go to Pipeline |
+| Signal Prospecting or prepare configured event lists for Event Sequence | `workspaces/prospecting/CONTEXT.md` | Named-account reports, unsent drafts, approved follow-up Tasks or Apollo sequence. Open-Opportunity contacts go to Pipeline |
 | Prepare for meetings, log interactions, review pipeline, triage Tasks, review pilots, or close deals | `workspaces/pipeline/CONTEXT.md` | Read-only briefs, approved customer-system work, and reports. Verified Salesforce corrections feed Forecasting |
 | Coach calls or deals, or refresh coaching criteria | `workspaces/deal-coaching/CONTEXT.md` | Read-only coaching. Salesforce suggestions go to Pipeline. Approved criteria go to a repo PR |
 | Forecast, track quarter or year pace, or review forecast learning | `workspaces/forecasting/CONTEXT.md` | Forecast reports, thread snapshots, and approved criteria proposals for a repo PR |

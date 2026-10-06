@@ -18,7 +18,13 @@ Include a check-in for no recent contact. Add no fixed numeric threshold. Follow
 Do not infer more purchased seats from members alone. No Gmail drafts or outreach.
 When activity and buyer evidence support more seats, explain that evidence and the proposed increment. Show any idle seats, alternative adoption work, and uncertainty.
 Expansion Opportunity proposals still require buyer evidence for demand. No expansion proposal for unknown enterprise status, mismatched org, incomplete usage, or any open Opportunity.
-With any open Opportunity, the assessment remains read-only and recommended actions, including renewal work, hand off to Pipeline hygiene rather than new record proposals here.
+With any open Opportunity, the assessment remains read-only. Send recommended actions, including renewal work, to its active deal thread first, otherwise to Pipeline hygiene.
+Ask that owner to merge with any open proposal on the same record. Propose nothing on that record here.
+For Pipeline hygiene, use its verified session ID for both transports. Ambiguous deal ownership holds the handoff instead of assuming no owner.
+Try `pplx session send` once. On confirmed failure with no delivery, retry once with `pplx tm mail send <deal-thread session id>`. Record which command delivered.
+Failed or ambiguous routing stays needs-input for the handoff. Never claim delivery without a successful send.
+An ambiguous send needs native reconciliation or stays needs-input. Never blindly retry a missing or delayed response.
+Keep the verified destination session ID, link and successful native delivery receipt in the run evidence. Report the exact blocker when delivery is unresolved.
 
 For each reviewed current subscription, use `Opportunity.Subscription_Cancel_Date__c` for Subscription End Date.
 Verified Salesforce subscription dates remain review evidence when org or usage is missing or conflicting. Unknown usage stays null and blocks expansion, not independent renewal evidence.

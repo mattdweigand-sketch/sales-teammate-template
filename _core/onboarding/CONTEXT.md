@@ -63,6 +63,8 @@ Success reports `mode` as `configured`, `routes` as `18`, `integrations` as `21`
 Setup creates local configuration and pointer files. It does not create teammates in Perplexity Computer or activate schedules.
 
 To reuse saved answers, pass the external JSON file path with `--answers`. Setup derives the configured state, so the answer file has no mode field.
-The terminal questionnaire requires JSON for list and mapping answers. Guided setup is easier when those formats are unfamiliar.
+The terminal questionnaire requires JSON for list, mapping and boolean answers. Use true or false for missing-Account inclusion.
+Event house IDs and missing-Account inclusion are optional and default disabled. They change eligibility without approving enrollment or verifying connections.
+Guided setup is easier when those formats are unfamiliar.
 Use `check --allow-template` only to inspect this unconfigured template. Use `integrations` to print the complete system interview.
 Follow adapters.md to configure, verify and deploy the selected connections.

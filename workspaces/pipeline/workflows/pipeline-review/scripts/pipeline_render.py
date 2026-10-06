@@ -24,6 +24,8 @@ Run file keys
              slack_coverage_notes (optional list of {deal, name, contacts [names], reason}, one per deal)
   counts     open (Collect count, all stages), reviewed (hygiene plus Friday qualification), not_checked
   deals      every flagged deal once: id (006...), name, flags (trigger names)
+  routed     optional list of {deal, name (Account), thread_url, reason}, owned by deal threads,
+             counted separately from flagged deals and never eligible for local proposals
   today_actions  weekday report candidates from the existing reads, each with deal,
                  name, kind (buyer_reply|meeting|due|date_at_risk), date (YYYY-MM-DD),
                  reason (one line), evidence (list), size under policy.forecast.amount_field.
@@ -77,6 +79,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from email.utils import parseaddr
 from pathlib import Path
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -548,7 +551,8 @@ class Run:
         lines = ["## Top 3 actions today", ""]
         for rank, item in enumerate(selected, 1):
             deal = self.link("Opportunity", item["deal"], item["name"])
-            lines.append(f"- Priority {rank} · {deal} · {item['reason']}")
+            owner = " · in deal thread" if item["deal"] in {row["deal"] for row in self.data.get("routed") or []} else ""
+            lines.append(f"- Priority {rank} · {deal}{owner} · {item['reason']}")
         if selected:
             lines += ["", "Use the proposal labels below for approvals."]
             if self.uses_retrieved([item["evidence"] for item in selected]):
@@ -640,6 +644,38 @@ class Run:
         for w in self.data.get("withheld") or []:
             if w.get("deal") not in self.deals or not w.get("reason"):
                 self.err(f"withheld {w.get('deal')}: must name a flagged deal and a reason")
+        routed = self.data.get("routed", [])
+        if not isinstance(routed, list):
+            self.err("routed must be a list")
+            routed = []
+        routed_ids = set()
+        for row in routed:
+            if not isinstance(row, dict):
+                self.err("routed entries must be objects")
+                continue
+            self.check_id("Opportunity", row.get("deal"), "routed")
+            if not isinstance(row.get("deal"), str):
+                continue
+            if not re.fullmatch(r"006[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?", row["deal"]):
+                self.err("routed needs a valid Opportunity Id")
+            if row.get("deal") in routed_ids:
+                self.err("routed: each deal appears once")
+            routed_ids.add(row.get("deal"))
+            for field in ("name", "reason", "thread_url"):
+                value = row.get(field)
+                if not isinstance(value, str) or not value.strip() or any(char in value for char in "\r\n"):
+                    self.err(f"routed needs a one-line {field}")
+            link = row.get("thread_url")
+            try:
+                parsed = urlparse(link) if isinstance(link, str) else None
+                valid = (parsed is not None and parsed.scheme == "https" and parsed.hostname
+                         and not parsed.username and not parsed.password and not re.search(r"\s", link))
+            except ValueError:
+                valid = False
+            if not valid:
+                self.err("routed needs an https deal-thread link")
+            if row.get("deal") in self.deals:
+                self.err("routed deals must be counted separately from local flagged deals")
 
         labels = {}
 
@@ -809,6 +845,10 @@ class Run:
                 self.err(f"{where}: deal_name is required")
             targets([l.get("change") or {}], l.get("deal"), where)
 
+        for item in self.blocks + self.questions + self.letters:
+            if item.get("deal") in routed_ids:
+                self.err(f"label {item.get('label')}: routed deal is owned elsewhere; propose nothing here")
+
         # A withheld deal has nothing approvable.
         held = {w.get("deal") for w in self.data.get("withheld") or []}
         for item, deal in ([(b, b.get("deal")) for b in self.active(self.blocks)]
@@ -824,8 +864,8 @@ class Run:
         if missing:
             self.err(f"flagged deals with no clear recommendation, question, or withheld entry: {sorted(missing)}")
         k, u = self.counts.get("reviewed"), self.counts.get("not_checked")
-        if isinstance(k, int) and isinstance(u, int) and len(flagged) + u > k:
-            self.err(f"counts: flagged {len(flagged)} plus not checked {u} exceeds reviewed {k}")
+        if isinstance(k, int) and isinstance(u, int) and len(flagged) + len(routed_ids) + u > k:
+            self.err(f"counts: flagged {len(flagged)} plus routed {len(routed_ids)} plus not checked {u} exceeds reviewed {k}")
         if isinstance(self.counts.get("open"), int) and isinstance(k, int) and k > self.counts["open"]:
             self.err("counts: reviewed exceeds open")
 
@@ -865,8 +905,9 @@ class Run:
         questions = self.active(self.questions)
         k, u = self.counts["reviewed"], self.counts["not_checked"]
         f = len(self.deals)
+        routed = len(self.data.get("routed") or [])
         return {"open": self.counts["open"], "reviewed": k, "flagged": f, "not_checked": u,
-                "no_trigger": k - f - u, "blocks": len(blocks), "questions": len(questions),
+                "no_trigger": k - f - routed - u, "routed": routed, "blocks": len(blocks), "questions": len(questions),
                 "letters": len(self.active(self.letters)),
                 "written": sum(record_outcomes(self.reconciled(lab)).count("written")
                                for lab in dict.fromkeys(str(w.get("label")) for w in self.writes))}
@@ -1094,6 +1135,14 @@ class Run:
         out = [f"# Pipeline review · {d}", "", "  \n".join(head), ""]
         if self.run["branch"] == "weekday":
             out += self.today_action_lines()
+        out += ["## Routed to deal threads", ""]
+        routed = self.data.get("routed") or []
+        if routed:
+            out += [f"{len(routed)} routed · counted separately from local proposals", ""]
+            out += [f"- [{display(row['name'])}]({row['thread_url']}) · {display(row['reason'])}" for row in routed]
+            out += [""]
+        else:
+            out += ["None.", ""]
         out += ["## Clear recommendations", ""]
         if blocks:
             for b in blocks:

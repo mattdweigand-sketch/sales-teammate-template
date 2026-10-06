@@ -22,7 +22,8 @@ FROM Opportunity
 WHERE AccountId IN (<ownedAccountIds>)
 ```
 
-Any open Opportunity still permits the milestone assessment, but routes recommended actions to Pipeline hygiene with no new Opportunity proposal.
+Any open Opportunity still permits the milestone assessment, but routes recommended actions to its active deal thread first, otherwise to Pipeline hygiene, with no new Opportunity proposal.
+Find current project sessions by Account name with `pplx project sessions list --search` and verify the exact `<Account> deal` title. Ambiguous ownership is needs-input for the handoff.
 List won and open Opportunity links. The anchor is the earliest verified non-trial Closed Won CloseDate; later wins never reset age.
 Missing, invalid, future or conflicting anchor evidence is needs-input with no milestone computed. Paid Trial is excluded from the anchor.
 Group by Account and keep all non-trial won Opportunity ids and subscription dates visible.
