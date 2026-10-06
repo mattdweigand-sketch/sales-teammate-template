@@ -80,6 +80,9 @@ class ProspectingNavigationTests(unittest.TestCase):
         for branch, stage in stages.items():
             with self.subTest(branch=branch):
                 trace = contract_trace('event-sequence', f'{EVENT}/CONTEXT.md', ROOT, branch)
+                self.assertEqual(trace['actual_local_reads'][0], 'AGENTS.md')
+                self.assertIn('review_contract', trace)
+                self.assertTrue(trace['downstream_handoff'])
                 self.assertEqual(set(trace['actual_local_reads']) & all_stages, {f'{EVENT}/{stage}/CONTEXT.md'})
                 self.assertNotIn(f'{EVENT}/references/readback.md', trace['actual_local_reads'])
                 self.assertEqual([row['source'] for row in trace['input_scopes']].count('Stage'), 1)

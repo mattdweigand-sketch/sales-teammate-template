@@ -656,6 +656,8 @@ class Run:
             self.check_id("Opportunity", row.get("deal"), "routed")
             if not isinstance(row.get("deal"), str):
                 continue
+            if not re.fullmatch(r"006[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?", row["deal"]):
+                self.err("routed needs a valid Opportunity Id")
             if row.get("deal") in routed_ids:
                 self.err("routed: each deal appears once")
             routed_ids.add(row.get("deal"))

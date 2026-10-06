@@ -188,6 +188,16 @@ class EventListPrep(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "scope cannot be overridden"):
             self.scoped(row, overrides={"event-1": ["outside_named_accounts"]})
 
+    def test_fresh_lookup_finds_new_other_seller_account_and_loses_missing_scope(self):
+        row = self.row(account_id="", account_owner_id="", **{"Outreach Owner": "Operator"})
+        self.assertEqual(self.scoped(row)["counts"], {"enroll": 1})
+        row.update(account_id="newly-found-account", account_owner_id="synthetic-other")
+        result = self.scoped(row)
+        self.assertEqual(result["counts"], {"outside_named_accounts": 1})
+        self.assertIsNone(result["contacts"][0]["scope"])
+        with self.assertRaisesRegex(ValueError, "scope cannot be overridden"):
+            self.scoped(row, overrides={"event-1": ["outside_named_accounts"]})
+
     def test_outreach_owner_arguments_are_paired(self):
         with self.assertRaisesRegex(ValueError, "supplied together"):
             self.prepare([self.row()], outreach_owner_column="Outreach Owner")

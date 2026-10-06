@@ -8,7 +8,8 @@
 - Search current project deal threads by Account name with `pplx project sessions list --search`.
   Send matched Tasks and evidence with `pplx session send` to the verified deal thread instead of proposing them in the scheduled run.
   On confirmed failure with no delivery, retry once with `pplx tm mail send <deal-thread session id>`. Record which command delivered. Never claim delivery without a successful send.
-An ambiguous send needs native reconciliation or stays needs-input. Never blindly retry a missing or delayed response.
+  An ambiguous send needs native reconciliation or stays needs-input. Never blindly retry a missing or delayed response.
+  Keep the verified destination session ID, link and successful native delivery receipt in the run evidence. Report the exact blocker when delivery is unresolved.
   Mark those rows routed, not completed. Do not auto-move or otherwise write them here. Failed or ambiguous routing is needs-input.
 - Show draft text only. Create Gmail drafts only after approval. Apply the ownership order in `references/grouping.md` "Pipeline ownership".
 

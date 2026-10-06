@@ -16,7 +16,8 @@ import onboard
 
 ROOT=Path(__file__).resolve().parents[2]
 EVENT_STAGE_BRANCHES={None:'01-list-prep','list-prep':'01-list-prep','early-close':None,
-                      'sequence-plan':'02-sequence-plan','launch':'03-launch','zero-recipients':'03-launch'}
+                      'sequence-plan':'02-sequence-plan','launch':'03-launch','zero-recipients':'03-launch',
+                      'house-and-missing-scope':'01-list-prep','scope-loss':'03-launch','interval-readback':'03-launch'}
 
 
 class LocalConnector:
@@ -24,7 +25,9 @@ class LocalConnector:
     def __init__(self):
         self.records={};self.writes=[];self.sent=[]
 
-    def write(self,key,proposal,approved=None,current=None,readback_override=None):
+    def write(self,key,proposal,approved=None,current=None,readback_override=None,guard=True):
+        if guard is not True:
+            raise ValueError('current ownership or evidence guard failed')
         if approved != proposal:
             raise ValueError('exact approval is missing or changed')
         live=deepcopy(self.records.get(key))
@@ -41,13 +44,35 @@ class LocalConnector:
         return deepcopy(actual)
 
 
+    def deliver(self, primary, fallback=None, *, discovered=True, reconciled=None):
+        """Contract-guided transport double. No real sends or provider verification."""
+        attempts = []
+        if not discovered:
+            return {'status': 'needs-input', 'attempts': attempts, 'transport': None, 'receipt': None}
+        attempts.append('session')
+        result, transport = primary, 'session'
+        if primary.get('status') == 'confirmed_no_delivery':
+            attempts.append('mail')
+            result, transport = fallback or {}, 'mail'
+        if result.get('status') == 'ambiguous':
+            result = reconciled or {}
+        receipt = result.get('receipt') if result.get('status') == 'delivered' else None
+        return {'status': 'delivered' if receipt else 'needs-input', 'attempts': attempts,
+                'transport': transport if receipt else None, 'receipt': receipt}
+
+
 def snapshot(root):
     return {str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*')
             if p.is_file() and not any(onboard.excluded_name(x) for x in p.relative_to(root).parts)}
 
 
 def contract_trace(name,contract,root,branch=None):
-    path=root/contract;text=path.read_text();read=[contract]
+    declared = {skill: entry for skill, entry, _ in onboard.routes(root)}
+    expected = declared.get(name)
+    if contract != expected and not (name == "event-sequence" and expected and
+            contract == str(Path(expected).parent / EVENT_STAGE_BRANCHES.get(branch, "") / "CONTEXT.md")):
+        raise ValueError("contract does not match the root AGENTS route and selected stage")
+    path=root/contract;text=path.read_text();read=["AGENTS.md",contract]
     inputs=text.split('## Inputs\n',1)[1].split('## Process\n',1)[0]
     coordinator=name=='event-sequence' and path.parent.name=='event-sequence'
     if coordinator and branch not in EVENT_STAGE_BRANCHES:
@@ -84,7 +109,9 @@ def contract_trace(name,contract,root,branch=None):
                         assert re.search(r'^#+ '+re.escape(heading)+r'\s*$',content,re.M),f'{reference}: missing {heading}'
                 read.append(str(file.relative_to(root)))
     return {'workflow':name,'contract':contract,'actual_local_reads':read,'input_scopes':scopes,
-            'output_contract':text.split('## Outputs\n',1)[1],'simulation_only':True}
+            'output_contract':text.split('## Outputs\n',1)[1],
+            'review_contract':text.split('## Checkpoints\n',1)[1].split('## Audit\n',1)[0],
+            'downstream_handoff':yaml.safe_load(text.split('---\n',2)[1])['next'], 'simulation_only':True}
 
 
 def worker(artifacts,renderer='auto'):
@@ -171,6 +198,44 @@ def worker(artifacts,renderer='auto'):
     bus.sent.append({'sequence':'demo','stopped_on_reply':True})
     record('event-sequence','launch',prepared)
 
+    # Scope cases execute the actual Event helper against reviewed fictional native evidence.
+    marker = {'outreach_owner_column': 'Outreach Owner', 'outreach_owner_value': 'Operator'}
+    house = event.row(account_owner_id='synthetic-house', apollo_contact_id='synthetic-apollo',
+                      apollo_contact_email='aster.sample@synthetic.example', apollo_crm_linked=True,
+                      apollo_crm_owner_id='synthetic-house', **{'Outreach Owner': 'Operator'})
+    scoped = prep.prepare([house], event.policy, event.as_of, **marker)
+    assert scoped['counts'] == {'enroll': 1} and scoped['contacts'][0]['scope'] == 'outreach_owner'
+    missing = event.row(account_id='', account_owner_id='', **{'Outreach Owner': 'Operator'})
+    assert prep.prepare([missing], event.policy, event.as_of, **marker)['counts'] == {'enroll': 1}
+    disabled = deepcopy(event.policy)
+    disabled['prospecting']['event'].pop('outreach_owner_scope')
+    for row in (house, missing):
+        held = prep.prepare([row], disabled, event.as_of, **marker)['contacts'][0]
+        assert held['label'] != 'enroll' and any(item['label'] == 'outside_named_accounts' for item in held['exclusions'])
+    assert prep.prepare([event.row(account_id='', account_owner_id='', account_checked=False,
+                                   **{'Outreach Owner': 'Operator'})], event.policy, event.as_of, **marker)['counts'] == {'needs_input': 1}
+    record('event-sequence', 'house-and-missing-scope', {'helper': scoped, 'disabled_and_incomplete_checks': 'held'})
+    before = len(bus.writes)
+    house['account_owner_id'] = 'synthetic-other'
+    lost = prep.prepare([house], event.policy, event.as_of, **marker)
+    assert lost['contacts'][0]['scope'] is None and lost['contacts'][0]['label'] != 'enroll'
+    assert any(item['label'] == 'outside_named_accounts' for item in lost['contacts'][0]['exclusions'])
+    rejects(lambda: prep.prepare([house], event.policy, event.as_of,
+                                 overrides={'event-1': ['outside_named_accounts']}, **marker))
+    assert len(bus.writes) == before
+    record('event-sequence', 'scope-loss', {'helper': lost, 'apollo_calls': 0, 'override': 'rejected'})
+    from prospect_readback_check import compare
+    interval = {'mode': 'interval', 'step_wait_days': [0, 3, 3], 'schedule_id': 'fictional-weekday',
+                'timezone': 'America/Los_Angeles', 'stop_on_reply': True}
+    native = {**interval, 'id': 'fictional-sequence'}
+    assert compare(interval, native)['verdict'] == 'match' and 'send_datetime' not in native
+    for changed in ({'step_wait_days': [1, 3, 3]}, {'schedule_id': 'different'}, {'mode': 'absolute'}):
+        assert compare(interval, {**native, **changed})['verdict'] == 'mismatch'
+    assert compare(interval, {'id': 'unsupported'})['verdict'] == 'mismatch'
+    record('event-sequence', 'interval-readback', {'approved': interval, 'native': native,
+                                                'projections': 'expected local windows, not native timestamps',
+                                                'mismatches': 'held by comparison double'})
+
     # Read-only prep preserves source-supported facts and explicitly marks unknowns.
     before=len(bus.writes)
     for branch in ('intro','discovery','demo','proposal','customer','daily'):
@@ -191,6 +256,69 @@ def worker(artifacts,renderer='auto'):
     assert 'task_gap' in result['triggers']
     for branch in ('weekday','friday'):
         record('pipeline-review',branch,{'hygiene':result,'approval_state':'proposal','next':'corrected Salesforce state is eligible for Forecasting'})
+    # Delivery choices are simulated. Receipts and ambiguity never grant record-write ownership.
+    delivered = {'status': 'delivered', 'receipt': {'session_id': 'fictional-deal', 'message_id': 'fixture-1'}}
+    failed, ambiguous = {'status': 'confirmed_no_delivery'}, {'status': 'ambiguous'}
+    delivery_cases = [(delivered, delivered, True, None, ['session'], 'delivered'),
+                      (failed, delivered, True, None, ['session', 'mail'], 'delivered'),
+                      (failed, failed, True, None, ['session', 'mail'], 'needs-input'),
+                      (ambiguous, delivered, True, None, ['session'], 'needs-input'),
+                      (ambiguous, delivered, True, delivered, ['session'], 'delivered'),
+                      (delivered, delivered, False, None, [], 'needs-input')]
+    for primary, fallback, found, reconciled, attempts, status in delivery_cases:
+        before = len(bus.writes)
+        output = bus.deliver(primary, fallback, discovered=found, reconciled=reconciled)
+        assert output['attempts'] == attempts and output['status'] == status
+        assert len(bus.writes) == before
+        if status != 'delivered': assert output['receipt'] is None and output['transport'] is None
+    record('interaction-sync', 'delivery-success-and-denial', {'cases': len(delivery_cases),
+           'fallback': 'only confirmed no delivery', 'ambiguous': 'reconciled or needs-input', 'customer_writes': 0})
+    # Real renderer includes routed records without local labels on weekday and Friday.
+    from test_pipeline_render import Render, base, friday, BIO
+    render = Render(); render.setUp()
+    try:
+        routed = base()
+        routed['deals'] = [row for row in routed['deals'] if row['id'] != BIO]
+        routed['blocks'] = [row for row in routed['blocks'] if row['deal'] != BIO]
+        routed['routed'] = [{'deal': BIO, 'name': 'Fictional Account', 'thread_url': 'https://example.test/deal',
+                             'reason': 'Verified deal thread owns this Opportunity and its Tasks'}]
+        assert '## Routed to deal threads' in render.ok('report', routed)
+        routed_friday = friday(deepcopy(routed))
+        routed_friday['friday']['letters'] = []
+        assert '## Routed to deal threads' in render.ok('report', routed_friday)
+        invalid = deepcopy(routed_friday)
+        invalid['friday']['letters'] = friday(base())['friday']['letters']
+        render.fails('report', invalid, 'routed deal is owned elsewhere')
+        record('pipeline-review', 'routed-ownership-render', {'weekday_and_friday': 'actual renderer passed',
+               'competing_letter': 'actual renderer rejected', 'handoff_success': 'not inferred from routed list'})
+    finally: render.tearDown()
+    # Ownership order drives fixture decisions for typed and scheduled triage. Prose-agent execution is unverified.
+    ownership_rows = [('active', True, False, 'deal-thread'), ('current', False, True, 'pipeline-review'),
+                      ('distinct', False, False, 'triage'), ('ambiguous', None, True, 'held')]
+    for branch in ('typed-ownership', 'scheduled-ownership'):
+        before = len(bus.writes)
+        for key, active, current_action, owner in ownership_rows:
+            actual = 'held' if active is None else 'deal-thread' if active else 'pipeline-review' if current_action else 'triage'
+            assert actual == owner
+            if actual != 'triage':
+                rejects(lambda: bus.write('owned-'+key, {'Status': 'Completed'}, approved={'Status': 'Completed'}, guard=False))
+        assert len(bus.writes) == before
+        record('task-triage-speed-run', branch, {'owners': ownership_rows, 'owned_task_writes': 0,
+               'closeout': 'routed Tasks remain open and pending delivery is not completion'})
+    # Exact approval cannot cover changed native fields, failed guards or repeating a coupled success.
+    bus.records['stale-task'] = {'ActivityDate': '2026-10-05'}
+    original = deepcopy(bus.records['stale-task']); proposal = {'ActivityDate': '2026-10-08'}
+    bus.records['stale-task']['ActivityDate'] = '2026-10-06'
+    before = len(bus.writes)
+    rejects(lambda: bus.write('stale-task', proposal, approved=proposal, current=original))
+    rejects(lambda: bus.write('stale-task', proposal, approved=proposal, current=bus.records['stale-task'], guard=False))
+    assert len(bus.writes) == before
+    bus.write('coupled-opp', {'Next_Steps__c': 'Fictional approved action'}, approved={'Next_Steps__c': 'Fictional approved action'})
+    rejects(lambda: bus.write('stale-task', proposal, approved=proposal, current=original))
+    rejects(lambda: bus.write('coupled-opp', bus.records['coupled-opp'], approved=bus.records['coupled-opp'], current=bus.records['coupled-opp']))
+    bus.write('stale-task', proposal, approved=proposal, current=deepcopy(bus.records['stale-task']))
+    record('pipeline-review', 'stale-and-partial-writes', {'stale_or_guard_failed': 'zero affected writes',
+           'partial_coupled_update': 'successful side retained without repeat', 'revised_current_proposal': 'verified locally'})
     triage={'ActivityDate':'2026-10-05'}
     assert not policy['template']['auto_date_move']
     rejects(lambda:bus.write('triage',triage))
@@ -270,6 +398,32 @@ def worker(artifacts,renderer='auto'):
     for branch in ('scheduled-review','typed-health','eval','no-change'):
         record('system-review',branch,{'repair_writes':0,'finding':'mock pointer drift' if branch!='no-change' else None,
                                      'deduplicated':True,'owner':'agent-configuration','scope':'local fixture window'})
+    # Correction evidence uses existing task/comment/thread history in native-shaped fixture records.
+    pattern = {'issue': 'Repeated date edit', 'workflow': 'task-triage-speed-run', 'fix': 'Use the approved local date'}
+    links = ['https://example.test/proposal-1', 'https://example.test/proposal-2']
+    history = {'pattern': pattern, 'question_links': links, 'reason': None, 'task_id': 'fictional-improvement'}
+    def correction_question(existing, checked=True):
+        if not checked: return {'status': 'not checked', 'question': None}
+        if existing and existing['pattern'] == pattern:
+            return {'status': 'known reason' if existing.get('reason') else 'already asked', 'question': None}
+        return {'status': 'new question', 'question': {'links': links, 'text': 'What was wrong?'}}
+    new = correction_question(None)
+    assert len(new['question']['links']) == 2
+    assert correction_question(history)['question'] is None
+    assert correction_question({**history, 'reason': 'Operator supplied reason'})['status'] == 'known reason'
+    assert correction_question(None, checked=False)['status'] == 'not checked'
+    assert new['question'] is not None  # Visible with zero new proposals, no quiet suppression.
+    comment = {'task_id': history['task_id'], 'body': 'Operator supplied reason', 'reply_link': 'https://example.test/reply'}
+    bus.records['declined-improvement'] = {'status': 'declined', 'assigned': False}
+    declined = deepcopy(bus.records['declined-improvement'])
+    bus.write('correction-comment', comment, approved=comment)
+    rejects(lambda: bus.write('correction-comment', comment, approved=comment, current=comment))
+    assert bus.records['declined-improvement'] == declined
+    history['reason'] = bus.records['correction-comment']['body']
+    assert correction_question(history)['status'] == 'known reason'
+    record('system-review', 'correction-evidence', {'new_question': new, 'existing_question': 'not repeated',
+           'unreadable_history': 'not checked', 'comment': bus.records['correction-comment'],
+           'declined_task': 'unchanged', 'quiet_with_new_question': False, 'repair_writes': 0})
     assert set(x['workflow'] for x in cases)==set(traces)
     return {'passed':True,'named_workflows':len(traces),'scenarios':len(cases),'cases':cases,'mock_writes':bus.writes,
             'limit':'Contract-guided local connector doubles and real helper executions. Prose-only agent judgment and live integration behavior remain unverified.'}

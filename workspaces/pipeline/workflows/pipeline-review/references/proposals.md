@@ -10,6 +10,7 @@ For an Opportunity owned by an active deal thread, send that thread the flag, ev
 Propose nothing on that record in this run. Try `pplx session send` once. On confirmed failure with no delivery, retry once with `pplx tm mail send <deal-thread session id>`.
 Record which command delivered. Failed or ambiguous routing is needs-input. Never claim delivery without a successful send.
 An ambiguous send needs native reconciliation or stays needs-input. Never blindly retry a missing or delayed response.
+Keep the verified destination session ID, link and successful native delivery receipt in the run evidence. Report the exact blocker when delivery is unresolved.
 Keep these rows in report-format's "Routed to deal threads" section, not local approval blocks, questions, or Friday letters.
 
 For each deal flagged by `hygiene_check` or by `new_activity` (`workspaces/pipeline/workflows/pipeline-review/references/triggers.md`), show a numbered clear recommendation, a question, or both.

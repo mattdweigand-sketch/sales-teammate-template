@@ -33,6 +33,7 @@ With a pending first send and no native timestamp, report pending plus matched i
 Enrollment may already have sent real email. Say what native evidence proves sent versus scheduled, not that every email is unsent.
 Readback is verified when the create or update response copy, scheduled subjects, counts, active state, stop on reply, and first send all match approval.
 Matching steps, mailbox, schedule, recipient reconciliation, and sent-content checks when applicable are also required.
+First-send matching uses its native timestamp when available, or an explicitly pending first send with verified intervals and named schedule. Unknown native state stays partial.
 Only the matched pre-enrollment copy result plus complete native readback satisfies readback. The permission-error search path changes the read tools, never the copy gate.
 Other gaps make the outcome partial.
 Report native CRM push status from enrichment and enrollment responses or reads when available. If unavailable, say not checked. Never infer a successful Salesforce sync from enrollment counts.

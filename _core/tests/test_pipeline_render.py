@@ -196,7 +196,7 @@ class Render(unittest.TestCase):
         self.fails("report", data, "plus routed 1")
 
     def test_malformed_routed_rows_reject_without_output(self):
-        for routed in (None, {}, [None], [{"deal": []}], [{"deal": "bad"}]):
+        for routed in (None, {}, [None], [{"deal": []}], [{"deal": "bad"}], [{"deal": "006invalid!00001AAA", "name": "Account", "reason": "Owner", "thread_url": "https://example.test/deal"}]):
             with self.subTest(routed=routed):
                 data = base()
                 data["routed"] = routed
