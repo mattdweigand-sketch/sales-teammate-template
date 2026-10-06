@@ -46,6 +46,14 @@ Keep raw run evidence, customer material, and review history in the Systems thre
 - Drift from the profile, pointer, or schedule checks, verified from actual settings.
 - A system gap against Operator's configured revenue objective, framed as a system change rather than a forecast or sales policy change.
 
+For each same-edit or same-rejection pattern, ask Operator one question, with both links, asking what was wrong. Ask once per pattern, never per proposal.
+Skip a pattern whose reason Operator already gave. Without the answer the cause stays a labeled hypothesis. Never infer the reason from the edit.
+Record the answer as an evidence comment on the matching improvement task, with the reply link. It replaces the hypothesis as the cause evidence for that fix.
+Check linked task comments and Systems review history by underlying issue, workflow and intended fix for a prior reason or question.
+An already asked pattern stays unanswered evidence and gets no repeat question. Unreadable dedupe is not checked, never a blind question or duplicate task.
+Read back a later reply's native evidence comment and record it once. A declined match grants no reopening or repair authority.
+Without a verified matching task, keep the reply and links in the existing Systems thread and report the unresolved task link. Never create a task solely to store an answer.
+
 ## Proposals and task recording
 
 Surface at most 3 new numbered proposals, ranked by impact. Each has evidence links, an owner, the exact fix, effort `S`, `M`, or `L`, and verification.
@@ -61,9 +69,11 @@ Read back each task or evidence comment. Verify status open, no execution assign
 Report a failed or unverified recording as such, including any created task ID. Do not claim it was recorded or retry blindly into a duplicate.
 Task creation and evidence comments are the only durable writes. Repairs, configuration changes, and policy decisions retain their own approval gates.
 
-If nothing is new after complete evidence reads and dedupe, post one line saying no new improvements. Comment-only additions do not need a new proposal notification.
-Friday still keeps its scorecard and backlog, with the Eval result as that one line. A no-new typed Eval posts only the one line.
-For a scheduled run, call `pplx automation suppress-run-notification` for that run only. This leaves its answer and future runs unchanged.
+If nothing is new after complete evidence reads and dedupe, post one line saying no new improvements only with no new proposals and no new questions.
+Comment-only additions do not need a new proposal notification.
+Friday still keeps its scorecard and backlog, with the Eval result as that one line.
+A no-new typed Eval posts only the one line when no new question requires attention. A new question remains visible even without new proposals.
+For a scheduled run, call `pplx automation suppress-run-notification` for that run only when no new proposals or questions require attention. This leaves its answer and future runs unchanged.
 A typed Eval has no automation notification to suppress. Do not hide missing evidence or recording failures as a no-new result.
 
 ## Friday backlog

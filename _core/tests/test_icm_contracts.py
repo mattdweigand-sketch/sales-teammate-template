@@ -779,6 +779,31 @@ class SystemReviewEvaluation(unittest.TestCase):
                          "A system gap against Operator's configured revenue objective, framed as a system change"):
             self.assertIn(expected, signals)
 
+    def test_repeated_corrections_ask_once_with_links_and_record_answer_evidence(self):
+        signals = "\n".join(self.evaluation["Signals"])
+        approved = (
+            "For each same-edit or same-rejection pattern, ask Operator one question, with both links, asking what was wrong. Ask once per pattern, never per proposal.\n"
+            "Skip a pattern whose reason Operator already gave. Without the answer the cause stays a labeled hypothesis. Never infer the reason from the edit.\n"
+            "Record the answer as an evidence comment on the matching improvement task, with the reply link. It replaces the hypothesis as the cause evidence for that fix."
+        )
+        self.assertEqual(signals.count(approved), 1)
+        for guard in ("linked task comments and Systems review history", "no repeat question",
+                      "Unreadable dedupe is not checked", "Read back a later reply's native evidence comment",
+                      "declined match grants no reopening or repair authority", "Never create a task solely to store an answer"):
+            self.assertIn(guard, signals)
+
+    def test_correction_questions_do_not_pause_review_or_disappear_without_proposals(self):
+        routing = "\n".join(self.review["Report and routing"])
+        self.assertLess(routing.index("Follow with at most 3"), routing.index("Then list each repeated-correction question"))
+        for guard in ("one line with both links", "wait for no reply", "do not count toward the three-proposal cap",
+                      "new question visible even with no new proposals", "Previously asked patterns do not notify again"):
+            self.assertIn(guard, routing)
+        proposals = "\n".join(self.evaluation["Proposals and task recording"])
+        self.assertIn("only with no new proposals and no new questions", proposals)
+        self.assertIn("only when no new proposals or questions require attention", proposals)
+        self.assertIn("None.", "\n".join(self.contract["Checkpoints"]))
+        self.assertEqual(self.frontmatter["writes"], "Teammate improvement tasks and evidence comments only")
+
     def test_proposals_are_capped_ranked_and_do_not_set_forecasts_or_policy(self):
         proposals = "\n".join(self.evaluation["Proposals and task recording"])
         for expected in ("at most 3 new numbered proposals, ranked by impact", "evidence links, an owner, the exact fix",
