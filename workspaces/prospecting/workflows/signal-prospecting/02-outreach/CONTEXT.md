@@ -8,21 +8,22 @@ next: Pipeline when an open Opportunity exists, otherwise Outputs handoff
 # Outreach
 
 Turns one qualified bundle into one Gmail draft (`policy.prospecting.outreach.max_drafts_per_run`). The bundle arrives as fenced JSON in the thread from a scan stage. This stage never finds
-signals, never sends, and never writes to Salesforce. Product facts come from policy.template and wording follows `workspaces/prospecting/workflows/outreach/references/talk-track.md`.
+signals, never sends, and never writes to Salesforce. Product facts come from policy.template.
+Wording follows `workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md`.
 
 ## Inputs
 
 | Source | File/Location | Section/Scope | Why |
 |---|---|---|---|
 | Policy | `_core/policy.yaml` | prospecting.outreach, prospecting.identity, prospecting.user_scan, template | Set bundle age, verified recipient sources, suppression and draft limits |
-| Reference | `workspaces/prospecting/workflows/outreach/references/talk-track.md` | Core messaging, applicable Match the angle row, Claim boundaries, supporting evidence only for claims used | Select supported product wording and keep claims within the chosen angle |
+| Reference | `workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md` | Core messaging, applicable Match the angle row, Claim boundaries, supporting evidence only for claims used | Select supported product wording and keep claims within the chosen angle |
 | Reference | `workspaces/prospecting/references/icp.md` | Relevant Target personas section | Connect the initiative to the recipient responsibility supported by sources |
-| Tool | `workspaces/prospecting/workflows/outreach/scripts/prospect_outreach_gate.py` | Docstring and CLI | Check evidence age, recipient, suppression and the exact proposed draft |
+| Tool | `workspaces/prospecting/workflows/signal-prospecting/02-outreach/scripts/prospect_outreach_gate.py` | Docstring and CLI | Check evidence age, recipient, suppression and the exact proposed draft |
 | Tool | `workspaces/prospecting/scripts/prospect_account_route.py` | Docstring and route table | Recheck Account owner and open-deal routing before drafting |
 | Tool | `workspaces/prospecting/scripts/prospect_readback_check.py` | Docstring and CLI | Compare approved fields with the complete native returned record or draft |
 | External skill | draft-anti-slop | Advisory style review named in step 6 | Surface advisory cold-email style warnings without overriding approved wording |
 | Working | Qualified bundle in this thread, recipient sources and current Salesforce/Gmail activity reads | No bundle reconstruction from memory or summaries | Bind this draft to its actual bundle, verified recipient and completed suppression reads |
-| Reference | `workspaces/prospecting/workflows/outreach/references/execution.md` | Full file | Apply bundle intake, recipient checks, suppression and exact Gmail readback |
+| Reference | `workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/execution.md` | Full file | Apply bundle intake, recipient checks, suppression and exact Gmail readback |
 | Rules | `_core/rules.md` | rules#approval, rules#write_protocol, rules#absence_conclusions, rules#not_checked_means | Require exact approval and native readback, and separate unread evidence from absence |
 | Rules | `_core/rules.md` | rules#email_body | Check customer draft wording and re-read linked security evidence before answering |
 | Policy | `_core/policy.yaml` | email_voice, tooling | Shared draft review and tool paths |
@@ -68,5 +69,5 @@ per rules#write_protocol.
 |---|---|---|
 | Exact proposal | Current thread | Numbered To, Subject and Body plus evidence and gate result |
 | Approved draft | Gmail after approval | One draft with Id and exact readback. Operator sends manually |
-| Proven send handoff | Current thread to workspaces/prospecting/workflows/followup/ | After Operator sends. No Salesforce Task in this stage |
+| Proven send handoff | Current thread to workspaces/prospecting/workflows/signal-prospecting/03-followup/ | After Operator sends. No Salesforce Task in this stage |
 | Pipeline handoff | Pipeline thread | Account and open Opportunity IDs with dated evidence. No prospecting writes |

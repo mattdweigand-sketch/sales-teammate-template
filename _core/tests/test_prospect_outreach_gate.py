@@ -12,7 +12,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "_core"
-SCRIPTS = ROOT / "workspaces" / "prospecting" / "workflows" / "outreach" / "scripts"
+SCRIPTS = ROOT / "workspaces" / "prospecting" / "workflows" / "signal-prospecting" / "02-outreach" / "scripts"
 sys.path.insert(0, str(ROOT / "workspaces/prospecting/scripts"))
 sys.path.insert(0, str(SCRIPTS))
 import prospect_common  # noqa: E402

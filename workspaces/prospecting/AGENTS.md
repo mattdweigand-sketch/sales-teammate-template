@@ -1,6 +1,7 @@
 # Prospecting
 
-Own named-account research, approved unsent outreach drafts, post-send follow-up, and approved event sequences.
+Own Signal Prospecting and Event Sequence for named accounts.
+Signal Prospecting has Research, Outreach and Follow-up stages. Event Sequence coordinates List Prep, Sequence Plan and Launch.
 Read `workspaces/prospecting/CONTEXT.md` for routing, or go directly to the named skill's contract in root AGENTS.md.
 
 ## Boundaries

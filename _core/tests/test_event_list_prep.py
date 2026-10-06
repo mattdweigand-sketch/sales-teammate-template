@@ -511,7 +511,7 @@ class EventListPrep(unittest.TestCase):
                                      overrides={"event-1": ["recent_reply"]})["contacts"][0]["label"], "needs_input")
 
     def test_migrated_default_rules_cli_scrub_audit_and_batch_synthetic_fixture(self):
-        folder = SCRIPT.parent
+        folder = SCRIPT.parent.parent / "01-list-prep/scripts"
         fixture = ROOT / "_core/tests/prospecting-fixtures/event_risky.csv"
         rows = list(csv.DictReader(io.StringIO(fixture.read_text())))
         self.assertTrue(all(not row["Email Business"] or "@" not in row["Email Business"] or

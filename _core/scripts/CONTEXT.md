@@ -10,9 +10,9 @@ They check mechanics, not the truth of source claims or human approval. External
 |---|---|---|
 | `onboard` | `_core/scripts/` | Local one-pass setup and readiness checks |
 | `rehearse` | `_core/scripts/` | Scratch workflow simulations and regression suite |
-| `event_list_prep` | `workspaces/prospecting/workflows/event-sequence/scripts/` | event-sequence |
-| `event_scrub_leads` | `workspaces/prospecting/workflows/event-sequence/scripts/` | event-sequence |
-| `event_make_batches` | `workspaces/prospecting/workflows/event-sequence/scripts/` | event-sequence |
+| `event_list_prep` | `workspaces/prospecting/workflows/event-sequence/scripts/` | List Prep and Launch |
+| `event_scrub_leads` | `workspaces/prospecting/workflows/event-sequence/01-list-prep/scripts/` | List Prep |
+| `event_make_batches` | `workspaces/prospecting/workflows/event-sequence/01-list-prep/scripts/` | List Prep |
 | `hygiene_check` | `_core/scripts/` | pipeline-review, forecast-weekly |
 | `coverage_check` | `_core/scripts/` | pipeline-review, forecast-weekly |
 | `forecast_notify` | `workspaces/forecasting/workflows/forecast-weekly/scripts/` | Forecast (weekly) automation |
@@ -30,10 +30,10 @@ They check mechanics, not the truth of source claims or human approval. External
 | `prospect_account_route` | `workspaces/prospecting/scripts/` | Research and Outreach route table |
 | `prospect_privacy_check` | `workspaces/prospecting/scripts/` | Research Adoption, Outreach adoption context |
 | `prospect_readback_check` | `workspaces/prospecting/scripts/` | Outreach, Follow-up |
-| `prospect_scan_verdict` | `workspaces/prospecting/workflows/research/scripts/` | Research Buying signals |
-| `prospect_outreach_gate` | `workspaces/prospecting/workflows/outreach/scripts/` | Outreach |
-| `prospect_followup_gate` | `workspaces/prospecting/workflows/followup/scripts/` | Follow-up |
-| `prospect_adoption_lookup` | `workspaces/prospecting/workflows/research/scripts/` | Research Adoption account lookup |
+| `prospect_scan_verdict` | `workspaces/prospecting/workflows/signal-prospecting/01-research/scripts/` | Research Buying signals |
+| `prospect_outreach_gate` | `workspaces/prospecting/workflows/signal-prospecting/02-outreach/scripts/` | Outreach |
+| `prospect_followup_gate` | `workspaces/prospecting/workflows/signal-prospecting/03-followup/scripts/` | Follow-up |
+| `prospect_adoption_lookup` | `workspaces/prospecting/workflows/signal-prospecting/01-research/scripts/` | Research Adoption account lookup |
 
 ## What to load
 

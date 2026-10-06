@@ -15,6 +15,8 @@ import yaml
 import onboard
 
 ROOT=Path(__file__).resolve().parents[2]
+EVENT_STAGE_BRANCHES={None:'01-list-prep','list-prep':'01-list-prep','early-close':None,
+                      'sequence-plan':'02-sequence-plan','launch':'03-launch','zero-recipients':'03-launch'}
 
 
 class LocalConnector:
@@ -47,11 +49,18 @@ def snapshot(root):
 def contract_trace(name,contract,root,branch=None):
     path=root/contract;text=path.read_text();read=[contract]
     inputs=text.split('## Inputs\n',1)[1].split('## Process\n',1)[0]
+    coordinator=name=='event-sequence' and path.parent.name=='event-sequence'
+    if coordinator and branch not in EVENT_STAGE_BRANCHES:
+        raise ValueError('Event trace requires one declared entry branch')
     scopes=[]
     for row in inputs.splitlines():
         if not row.startswith('|') or row.startswith('| Source') or row.startswith('|---'):continue
         cells=[x.strip() for x in row.strip('|').split('|')]
         scope=cells[2].lower()
+        if coordinator:
+            stage=EVENT_STAGE_BRANCHES[branch]
+            if cells[0]=='Stage' and cells[1]!=f'`{stage}/CONTEXT.md`':continue
+            if cells[0]=='Reference' and branch!='early-close':continue
         if name=='signal-scan' and cells[0].startswith('Adoption'):continue
         if name=='signal-user-scan' and cells[0].startswith('Buying signals'):continue
         if name=='sales-call-prep' and 'scheduled daily run only' in scope and branch!='daily':continue
@@ -98,6 +107,10 @@ def worker(artifacts,renderer='auto'):
     def record(name,branch,output):
         assert name in traces
         item={**contract_trace(name,traces[name],ROOT,branch),'branch':branch,'passed':True,'output':output}
+        if name=='event-sequence' and EVENT_STAGE_BRANCHES[branch]:
+            contract=str(Path(traces[name]).parent/EVENT_STAGE_BRANCHES[branch]/'CONTEXT.md')
+            item['stage_trace']=contract_trace(name,contract,ROOT,branch)
+            item['actual_local_reads']=list(dict.fromkeys(item['actual_local_reads']+item['stage_trace']['actual_local_reads']))
         cases.append(item);(artifacts/f'{name}-{branch}.json').write_text(json.dumps(item,indent=2,default=str)+'\n')
     def rejects(function):
         try:function()
@@ -139,13 +152,24 @@ def worker(artifacts,renderer='auto'):
 
     event=EventListPrep();event.setUp()
     prepared=prep.prepare([event.row()],event.policy,event.as_of);assert prepared['contacts'][0]['label']=='enroll'
+    record('event-sequence','list-prep',prepared)
     for change in [{'open_opportunity':True},{'account_owner_id':'other'},{'active_sequence':True},{'email_status':'unverified'}]:
         assert prep.prepare([event.row(**change)],event.policy,event.as_of)['contacts'][0]['label']!='enroll'
+    empty=prep.prepare([event.row(open_opportunity=True)],event.policy,event.as_of)
+    assert not any(contact['label']=='enroll' for contact in empty['contacts']) and not empty['enrichment_candidates']
+    before=len(bus.writes)
+    record('event-sequence','early-close',empty)
+    assert len(bus.writes)==before
     enrollment={'contacts':['aster.sample@synthetic.example'],'copy':['Demo invite'],'mailbox':'rep@seller.example','schedule':'demo-only'}
     rejects(lambda:bus.write('apollo',enrollment))
+    record('event-sequence','sequence-plan',{'exact_proposal':enrollment,'writes':0})
+    dropped=prep.prepare([event.row(last_reply_at=event.as_of.isoformat())],event.policy,event.as_of)
+    assert not any(contact['label']=='enroll' for contact in dropped['contacts'])
+    record('event-sequence','zero-recipients',dropped)
+    assert len(bus.writes)==before
     bus.write('apollo',enrollment,approved=enrollment)
     bus.sent.append({'sequence':'demo','stopped_on_reply':True})
-    record('event-sequence','intake-exclusions-enrollment-reply',prepared)
+    record('event-sequence','launch',prepared)
 
     # Read-only prep preserves source-supported facts and explicitly marks unknowns.
     before=len(bus.writes)

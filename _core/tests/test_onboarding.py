@@ -78,6 +78,18 @@ class OnboardingTests(unittest.TestCase):
         status=self.instantiate_fixture(self.answers,self.destination)
         self.assertFalse(status['external_ready'])
         self.assertEqual(len(list((self.destination/'_core/onboarding/skill-pointers').glob('*.md'))),18)
+        pointers=self.destination/'_core/onboarding/skill-pointers'
+        stages={'signal-scan':'01-research','signal-user-scan':'01-research',
+                'signal-outreach':'02-outreach','signal-followup':'03-followup'}
+        for name,stage in stages.items():
+            pointer=(pointers/f'{name}.md').read_text()
+            self.assertIn(f'`workspaces/prospecting/workflows/signal-prospecting/{stage}/CONTEXT.md`',pointer)
+            self.assertTrue((self.destination/f'workspaces/prospecting/workflows/signal-prospecting/{stage}/CONTEXT.md').is_file())
+        self.assertIn('Select branch Buying signals.',(pointers/'signal-scan.md').read_text())
+        self.assertIn('Select branch Adoption.',(pointers/'signal-user-scan.md').read_text())
+        event=(pointers/'event-sequence.md').read_text()
+        self.assertIn('`workspaces/prospecting/workflows/event-sequence/CONTEXT.md`',event)
+        self.assertNotIn('/03-launch/CONTEXT.md',event)
         self.assertFalse((self.destination/'.git').exists())
         self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(),before)
         self.assertEqual(onboard.check(self.destination),0)
@@ -95,7 +107,7 @@ class OnboardingTests(unittest.TestCase):
         self.assertEqual(policy['momentum']['attendee_email'],'alex@demo-west.test')
         self.assertEqual(policy['coach']['schedule']['deal_review']['tz'],'Europe/London')
         self.assertEqual(policy['salesforce']['note_prefix'],'M/D/YY AD - ')
-        text=(self.destination/'workspaces/prospecting/workflows/outreach/references/talk-track.md').read_text()
+        text=(self.destination/'workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md').read_text()
         self.assertEqual(policy['template']['product_value'],'Demo Service coordinates review work.')
         self.assertNotIn('Example Product',text)
         self.assertNotIn('Next_Steps__c',(self.destination/'_core/scripts/hygiene_check.py').read_text())

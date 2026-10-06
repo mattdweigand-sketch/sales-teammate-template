@@ -212,7 +212,7 @@
     ],
     "scope": "Privacy-safe adoption or the selected usage-report branch",
     "source": [
-      "workspaces/prospecting/workflows/research/scripts/adoption_lookup.sql",
+      "workspaces/prospecting/workflows/signal-prospecting/01-research/scripts/adoption_lookup.sql",
       "workspaces/pipeline/references/pilot-usage-queries.md"
     ],
     "setup": "Configure account, role, database, schema and the chosen warehouse in the connector or MCP server. Map all ten sample tables and their consumed columns. Review joins, organization IDs, snapshot dates, event timezone, task grain and credit-cent billing semantics. A table rename alone does not adapt a different schema.",
@@ -346,7 +346,7 @@
     "scope": "System-managed email Tasks, Contact sync and integration-owner exclusions",
     "source": [
       "_core/policy.yaml",
-      "workspaces/prospecting/workflows/followup/references/execution.md"
+      "workspaces/prospecting/workflows/signal-prospecting/03-followup/references/execution.md"
     ],
     "setup": "Identify each actual email and enrollment sync into Salesforce, including Unify if used. Review Task subtype, inbound subject markers, dedupe, Contact ownership and push status. Supply only verified integration User IDs to ignore during warm-engagement checks. An empty list means no ignored users.",
     "authentication": "Use existing authorized integration service accounts. No separate Unify key is required unless the chosen adapter actually calls its API.",
@@ -438,7 +438,7 @@
     ],
     "scope": "Dated public evidence only",
     "source": [
-      "workspaces/prospecting/workflows/research/references/buying-signals.md",
+      "workspaces/prospecting/workflows/signal-prospecting/01-research/references/buying-signals.md",
       "workspaces/pipeline/workflows/sales-call-prep/references/collect.md"
     ],
     "setup": "Choose the runtime web search and page-fetch tools or an equivalent search API/MCP connection. Verify fetched page text, source URLs, dates and supporting quotations. Public mentions do not substitute for warehouse adoption evidence.",
@@ -572,7 +572,7 @@
     "scope": "Buyer wording and optional attachments",
     "source": [
       "_core/collateral/approved-material.md",
-      "workspaces/prospecting/workflows/outreach/references/talk-track.md"
+      "workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md"
     ],
     "setup": "Replace fictional product guidance with dated company-approved claims and limits. Supply only approved seller collateral and verify runtime attachment access. Source-company PDFs, videos and claims remain excluded.",
     "authentication": "Local approved materials need no new key. Use the existing authorized mailbox or storage adapter if runtime retrieval requires one.",

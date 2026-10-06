@@ -19,7 +19,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import yaml
-from test_skill_contracts import SKILLS, CONTRACT_PATHS, skill_dirs
+from test_skill_contracts import SKILLS, CONTRACT_PATHS, skill_dirs, ROUTING_OVERVIEWS, reference_consumers, input_reference_rows
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "_core"
@@ -39,7 +39,7 @@ TABLE_HEADERS = {
     "Outputs": "| Artifact | Location | Format |",
 }
 # `path` "Heading" or `path` "Heading one", "Heading two"
-SCOPED_REF = re.compile(r"`((?:workspaces/[^`]+/)?references/[a-z0-9-]+\.md|_core/scripts/interfaces\.md|_core/slack-evidence\.md|_core/CONVENTIONS\.md)`((?:[^`\n|]*?\"[^\"]+\")*)")
+SCOPED_REF = re.compile(r"`((?:workspaces/[^`]+/|\.\./|[0-9]{2}-[a-z-]+/)?references/[a-z0-9-]+\.md|_core/scripts/interfaces\.md|_core/slack-evidence\.md|_core/CONVENTIONS\.md)`((?:[^`\n|]*?\"[^\"]+\")*)")
 QUOTED = re.compile(r"\"([^\"]+)\"")
 
 
@@ -53,7 +53,7 @@ def workflow_path(name):
 
 def context_files():
     files = [ROOT / "CONTEXT.md", CORE / "CONTEXT.md", CORE / "scripts" / "CONTEXT.md"]
-    return files + sorted(WORKSPACES.glob("*/CONTEXT.md")) + [d / "CONTEXT.md" for d in workflow_dirs()]
+    return files + sorted(WORKSPACES.glob("*/CONTEXT.md")) + [d / "CONTEXT.md" for d in workflow_dirs()] + sorted(ROUTING_OVERVIEWS)
 
 
 def reference_files():
@@ -117,7 +117,8 @@ class ContractShape(unittest.TestCase):
     def check_sections(self, path):
         secs = sections(path.read_text())
         names = list(secs)
-        self.assertEqual(names, [s for s in SECTION_ORDER if s in secs], f"{path.relative_to(ROOT)}: {names}")
+        expected = (['Pipeline'] if path == CONTRACT_PATHS['event-sequence'] else []) + SECTION_ORDER
+        self.assertEqual(names, [s for s in expected if s in secs], f"{path.relative_to(ROOT)}: {names}")
         self.assertTrue(REQUIRED_SECTIONS <= set(names), f"{path.relative_to(ROOT)}: {names}")
         for name, header in TABLE_HEADERS.items():
             if name in secs:
@@ -233,19 +234,16 @@ class ScopedReferences(unittest.TestCase):
         missing = []
         for d in workflow_dirs():
             text = (d / "CONTEXT.md").read_text()
-            for ref in set(re.findall(r"`(references/[^`]+)`", text)):
-                if not (d / ref).is_file():
+            for ref, _ in SCOPED_REF.findall(text):
+                if not resolve_ref(d, ref).is_file():
                     missing.append(f"{d.name}: {ref}")
-            _, inputs = table_rows(sections(text)["Inputs"])
-            for r in inputs:
-                refs = re.findall(r"`(references/[^`]+\.md)`", r[1])
-                for ref in refs:
-                    target = d / ref
-                    if not target.is_file():
-                        continue
-                    for q in QUOTED.findall(r[2]):
-                        if q not in headings(target):
-                            missing.append(f"{d.name}: {ref} \"{q}\"")
+            for target, scope in input_reference_rows(d / 'CONTEXT.md'):
+                if not target.is_file():
+                    missing.append(f"{d.name}: {target}")
+                    continue
+                for q in QUOTED.findall(scope):
+                    if q not in headings(target):
+                        missing.append(f'{d.name}: {target} "{q}"')
         self.assertEqual(missing, [])
 
     def test_scoped_citations_name_real_headings(self):
@@ -265,14 +263,9 @@ class ScopedReferences(unittest.TestCase):
         self.assertEqual(missing, [])
 
     def test_every_reference_is_routed_by_its_contract(self):
-        orphans = []
-        for d in workflow_dirs():
-            text = (d / "CONTEXT.md").read_text()
-            for f in sorted((d / "references").glob("*.md")) if (d / "references").is_dir() else []:
-                if f"references/{f.name}" not in text:
-                    orphans.append(f"{d.name}/references/{f.name}")
+        references = sorted(WORKSPACES.glob('*/workflows/**/references/*.md'))
+        orphans = [str(ref.relative_to(ROOT)) for ref in references if not reference_consumers(ref)]
         self.assertEqual(orphans, [])
-
 
 class WorkspaceNavigation(unittest.TestCase):
     def test_call_prep_is_owned_by_pipeline_without_stale_paths(self):
@@ -305,16 +298,25 @@ class WorkspaceNavigation(unittest.TestCase):
         self.assertTrue(all(len(row) == 3 and all(row) for row in rows))
         routes = [row[1].strip("`") for row in rows]
         self.assertEqual(sorted(routes), [str(p.relative_to(ROOT)) for p in sorted(WORKSPACES.glob("*/CONTEXT.md"))])
-        contracts = []
+        contracts = set()
         for route in routes:
             workspace = (ROOT / route).parent
             header, rows = table_rows(sections((ROOT / route).read_text())["Task routing"])
             self.assertEqual(header, "| Task or event | Contract | Output and handoff | Human check |")
             self.assertTrue(all(len(row) == 4 and all(row) for row in rows))
-            owned = [workspace / row[1].strip("`") for row in rows]
-            self.assertEqual(sorted(set(owned)), sorted(workspace.glob("workflows/**/CONTEXT.md")))
-            contracts.extend(owned)
-        self.assertEqual(sorted(set(contracts)), [d / "CONTEXT.md" for d in workflow_dirs()])
+            owned = {(workspace / row[1].strip("`")).resolve() for row in rows}
+            self.assertEqual(owned, set(workspace.glob('workflows/*/CONTEXT.md')))
+            contracts.update(owned)
+            for parent in owned:
+                if 'Pipeline' not in sections(parent.read_text()):
+                    continue
+                header, stages = table_rows(sections(parent.read_text())['Pipeline'])
+                self.assertEqual(header, '| Stage | Trigger | Output | Human check | Contract route |')
+                self.assertTrue(all(len(row) == 5 and all(row) for row in stages))
+                selected = {(parent.parent / row[4].strip('`')).resolve() for row in stages}
+                self.assertEqual(selected, set(parent.parent.glob('*/CONTEXT.md')))
+                contracts.update(selected)
+        self.assertEqual(contracts, {d / 'CONTEXT.md' for d in workflow_dirs()} | ROUTING_OVERVIEWS)
 
     def test_workspace_instructions_are_explicitly_reachable(self):
         agents = (ROOT / "AGENTS.md").read_text()
@@ -346,7 +348,13 @@ class WorkspaceNavigation(unittest.TestCase):
                 self.assertIn("Improvement task recording needs no approval pause", checkpoints)
                 self.assertIn("Repairs and policy decisions follow their owning workflow's approval rules", checkpoints)
                 continue
-            needs_checkpoint = not fm["writes"].startswith("nothing") or d.name in {"pilot-usage", "deal-coach"}
+            if d.name == '03-launch':
+                checkpoints = '\n'.join(sections(text)['Checkpoints'])
+                self.assertTrue(checkpoints.startswith('\nNone. Sequence Plan owns the exact E approval.'))
+                self.assertIn('same-thread native approval', checkpoints)
+                self.assertIn('stops for revised approval on material changes', checkpoints)
+                continue
+            needs_checkpoint = not fm["writes"].startswith("nothing") or d.name in {"pilot-usage", "deal-coach", "02-sequence-plan"}
             if needs_checkpoint:
                 _, rows = table_rows(sections(text).get("Checkpoints", []))
                 self.assertTrue(rows, f"{d.name} must expose its existing human review boundary")
@@ -1122,6 +1130,9 @@ class EventSequenceContract(unittest.TestCase):
         self.prep = (self.workflow / "references" / "prep.md").read_text()
         self.sequence = (self.workflow / "references" / "sequence.md").read_text()
         self.readback = (self.workflow / "references" / "readback.md").read_text()
+        self.list_prep = (self.workflow / '01-list-prep/CONTEXT.md').read_text()
+        self.plan = (self.workflow / '02-sequence-plan/CONTEXT.md').read_text()
+        self.launch = (self.workflow / '03-launch/CONTEXT.md').read_text()
 
     def test_eighteen_routes_and_direct_prospecting_workflows(self):
         self.assertEqual(len(SKILLS), 18)
@@ -1129,8 +1140,8 @@ class EventSequenceContract(unittest.TestCase):
                       (ROOT / "AGENTS.md").read_text())
         routes = (WORKSPACES / "prospecting" / "CONTEXT.md").read_text()
         self.assertIn("| Named-account event contacts or `event-sequence` | `workflows/event-sequence/CONTEXT.md`", routes)
-        self.assertEqual(self.workflow.parent, workflow_path("signal-scan").parent)
-        self.assertIn("Event Sequence as direct workflow folders", (CORE / "CONVENTIONS.md").read_text())
+        self.assertEqual(self.workflow.parent, workflow_path("signal-scan").parent.parent)
+        self.assertIn("Signal Prospecting and Event Sequence as direct workflow folders", (CORE / "CONVENTIONS.md").read_text())
 
     def test_exact_rule_words_and_proposed_policy_values(self):
         rule = (CORE / "rules.md").read_text().split('<a id="event_sequence"></a>**event_sequence**\n', 1)[1].split('\n\n', 1)[0]
@@ -1154,7 +1165,7 @@ class EventSequenceContract(unittest.TestCase):
         for key, filename in (("event_list_prep", "event_list_prep.py"), ("event_scrub_leads", "scrub_leads.py"),
                               ("event_make_batches", "make_batches.py")):
             self.assertEqual(policy["tooling"]["scripts"][key],
-                             f"workspaces/prospecting/workflows/event-sequence/scripts/{filename}")
+                             f"workspaces/prospecting/workflows/event-sequence/{'scripts' if key == 'event_list_prep' else '01-list-prep/scripts'}/{filename}")
 
     def test_credit_spends_and_waterfall_are_separate_from_enrollment(self):
         for name in ("apollo_people_bulk_match", "run_waterfall_email=true"):
@@ -1180,7 +1191,7 @@ class EventSequenceContract(unittest.TestCase):
         self.assertIn("run_waterfall_email=true", operations[1])
         self.assertLess(enrichment.index(operations[0]), enrichment.index(operations[1]))
         self.assertIn("Native Apollo verification status and explicit domain flag.", self.prep)
-        frontmatter = yaml.safe_load(self.contract.split("---\n", 2)[1])
+        frontmatter = yaml.safe_load(self.list_prep.split("---\n", 2)[1])
         self.assertTrue(frontmatter["reads"].endswith("Salesforce, Gmail, Apollo"))
 
     def test_crm_sync_disclosure_is_in_every_credit_and_enrollment_proposal_and_readback(self):
@@ -1261,7 +1272,7 @@ class EventSequenceContract(unittest.TestCase):
                             "missing sent content stays partial",
                             "create or update response copy, scheduled subjects, counts, active state, stop on reply, and first send all match approval"):
             self.assertIn(requirement, self.readback)
-        audit = "\n".join(sections(self.contract)["Audit"])
+        audit = "\n".join(sections(self.launch)["Audit"])
         for requirement in ("Pre-enrollment copy result, scheduled subjects", "sent-content checks when sent"):
             self.assertIn(requirement, audit)
 
@@ -1274,7 +1285,7 @@ class EventSequenceContract(unittest.TestCase):
                             "Rerun the helper before E1", "Incomplete results stay needs-input and cannot enroll",
                             "Known-email enrichment still requires all checks complete"):
             self.assertIn(requirement, enrichment)
-        self.assertIn("With no usable email, defer only exact-email checks", self.contract)
+        self.assertIn("With no usable email, defer only exact-email checks", self.list_prep)
 
     def test_native_copy_comparison_and_missing_templates_stop_before_real_send_boundary(self):
         enrollment = "\n".join(sections(self.sequence)["Enrollment"])
@@ -1295,7 +1306,7 @@ class EventSequenceContract(unittest.TestCase):
             self.assertIn(requirement, enrollment)
         self.assertIn("Report the pre-enrollment comparison result", self.readback)
         self.assertIn("Missing templates stop before enrollment and require Operator's input", self.readback)
-        self.assertIn("Copy, before enrollment call", "\n".join(sections(self.contract)["Audit"]))
+        self.assertIn("Copy, before enrollment call", "\n".join(sections(self.launch)["Audit"]))
 
     def test_blocked_campaign_readback_names_schedule_and_mailbox_sources(self):
         for requirement in ("When campaigns_show is blocked, take steps and exact send times from the stored create or update response",
@@ -1362,10 +1373,10 @@ class EventSequenceContract(unittest.TestCase):
                             "If no recipients remain, skip every Apollo call"):
             self.assertIn(requirement, enrollment)
         self.assertLess(enrollment.index("Re-run the bounded reply check"), enrollment.index("apollo_contacts_bulk_create"))
-        process = "\n".join(sections(self.contract)["Process"])
+        process = "\n".join(sections(self.launch)["Process"])
         self.assertIn("fresh `--as-of`", process)
         self.assertIn("without re-approval or additions", process)
-        freshness = next(row for row in sections(self.contract)["Audit"] if row.startswith("| Freshness,"))
+        freshness = next(row for row in sections(self.launch)["Audit"] if row.startswith("| Freshness,"))
         self.assertIn("only drops or holds approved contacts", freshness)
         self.assertIn("schedule changes require revision", freshness)
 
@@ -1383,10 +1394,10 @@ class EventSequenceContract(unittest.TestCase):
 
     def test_early_no_enrollment_close_does_not_require_or_run_a_reply_recheck(self):
         process = "\n".join(sections(self.contract)["Process"])
-        self.assertIn('go straight to step 8 per `references/prep.md` "No enrollment"', process)
+        self.assertIn('close through `references/readback.md` "Handoff and close"', process)
         audit = "\n".join(sections(self.contract)["Audit"])
         self.assertIn("With no recipients and no remaining enrichment", audit)
-        self.assertIn("skip steps 3-7 as applicable", audit)
+        self.assertIn("Never load Plan or Launch, audit nonexistent files or run a reply recheck", audit)
         close = "\n".join(sections(self.readback)["Handoff and close"])
         for requirement in ("If a reply recheck ran", "Attach its saved receipt file to the thread message",
                             "Otherwise close with the original exclusions, holds, and handoff evidence",
@@ -1397,9 +1408,48 @@ class EventSequenceContract(unittest.TestCase):
         reply_row = next(row for row in receipt_rows if row[0] == "Reply recheck")
         self.assertTrue(reply_row[1].startswith("When run,"))
 
+    def test_launch_inherits_only_exact_same_thread_native_e_approval(self):
+        process = "\n".join(sections(self.launch)["Process"])
+        first = next(line for line in sections(self.launch)['Process'] if line.startswith('1. '))
+        self.assertIn('native approval in this same run thread matching the saved exact E proposal', first)
+        self.assertIn('Missing, mismatched or other-thread approval stops before any writes', first)
+        self.assertLess(process.index('Require native approval'), process.index('Fresh-read ownership'))
+        checkpoints = "\n".join(sections(self.launch)['Checkpoints'])
+        self.assertTrue(checkpoints.strip().startswith('None.'))
+        self.assertIn("Sequence Plan owns the exact E approval", checkpoints)
+        self.assertIn('without a repeat pause', checkpoints)
+        self.assertIn('revised approval on material changes', checkpoints)
+        self.assertEqual(yaml.safe_load(self.plan.split('---\n', 2)[1])['writes'], 'nothing')
+        self.assertIn('Wait for approval of that exact E proposal', self.plan)
+
+    def test_zero_recipient_launch_stops_before_every_apollo_operation(self):
+        process = "\n".join(sections(self.launch)['Process'])
+        zero = next(line for line in sections(self.launch)['Process'] if line.startswith('3. '))
+        self.assertIn('If no recipients remain, skip every Apollo call', zero)
+        self.assertIn('actual recheck receipt, drops and holds', zero)
+        for operation in ('contact creation', 'sequence create/update', 'add_contact_ids', 'campaign approval'):
+            self.assertIn(operation, process.split('4. Otherwise enroll', 1)[0])
+        self.assertLess(process.index('fresh `--as-of`'), process.index('If no recipients remain'))
+        self.assertLess(process.index('If no recipients remain'), process.index('Otherwise enroll'))
+        self.assertIn('No remaining approved recipients stops before every Apollo call', self.launch)
+
+    def test_shared_event_inputs_are_scoped_to_the_stage_responsibility(self):
+        expected = ((self.list_prep, {'prep.md', 'scrubber.md'}),
+                    (self.plan, {'sequence.md'}),
+                    (self.launch, {'prep.md', 'sequence.md', 'readback.md'}),
+                    (self.contract, {'readback.md'}))
+        for contract, names in expected:
+            inputs = "\n".join(sections(contract)['Inputs'])
+            rows = [line for line in inputs.splitlines() if line.startswith('| Reference |')]
+            self.assertEqual({Path(ref).name for row in rows for ref in re.findall(r'`([^`]+\.md)`', row)}, names)
+            self.assertTrue(all('"' in row.split('|')[3] for row in rows))
+        self.assertIn('"Handoff and close" only for early no-recipient close', self.contract)
+
     def test_approval_and_fresh_guards_precede_real_send_boundary(self):
-        process = "\n".join(sections(self.contract)["Process"])
-        self.assertLess(process.index("5. Present one exact enrollment proposal"), process.index("6. Fresh-read ownership"))
+        process = "\n".join(sections(self.launch)["Process"])
+        self.assertIn("Present one exact enrollment proposal", self.plan)
+        self.assertIn("native approval in this same run thread", self.launch)
+        self.assertLess(process.index("Require native approval"), process.index("Fresh-read ownership"))
         for name in ("apollo_contacts_bulk_create", "apollo_sequences_create", "apollo_sequences_update",
                      "apollo_emailer_campaigns_add_contact_ids", "apollo_emailer_campaigns_approve"):
             self.assertIn(name, self.sequence)
@@ -1418,15 +1468,15 @@ class EventSequenceContract(unittest.TestCase):
             self.assertIn(name, self.readback)
         self.assertIn("no direct Salesforce writes", self.contract)
         self.assertIn("Event-sequence writes no Salesforce records", (WORKSPACES / "prospecting" / "AGENTS.md").read_text())
-        self.assertIn("No direct Salesforce writes", "\n".join(sections(self.contract)["Audit"]))
+        self.assertIn("No direct Salesforce writes", "\n".join(sections(self.launch)["Audit"]))
         self.assertIn("Workers do not directly message other sessions", self.readback)
         self.assertIn("The workflow ends here", self.readback)
         self.assertIn("never Git", self.readback)
 
     def test_no_enrollment_routes_to_handoff_without_an_empty_file_audit(self):
-        self.assertIn('"No enrollment" at steps 2-3', self.contract)
-        self.assertIn('go straight to step 8 per `references/prep.md` "No enrollment"', self.contract)
-        self.assertIn("For a nonempty candidate list, scrub and independent audit both PASS", self.contract)
+        self.assertIn('"No enrollment"', self.list_prep)
+        self.assertIn('close through `references/readback.md` "Handoff and close"', self.contract)
+        self.assertIn("For a nonempty candidate list, scrub and independent audit both PASS", self.list_prep)
         no_enrollment = self.prep.split("## No enrollment\n", 1)[1].split("\n## Helper evidence", 1)[0]
         self.assertIn("no enrichment remains to propose or perform", no_enrollment)
         self.assertIn("audit of nonexistent clean files", no_enrollment)
@@ -1442,13 +1492,13 @@ class EventSequenceContract(unittest.TestCase):
 
     def test_root_event_route_and_migrated_scrubber_authoring_paths(self):
         self.assertIn("prepare named-account event lists", (ROOT / "CONTEXT.md").read_text())
-        scrubber = (self.workflow / "references" / "scrubber.md").read_text()
+        scrubber = (self.workflow / "01-list-prep/references/scrubber.md").read_text()
         self.assertIn("adjacent `scripts/email_rules.json`", scrubber)
         self.assertIn("-m unittest _core.tests.test_event_scrub_leads", scrubber)
         self.assertNotIn("<skill-folder>", scrubber)
 
     def test_scrubber_is_full_column_hygiene_not_external_verification(self):
-        scrubber = (self.workflow / "references" / "scrubber.md").read_text()
+        scrubber = (self.workflow / "01-list-prep/references/scrubber.md").read_text()
         for requirement in ("deterministic CSV hygiene after Apollo email verification",
                             "does not prove email verification, authorize credit spending or approve enrollment",
                             "policy.tooling.scripts.event_scrub_leads", "--clean-column-profile full",
@@ -1486,7 +1536,7 @@ class ICMRefactorContracts(unittest.TestCase):
         running = "\n".join(sections((CORE / "scripts" / "interfaces.md").read_text())["Running"])
         self.assertIn("Coverage and forecast notification run from the sandbox root. Pilot commands run from the checkout with explicit sandbox input/output paths, as the pilot-usage contract shows.", running)
         self.assertIn("Pipeline rendering with its default `--sources` also runs from the sandbox root.", running)
-        research = (WORKSPACES / "prospecting" / "workflows" / "research" / "CONTEXT.md").read_text()
+        research = (WORKSPACES / "prospecting" / "workflows" / "signal-prospecting" / "01-research" / "CONTEXT.md").read_text()
         for requirement in ("Keep nonqualifying evidence and fit objections in the report.",
                             "Batch mode never pools evidence across accounts.",
                             "Adoption resolves ambiguous identity before lookup"):
@@ -1504,9 +1554,10 @@ class ICMRefactorContracts(unittest.TestCase):
         self.assertIn('`references/pdf-format.md` | Full file, PDF mode at steps 3 to 7', (workflow / "CONTEXT.md").read_text())
 
     def test_operational_prospecting_invocations_resolve_registered_keys(self):
-        paths = ("research/CONTEXT.md", "research/references/buying-signals.md", "research/references/adoption.md",
-                 "outreach/CONTEXT.md", "outreach/references/execution.md", "followup/references/execution.md",
-                 "event-sequence/references/scrubber.md")
+        paths = ("signal-prospecting/01-research/CONTEXT.md", "signal-prospecting/01-research/references/buying-signals.md", "signal-prospecting/01-research/references/adoption.md",
+                 "signal-prospecting/02-outreach/CONTEXT.md", "signal-prospecting/02-outreach/references/execution.md", "signal-prospecting/03-followup/references/execution.md",
+                 "event-sequence/01-list-prep/CONTEXT.md", "event-sequence/03-launch/CONTEXT.md",
+                 "event-sequence/01-list-prep/references/scrubber.md")
         registry = yaml.safe_load((CORE / "policy.yaml").read_text())["tooling"]["scripts"]
         for path in paths:
             text = (WORKSPACES / "prospecting" / "workflows" / path).read_text()

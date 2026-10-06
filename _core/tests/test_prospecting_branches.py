@@ -27,7 +27,7 @@ class ProspectingBranches(unittest.TestCase):
             groups.setdefault(path, []).append(name)
         shared = [set(names) for names in groups.values() if len(names) > 1]
         self.assertEqual(shared, [{"signal-scan", "signal-user-scan"}])
-        self.assertEqual(len(list((ROOT / "workspaces/prospecting/workflows").rglob("CONTEXT.md"))), 4)
+        self.assertEqual(len(list((ROOT / "workspaces/prospecting/workflows").rglob("CONTEXT.md"))), 8)
         self.assertNotEqual(CONTRACT_PATHS["event-sequence"], CONTRACT_PATHS["signal-scan"])
 
     def test_buying_signals_batch_routes_by_named_sections(self):

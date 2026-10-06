@@ -21,12 +21,12 @@ Select the branch before loading branch-specific Inputs. A report is not permiss
 | Buying signals policy | `_core/policy.yaml` | prospecting.scan, prospecting.outreach | Source limits, warm-engagement markers and activity window |
 | Buying signals reference | `workspaces/prospecting/references/signals.md` | Discovery, interpretation and qualification | Apply live source and freshness definitions |
 | Buying signals reference | `workspaces/prospecting/references/icp.md` | Target personas | Interpret evidenced responsibility |
-| Buying signals reference | `workspaces/prospecting/workflows/research/references/buying-signals.md` | Full file except Batch mode, load Batch mode only for lists | Aliases, fit objections, per-account evidence and report |
-| Buying signals tools | `workspaces/prospecting/scripts/prospect_evidence_gate.py`, `workspaces/prospecting/workflows/research/scripts/prospect_scan_verdict.py` | Docstrings and CLI | Prove quotes and render an ownership-aware next step |
+| Buying signals reference | `workspaces/prospecting/workflows/signal-prospecting/01-research/references/buying-signals.md` | Full file except Batch mode, load Batch mode only for lists | Aliases, fit objections, per-account evidence and report |
+| Buying signals tools | `workspaces/prospecting/scripts/prospect_evidence_gate.py`, `workspaces/prospecting/workflows/signal-prospecting/01-research/scripts/prospect_scan_verdict.py` | Docstrings and CLI | Prove quotes and render an ownership-aware next step |
 | Buying signals working | Fetched public pages and current Account Tasks | This run, fetched text in sandbox | Source proof and warm-engagement checks |
 | Adoption policy | `_core/policy.yaml` | prospecting.user_scan, prospecting.warehouse | Privacy schema and snapshot date |
-| Adoption reference | `workspaces/prospecting/workflows/research/references/adoption.md` | Account resolution, Query, Bundle, Handoff, Report, Boundaries | Fixed query and limited claims |
-| Adoption tool | `workspaces/prospecting/workflows/research/scripts/adoption_lookup.sql` | Header bindings and full query for one Account | Permitted organization and individual-adoption facts |
+| Adoption reference | `workspaces/prospecting/workflows/signal-prospecting/01-research/references/adoption.md` | Account resolution, Query, Bundle, Handoff, Report, Boundaries | Fixed query and limited claims |
+| Adoption tool | `workspaces/prospecting/workflows/signal-prospecting/01-research/scripts/adoption_lookup.sql` | Header bindings and full query for one Account | Permitted organization and individual-adoption facts |
 | Adoption tool | `workspaces/prospecting/scripts/prospect_privacy_check.py` | Docstring and CLI for account bundles | Reject extra fields and personal or activity data |
 | Adoption working | Snowflake native status, fixed-query bindings and permitted result | Current run, completed snapshot only | Preserve query and result provenance |
 
@@ -68,5 +68,5 @@ Select the branch before loading branch-specific Inputs. A report is not permiss
 | Artifact | Location | Format |
 |---|---|---|
 | Branch report and checked bundle | Current thread and sandbox | Public verdict or permitted adoption report, per branch reference |
-| Eligible Outreach handoff | Current thread to workspaces/prospecting/workflows/outreach/ on request | Fenced JSON after the branch's identity, fit and claim review |
+| Eligible Outreach handoff | Current thread to workspaces/prospecting/workflows/signal-prospecting/02-outreach/ on request | Fenced JSON after the branch's identity, fit and claim review |
 | Pipeline or owner handoff | Owning thread | Current Account, Opportunity or owner IDs with dated evidence. No Prospecting writes |

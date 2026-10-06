@@ -37,14 +37,14 @@ Named skills use the direct routes below without relying on discovery of nested 
 
 ## Skills
 
-To run a named workflow, go straight to its contract.
+To run a named workflow, go straight to its stage or coordinator contract. Load only its applicable Inputs.
 
 | Skill | Contract | Branch |
 |---|---|---|
-| `signal-scan` | `workspaces/prospecting/workflows/research/CONTEXT.md` | Buying signals |
-| `signal-user-scan` | `workspaces/prospecting/workflows/research/CONTEXT.md` | Adoption |
-| `signal-outreach` | `workspaces/prospecting/workflows/outreach/CONTEXT.md` | None |
-| `signal-followup` | `workspaces/prospecting/workflows/followup/CONTEXT.md` | None |
+| `signal-scan` | `workspaces/prospecting/workflows/signal-prospecting/01-research/CONTEXT.md` | Buying signals |
+| `signal-user-scan` | `workspaces/prospecting/workflows/signal-prospecting/01-research/CONTEXT.md` | Adoption |
+| `signal-outreach` | `workspaces/prospecting/workflows/signal-prospecting/02-outreach/CONTEXT.md` | None |
+| `signal-followup` | `workspaces/prospecting/workflows/signal-prospecting/03-followup/CONTEXT.md` | None |
 | `event-sequence` | `workspaces/prospecting/workflows/event-sequence/CONTEXT.md` | None |
 | `sales-call-prep` | `workspaces/pipeline/workflows/sales-call-prep/CONTEXT.md` | None |
 | `interaction-sync` | `workspaces/pipeline/workflows/interaction-sync/CONTEXT.md` | Single call or sweep |

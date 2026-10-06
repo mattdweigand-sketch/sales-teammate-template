@@ -69,7 +69,7 @@ Verified means Apollo `verified` on a non-catch-all domain, with `catchall_domai
 Unknown catch-all evidence, any error, empty result, or out-of-credits response is unverified. Never infer verified status from a plausible email or scrub PASS.
 Keep catch-all addresses excluded under event policy unless Operator explicitly overrides them for this list. Domain mismatches stay held for review.
 After reviewing enrichment results, rerun event_list_prep. Export only eligible rows with `First Name, Last Name, Email, Company Name, Website` to sandbox CSV.
-Run `policy.tooling.scripts.event_scrub_leads scrub <eligible.csv> --output-dir <fresh-dir> --clean-column-profile full` per `references/scrubber.md` "Run".
+Run `policy.tooling.scripts.event_scrub_leads scrub <eligible.csv> --output-dir <fresh-dir> --clean-column-profile full` per `01-list-prep/references/scrubber.md` "Run".
 Then independently run `policy.tooling.scripts.event_scrub_leads audit-clean-output <fresh-dir/clean_chunks> --report <audit.json>`.
 Both reports must say PASS. Scrubbing is hygiene, not verification, approval, or enrollment. Preserve every removed or quarantined row and reason in the proposal.
 Run `policy.tooling.scripts.event_make_batches <clean_chunks> --code <event-code> --output-dir <fresh-batches-dir>`.
@@ -79,10 +79,11 @@ Keep mismatches held unless Operator explicitly resolves or overrides the named 
 
 ## No enrollment
 
-Check after prep, declined enrichment, scrubbing, and batch holds. If no eligible recipients remain and no enrichment remains to propose or perform, go straight to contract step 8.
+Check after prep, declined enrichment, scrubbing, and batch holds. If no eligible recipients remain and no enrichment remains to propose or perform,
+return the reconciled no-enrollment result to the Event Sequence coordinator.
 Reconcile every input row to a duplicate, exclusion, hold, or removed row with its reason. Keep evidence gaps as needs-input and preserve the open-Opportunity handoff list.
 Skip the remaining enrichment, audit of nonexistent clean files, batching, copy, enrollment approval, and Apollo writes. Never call an empty export a verified sequence.
-Complete `references/readback.md` "Handoff and close" and report closed with no enrollment, zero enrolled, no sends, exclusions, holds, and actual handoff delivery status.
+The coordinator completes `references/readback.md` "Handoff and close" and reports closed with no enrollment, zero enrolled, no sends, exclusions, holds, and actual handoff delivery status.
 
 ## Helper evidence
 

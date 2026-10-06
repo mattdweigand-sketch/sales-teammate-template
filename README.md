@@ -37,6 +37,15 @@ sales-teammate-template/
 ├── CONTEXT.md           Guide to which workspace handles each kind of request
 ├── workspaces/          Instructions grouped by the work each assistant does
 │   ├── prospecting/
+│   │   └── workflows/
+│   │       ├── signal-prospecting/
+│   │       │   ├── 01-research/
+│   │       │   ├── 02-outreach/
+│   │       │   └── 03-followup/
+│   │       └── event-sequence/
+│   │           ├── 01-list-prep/
+│   │           ├── 02-sequence-plan/
+│   │           └── 03-launch/
 │   ├── pipeline/
 │   ├── deal-coaching/
 │   ├── forecasting/
@@ -57,5 +66,6 @@ Open a workspace above to see the jobs it handles. For guidance on changing the 
 Each workspace keeps its workflows together. Shared references and helpers used only within Prospecting or Pipeline live in that workspace's `references/` and `scripts/` folders.
 Repo-wide resources, policy, rules, the helper catalog and tests live in `_core/`.
 
-Prospecting works only on existing Salesforce Accounts owned by the user. Research, Outreach, Follow-up, and Event Sequence each have a direct workflow folder.
-The Prospecting context explains their handoffs. Named skills go directly to their contracts through root `AGENTS.md`.
+Prospecting works only on existing Salesforce Accounts owned by the user. Signal Prospecting groups Research, Outreach and Follow-up.
+Event Sequence coordinates List Prep, Sequence Plan and Launch. Each stage loads only its scoped Inputs and preserves its approval and handoff gates.
+The Prospecting context routes these two workflows. Named Signal skills go directly to their stages through root `AGENTS.md`. Event Sequence enters through its coordinator.

@@ -348,7 +348,7 @@ def instantiate(answers, destination, root=ROOT, *, simulation=False):
             'individuals_only':f"People at the organization already pay for {values['product_name']} individually."}
         policy_file.write_text(yaml.safe_dump(policy,sort_keys=False,allow_unicode=True))
         # Profile values are data, not shell or regular-expression replacement strings.
-        talk = stage/'workspaces/prospecting/workflows/outreach/references/talk-track.md'
+        talk = stage/'workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md'
         text = re.sub(r"review_by: '[0-9-]+'",f"review_by: '{values['product_review_date']}'",talk.read_text())
         talk.write_text(text)
         replacements = {'Example Product': values['product_name'], 'Example Seller': values['company_name'],

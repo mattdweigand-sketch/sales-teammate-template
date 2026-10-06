@@ -41,9 +41,15 @@ SKILLS.update({'signal-scan': 'prospecting', 'signal-user-scan': 'prospecting', 
 SKILLS["watch-sync"] = "pipeline"
 SKILLS["event-sequence"] = "prospecting"
 CONTRACT_PATHS = {name: WORKSPACES / owner / "workflows" / name / "CONTEXT.md" for name, owner in SKILLS.items() if owner != "prospecting"}
-SIGNAL_STAGES = {'signal-scan': 'research', 'signal-user-scan': 'research',
-                 'signal-outreach': 'outreach', 'signal-followup': 'followup'}
-CONTRACT_PATHS.update({name: WORKSPACES / 'prospecting' / 'workflows' / stage / 'CONTEXT.md'
+SIGNAL_STAGES = {'signal-scan': '01-research', 'signal-user-scan': '01-research',
+                 'signal-outreach': '02-outreach', 'signal-followup': '03-followup'}
+PROSPECTING_WORKFLOWS = WORKSPACES / 'prospecting' / 'workflows'
+SIGNAL_WORKFLOW = PROSPECTING_WORKFLOWS / 'signal-prospecting'
+EVENT_WORKFLOW = PROSPECTING_WORKFLOWS / 'event-sequence'
+EVENT_STAGE_ORDER = ('01-list-prep', '02-sequence-plan', '03-launch')
+ROUTING_OVERVIEWS = {SIGNAL_WORKFLOW / 'CONTEXT.md'}
+INTERNAL_CONTRACTS = {EVENT_WORKFLOW / stage / 'CONTEXT.md' for stage in EVENT_STAGE_ORDER}
+CONTRACT_PATHS.update({name: SIGNAL_WORKFLOW / stage / 'CONTEXT.md'
                       for name, stage in SIGNAL_STAGES.items()})
 SKILL_BRANCHES = {'signal-scan': 'Buying signals', 'signal-user-scan': 'Adoption'}
 CONTRACT_PATHS["event-sequence"] = WORKSPACES / "prospecting" / "workflows" / "event-sequence" / "CONTEXT.md"
@@ -65,7 +71,7 @@ def markdown_files():
 
 
 def skill_dirs():
-    return sorted(path.parent for path in WORKSPACES.glob("*/workflows/**/CONTEXT.md"))
+    return sorted({path.parent for path in CONTRACT_PATHS.values()} | {path.parent for path in INTERNAL_CONTRACTS})
 
 
 def layout_entries(directory):
@@ -74,7 +80,69 @@ def layout_entries(directory):
 
 
 def skill_name(d):
-    return d.name
+    return workflow_owner(d).name
+
+
+def workflow_owner(directory):
+    """The descriptive workflow parent, including for a nested stage."""
+    while directory.parent.name != 'workflows':
+        directory = directory.parent
+    return directory
+
+
+def input_reference_rows(contract):
+    """Resolved Markdown Inputs citations only. Prose elsewhere is not a consumer."""
+    text = contract.read_text().split('## Inputs\n', 1)[1].split('\n## ', 1)[0]
+    for line in text.splitlines():
+        if not line.startswith('|') or line.startswith(('| Source', '|---')):
+            continue
+        cells = [cell.strip() for cell in line.strip('|').split('|')]
+        for ref in re.findall(r'`([^`]+\.md)`', cells[1]):
+            target = ROOT / ref if ref.startswith(('_core/', 'workspaces/')) else contract.parent / ref
+            yield target.resolve(), cells[2]
+
+
+def reference_consumers(reference, contracts=None):
+    """Require owning Inputs. Shared stage references also require exact valid headings."""
+    contracts = contracts if contracts is not None else [d / 'CONTEXT.md' for d in skill_dirs()]
+    home = reference.parent.parent
+    flow = workflow_owner(home)
+    shared = home == flow and any(flow.glob('*/CONTEXT.md'))
+    real_headings = set(re.findall(r'^#{1,6} (.+)$', reference.read_text(), re.M))
+    consumers = []
+    for contract in contracts:
+        if workflow_owner(contract.parent) != flow or (not shared and contract.parent != home):
+            continue
+        for target, scope in input_reference_rows(contract):
+            if target != reference.resolve():
+                continue
+            named = re.findall(r'"([^"]+)"', scope)
+            if shared and (not named or 'full file' in scope.lower() or not set(named) <= real_headings):
+                continue
+            if not scope or (named and not set(named) <= real_headings):
+                continue
+            consumers.append(contract)
+    return consumers
+
+
+def contract_reference_texts(directory):
+    """Policy declarations cover actual Inputs, including only selected shared sections."""
+    yield (directory / 'CONTEXT.md').read_text()
+    for reference, scope in input_reference_rows(directory / 'CONTEXT.md'):
+        if 'references' not in reference.parts or not reference.is_file():
+            continue
+        text = reference.read_text()
+        named = re.findall(r'"([^"]+)"', scope)
+        if named and 'full file' not in scope.lower():
+            lines, current, selected = [], None, False
+            for line in text.splitlines():
+                if line.startswith('## '):
+                    current = line[3:].strip()
+                    selected = current in named
+                if selected:
+                    lines.append(line)
+            text = '\n'.join(lines)
+        yield text
 
 
 def body_after_frontmatter(text):
@@ -124,7 +192,13 @@ class SkillContractReferences(unittest.TestCase):
 
     def test_workflow_ownership_and_layout(self):
         dirs = skill_dirs()
-        self.assertEqual(dirs, sorted({path.parent for path in CONTRACT_PATHS.values()}))
+        actual = set(WORKSPACES.glob('*/workflows/**/CONTEXT.md'))
+        self.assertEqual(actual, {d / 'CONTEXT.md' for d in dirs} | ROUTING_OVERVIEWS)
+        self.assertEqual(len(dirs), 20)
+        self.assertEqual(len(actual), 21)
+        self.assertEqual({p.name for p in layout_entries(PROSPECTING_WORKFLOWS)}, {'signal-prospecting', 'event-sequence'})
+        self.assertEqual({p.name for p in SIGNAL_WORKFLOW.iterdir()}, {'CONTEXT.md', '01-research', '02-outreach', '03-followup'})
+        self.assertEqual({p.name for p in EVENT_WORKFLOW.iterdir()}, {'CONTEXT.md', 'references', 'scripts', *EVENT_STAGE_ORDER})
         for d in dirs:
             self.assertTrue((d / "CONTEXT.md").is_file(), f"{d.name}/CONTEXT.md missing")
         for owner in set(SKILLS.values()):
@@ -153,7 +227,9 @@ class SkillContractReferences(unittest.TestCase):
     def test_no_retired_workflow_paths(self):
         retired_group = "signal-" + "prospecting"
         retired_skill = "signal-" + "prospector"
-        retired = re.compile(r"workspaces/0[1-5]-|workflows/0[1-8]-|" + retired_group + "|" + retired_skill)
+        retired = re.compile(r"workspaces/0[1-5]-|workflows/0[1-8]-|" + retired_skill +
+                             r"|workflows/" + retired_group + r"/(?:prospect|research|outreach|followup)/" +
+                             r"|workflows/(?:research|outreach|followup)/")
 
         def check(path):
             self.assertNotRegex(path.read_text(), retired, str(path))
@@ -208,9 +284,9 @@ class SkillContractReferences(unittest.TestCase):
 
     def test_relative_contract_paths_resolve(self):
         missing = []
-        for c in (ROOT, CORE, *layout_entries(WORKSPACES)):
+        for c in (ROOT, CORE, *layout_entries(WORKSPACES), *skill_dirs(), *(p.parent for p in ROUTING_OVERVIEWS)):
             text = (c / "CONTEXT.md").read_text()
-            for p in set(re.findall(r"`(\.\./[A-Za-z0-9_./-]+|[a-z-]+/[A-Za-z0-9_./-]+\.md)`", text)):
+            for p in set(re.findall(r"`(\.\./[A-Za-z0-9_./-]+|[a-z0-9-]+/[A-Za-z0-9_./-]+\.md)`", text)):
                 if not (c / p).resolve().exists() and not (ROOT / p).exists():
                     missing.append(f"{c.name}/CONTEXT.md: {p}")
         self.assertEqual(missing, [])
@@ -271,7 +347,7 @@ class SkillContractReferences(unittest.TestCase):
             fm = frontmatter(text)
             m = re.search(r"_core/policy\.yaml \(([^)]*)\)", fm["reads"])
             declared = {b.strip() for b in m.group(1).split(",")} if m else set()
-            cited = {k.split(".")[0] for p in d.rglob("*.md") for k in POLICY_REF.findall(p.read_text())}
+            cited = {k.split(".")[0] for text in contract_reference_texts(d) for k in POLICY_REF.findall(text)}
             missing = sorted(cited - declared)
             if missing:
                 gaps.append(f"{d.name}: reads omits {missing}")
@@ -284,7 +360,7 @@ class SkillContractReferences(unittest.TestCase):
             text = "\n".join(p.read_text() for p in d.rglob("*.md"))
             for a in set(RULE_REF.findall(text)):
                 if a in cited_by:
-                    cited_by[a].add(d.name)
+                    cited_by[a].add(workflow_owner(d).name)
         self.assertEqual(cited_by.pop("auto_date_move"), {"task-triage-speed-run"})
         self.assertEqual(cited_by.pop("event_sequence"), {"event-sequence"})
         lonely = sorted(f"rules#{a} cited by {sorted(s)}" for a, s in cited_by.items() if len(s) < 2)

@@ -46,17 +46,17 @@ tooling:
     onboard: _core/scripts/onboard.py
     rehearse: _core/scripts/rehearse.py
     event_list_prep: workspaces/prospecting/workflows/event-sequence/scripts/event_list_prep.py
-    event_scrub_leads: workspaces/prospecting/workflows/event-sequence/scripts/scrub_leads.py
-    event_make_batches: workspaces/prospecting/workflows/event-sequence/scripts/make_batches.py
+    event_scrub_leads: workspaces/prospecting/workflows/event-sequence/01-list-prep/scripts/scrub_leads.py
+    event_make_batches: workspaces/prospecting/workflows/event-sequence/01-list-prep/scripts/make_batches.py
     prospect_common: workspaces/prospecting/scripts/prospect_common.py
     prospect_evidence_gate: workspaces/prospecting/scripts/prospect_evidence_gate.py
     prospect_account_route: workspaces/prospecting/scripts/prospect_account_route.py
     prospect_privacy_check: workspaces/prospecting/scripts/prospect_privacy_check.py
     prospect_readback_check: workspaces/prospecting/scripts/prospect_readback_check.py
-    prospect_scan_verdict: workspaces/prospecting/workflows/research/scripts/prospect_scan_verdict.py
-    prospect_outreach_gate: workspaces/prospecting/workflows/outreach/scripts/prospect_outreach_gate.py
-    prospect_followup_gate: workspaces/prospecting/workflows/followup/scripts/prospect_followup_gate.py
-    prospect_adoption_lookup: workspaces/prospecting/workflows/research/scripts/adoption_lookup.sql
+    prospect_scan_verdict: workspaces/prospecting/workflows/signal-prospecting/01-research/scripts/prospect_scan_verdict.py
+    prospect_outreach_gate: workspaces/prospecting/workflows/signal-prospecting/02-outreach/scripts/prospect_outreach_gate.py
+    prospect_followup_gate: workspaces/prospecting/workflows/signal-prospecting/03-followup/scripts/prospect_followup_gate.py
+    prospect_adoption_lookup: workspaces/prospecting/workflows/signal-prospecting/01-research/scripts/adoption_lookup.sql
     hygiene_check: _core/scripts/hygiene_check.py
     coverage_check: _core/scripts/coverage_check.py
     gmail_digest: _core/scripts/gmail_thread_digest.py

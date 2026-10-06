@@ -7,7 +7,9 @@ Canonical architecture, folder ownership, authoring, and maintenance guidance fo
 `AGENTS.md` gives workspace identity, essential boundaries, and entry routing. A named skill goes directly to its workflow contract.
 Root `CONTEXT.md` maps tasks and events to owning workspaces. Workspace AGENTS.md defines role and boundaries, and workspace CONTEXT.md routes workflows, triggers, outputs, and human checks.
 Read workspace entry files explicitly for task routing. Named skills retain direct root AGENTS.md routes to contracts, without relying on automatic discovery of nested instructions.
-A workflow's `CONTEXT.md` controls the run through its Inputs, Process, Checkpoints, Audit, and Outputs.
+A workflow has a standalone contract or a routing parent with stage contracts. Execution contracts use Inputs, Process, Checkpoints, Audit and Outputs.
+The Signal Prospecting parent is an overview. Named Signal skills go directly to their stages. The Event Sequence parent is an executable coordinator.
+Coordinators load a stage only when entered and never preload the union of stage Inputs.
 Read only the Inputs rows for the selected branch, including named reference sections, helper interfaces, policy blocks, rule anchors, and per-run evidence.
 Use an explicit Full file scope only when the whole reference applies. Sales runs never load another workflow's folder.
 Systems maintenance may inspect the affected files and consumers named by its scoped request. That access does not run or assume ownership of another domain's workflow.
@@ -19,7 +21,8 @@ Keep reference dependencies one-way. A workflow cites shared material without ma
 | Term | Means |
 |---|---|
 | Workspace | An agent's ownership boundary under `workspaces/`, with AGENTS.md for its role and CONTEXT.md for workflow routing |
-| Workflow | A task with an execution contract under its owning workspace's `workflows/`. Research aliases select branches of one contract |
+| Workflow | An owned task under `workflows/`, with a standalone contract or an overview or coordinator routing its actual stages |
+| Stage | One sequential responsibility with a bounded execution contract and declared evidence handoff. Research aliases share one stage |
 | Contract | The folder's `CONTEXT.md`, which names what to load and do. It is the workflow's skill body, at most 80 lines |
 | Core | `_core/`, for repo-wide policy, rules, registries and resources shared across workspaces, plus the workflow template and every test |
 | Reference | A file in a workspace or workflow's `references/`, read only through its contract's Inputs table and only the named sections. At most 200 lines |
@@ -27,7 +30,7 @@ Keep reference dependencies one-way. A workflow cites shared material without ma
 
 ## Folder ownership
 
-Workspace folders use descriptive names for their ownership boundaries. Workflow order is declared in context, with no numeric folder prefixes.
+Workspace and workflow folders use descriptive names. Number nested stage folders where actual handoffs have an order. Direct workspace and workflow names keep no numeric prefixes.
 
 | Path | Holds |
 |---|---|
@@ -38,17 +41,21 @@ Workspace folders use descriptive names for their ownership boundaries. Workflow
 | `workspaces/<workspace>/references/` | Canonical references shared by that workspace's workflows, with bounded Inputs in each consuming contract |
 | `workspaces/<workspace>/scripts/` | Deterministic helpers shared by that workspace's workflows, keyed in the repo-wide helper registry |
 | `workspaces/<workspace>/workflows/<skill>/` | One contract with its own references and scripts where needed. Named aliases can select branches of one contract |
-| `workspaces/prospecting/workflows/event-sequence/` | The complete event-list workflow with its own contract, references and helpers |
+| `workspaces/<workspace>/workflows/<workflow>/<NN-stage>/` | An ordered stage contract, with private references and helpers only when needed |
+| `workspaces/prospecting/workflows/signal-prospecting/` | Small Signal routing overview and three stages. Named skills bypass the overview |
+| `workspaces/prospecting/workflows/event-sequence/` | Event coordinator, three stages and references or helpers shared by those stages |
 | `_core/` | Shared policy, rules, collateral, helpers, conventions, onboarding, assets, specification and tests. `_core/CONTEXT.md` lists resources and their editors |
 | `.github/` | Repository automation such as the tests workflow |
 
-Share at the narrowest scope. A dependency one workflow uses lives in its folder. Dependencies shared within one workspace live in that workspace's references/ or scripts/.
+Share at the narrowest scope. Private stage dependencies stay with the stage. References and helpers used by several stages stay at their workflow parent.
+Each shared reference has at least one same-workflow contract Inputs consumer with its resolved path and exact valid section headings. Mentions elsewhere do not count.
+Dependencies shared by workflows in one workspace retain that workspace's references/ or scripts/ home.
 Resources shared across workspaces live in `_core/`. Repo-wide policy, rules, helper registries, templates and tests retain their canonical homes there.
 One home per fact. Values live in policy once, rules in `_core/rules.md` or the owning workflow once, and other files cite them. Skill descriptions live only in library frontmatter.
 Coach criteria remain in that workflow's references unless another workflow actually needs the same criteria.
 Domain agents own requirements, evidence, and proposals. Systems maintains the implementation across workspaces and shared core, then tests, ships when authorized, and verifies deployment.
 Systems never sets sales policy, coach scores, forecasts, or CRM values. Shared material has one canonical home at its owning scope, under its existing wording authority.
-Add a stage subfolder only for a distinct intermediate artifact needing independent human review. A branch or calculation alone does not justify another folder or workspace.
+Add stages for distinct sequential responsibilities and evidence handoffs. Preserve existing human reviews without adding pauses. A branch or calculation alone does not justify a stage.
 
 ## Handoffs and state
 
@@ -84,12 +91,13 @@ Pipeline review runs each weekday with its Friday rollup. Forecasting follows it
 Coach branch schedules stay in `policy.coach.schedule`. Authoring a contract or changing documentation does not activate or change an automation.
 The saved project skill is frontmatter plus a pointer to its workflow contract, and stops if that file is missing. The contract is the skill body.
 Editing a skill means editing its workflow folder. Touch the library pointer only to change its name, description, connectors, or contract path.
-Contract frontmatter carries `cadence`, `reads`, `writes`, and `next`, consistent with Inputs and Outputs. The workflow template is a starter, not a skill.
+Execution and coordinator frontmatter carries `cadence`, `reads`, `writes` and `next`, consistent with Inputs and Outputs. Routing overviews have no execution frontmatter.
+Launch consumes Sequence Plan's exact same-thread E approval and stops on material change. Consuming approval adds no repeat pause. The workflow template is a starter, not a skill.
 
 ## Adding a workflow
 
 1. Copy `_core/templates/workflow-context-template.md` to `workspaces/<workspace>/workflows/<skill>/CONTEXT.md` and fill its frontmatter and contract sections.
-   A sequential handoff also belongs in its workspace's pipeline table.
+   A stage contract belongs under its ordered stage folder. Its handoff belongs in the workflow parent's Pipeline table. Workspace routes name the workflow parent.
    Keep definitions, queries, formats, and examples in references. Add reference or script folders only when needed.
    Keep Checkpoints for every workflow. When it runs straight through, state `None.` plus the reason, with no approval pause.
 2. Add its direct route in root `AGENTS.md`, task route in the owner's CONTEXT.md, and owner in `SKILLS` in `_core/tests/test_skill_contracts.py`. Root CONTEXT.md routes workspaces.
@@ -116,8 +124,9 @@ Report what was verified structurally and what was not exercised through live co
 
 ## Sequential workspaces
 
-Prospecting has Research, Outreach, Follow-up, and Event Sequence as direct workflow folders, all limited to Operator-owned Salesforce Accounts.
-Workspace context declares the Research to Outreach to Follow-up handoffs. Root skill routes name each contract and both Research aliases explicitly.
+Prospecting has Signal Prospecting and Event Sequence as direct workflow folders, all limited to Operator-owned Salesforce Accounts.
+Signal Prospecting routes Research, Outreach and Follow-up. Event Sequence coordinates List Prep, Sequence Plan and Launch.
+Each parent's Pipeline table names triggers, outputs, reviews and stage routes. Root named skill routes remain direct and keep both Research aliases explicit.
 Research owns the read-only account adoption query. No discovery stage, account claiming, territory-discovery query, or discovery schedule remains.
 Workspace references and helpers live beside workflows when they serve only that workspace. Every consumer names bounded Inputs. Workflow-only resources stay in the owning workflow folder.
 
