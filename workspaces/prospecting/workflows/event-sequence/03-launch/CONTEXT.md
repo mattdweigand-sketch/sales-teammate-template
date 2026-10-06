@@ -25,8 +25,10 @@ Apollo sends only under `rules#event_sequence`. A reply stops that contact and O
 ## Process
 
 1. Require native approval in this same run thread matching the saved exact E proposal. Missing, mismatched or other-thread approval stops before any writes.
-2. Fresh-read ownership and open Opportunities. Outside named accounts always stops. Recheck Apollo identity and replies through the current time per `../references/sequence.md` "Enrollment".
-   Rerun `policy.tooling.scripts.event_list_prep` on the same reviewed rows with fresh `--as-of`. Drop recent_reply and hold incomplete rechecks, without re-approval or additions.
+2. Fresh-read ownership and open Opportunities. Keep outreach-owner rows only if still house-owned or a completed lookup still finds no Account under policy.
+   Anything else outside named accounts stops. Recheck Apollo identity and replies through the current time per `../references/sequence.md` "Enrollment".
+   Rerun `policy.tooling.scripts.event_list_prep` on the same reviewed rows with fresh `--as-of` and the same outreach-owner marker inputs.
+   Drop recent_reply and hold incomplete rechecks, without re-approval or additions.
 3. If no recipients remain, skip every Apollo call and close through `../references/readback.md` "Handoff and close" with the actual recheck receipt, drops and holds.
    Stop here before contact creation, sequence create/update, add_contact_ids or campaign approval. Ownership, Opportunity, copy, mailbox or schedule changes require a revised exact proposal.
 4. Otherwise enroll only the remaining approved snapshot per `../references/sequence.md` "Enrollment" and `rules#write_protocol`.
@@ -47,7 +49,7 @@ None. Sequence Plan owns the exact E approval. Launch consumes matching same-thr
 | Zero recipients | No remaining approved recipients stops before every Apollo call. Attach the actual recheck receipt and report drops and holds |
 | Copy, before enrollment call | Saved create/update steps, touches, subject/body templates, merge variables, schedule and stop on reply match approval before add_contact_ids. Missing templates or mismatch stops |
 | Readback, before close | Pre-enrollment copy result, scheduled subjects, counts, active state, stop on reply and first send match approval, with mailbox, recipient and sent-content checks when sent. Gaps stay partial with one fix proposal |
-| Scope, throughout | Only Operator-owned Accounts. No direct Salesforce writes. Apollo CRM sync disclosed in every C and E proposal. No contacts added to the approved set |
+| Scope, throughout | Operator-owned Accounts or approved outreach-owner rows still house-owned or missing. No other scope override. No direct Salesforce writes. Apollo CRM sync disclosed in every C and E proposal. No contacts added to the approved set |
 
 ## Outputs
 

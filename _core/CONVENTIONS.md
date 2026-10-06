@@ -124,7 +124,8 @@ Report what was verified structurally and what was not exercised through live co
 
 ## Sequential workspaces
 
-Prospecting has Signal Prospecting and Event Sequence as direct workflow folders, all limited to Operator-owned Salesforce Accounts.
+Prospecting has Signal Prospecting and Event Sequence as direct workflow folders. Signal stays limited to Operator-owned Salesforce Accounts.
+Event Sequence adds optional configured outreach-owner scope per `workspaces/prospecting/AGENTS.md`.
 Signal Prospecting routes Research, Outreach and Follow-up. Event Sequence coordinates List Prep, Sequence Plan and Launch.
 Each parent's Pipeline table names triggers, outputs, reviews and stage routes. Root named skill routes remain direct and keep both Research aliases explicit.
 Research owns the read-only account adoption query. No discovery stage, account claiming, territory-discovery query, or discovery schedule remains.

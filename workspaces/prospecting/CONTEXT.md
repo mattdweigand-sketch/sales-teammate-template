@@ -1,8 +1,9 @@
 # Prospecting routes
 
 Enter through `workspaces/prospecting/AGENTS.md` for ownership and boundaries. Select one workflow and only the applicable contract Inputs.
-Every workflow is limited to existing Salesforce Accounts owned by `policy.prospecting.identity.sfdc_user_id`. Current Salesforce ownership defines the named-account list.
-Resolve one Account before research, outreach, or enrollment. Missing or ambiguous identity stops. Other-owner and house-owned Accounts are outside scope.
+Signal workflows are limited to existing Salesforce Accounts owned by `policy.prospecting.identity.sfdc_user_id`. Current Salesforce ownership defines the named-account list.
+Resolve one Account before Signal research or outreach. Event Sequence also admits explicitly marked rows under its optional configured scope per `AGENTS.md`.
+Ambiguous identity stops. Other sellers' Accounts remain outside scope.
 
 ## Task routing
 

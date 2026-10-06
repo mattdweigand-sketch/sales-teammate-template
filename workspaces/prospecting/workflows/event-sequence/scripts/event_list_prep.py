@@ -3,7 +3,8 @@
 
 Needs policy.prospecting.event.exclude and recent_reply_days,
 policy.prospecting.identity.sfdc_user_id, and policy.tooling.generic_email_domains.
-Only existing Operator-owned Accounts are in scope.
+Existing Operator-owned Accounts and approved outreach-owner rows on house-owned or missing Accounts are in scope.
+Outreach-owner column and Operator's value are per-run inputs; house owners and missing-Account inclusion come from policy.
 Named-account scope is required even if an older exclusion config omits it, and cannot be overridden.
 Labels are proposals, not approval.
 Input is CSV or a reviewed JSON list. Outputs and per-list overrides stay outside Git.
@@ -132,6 +133,9 @@ def exclusions(contact, prospecting, tooling, as_of):
 
     if not contact["first_name"] or not contact["last_name"]:
         gaps.append("Missing first or last name for batch preparation")
+    if contact.get("outreach_owner_issue"):
+        gaps.append(contact["outreach_owner_issue"])
+    contact["scope"] = None
     if contact["account_checked"] is not True:
         gaps.append("Account identity and ownership not completely checked")
     elif contact["account_id"] and not contact["account_owner_id"]:
@@ -139,8 +143,16 @@ def exclusions(contact, prospecting, tooling, as_of):
     elif contact["account_owner_id"] and not contact["account_id"]:
         gaps.append("Owner evidence has no resolved Account")
     else:
-        if not contact["account_id"] or contact["account_owner_id"] != prospecting["identity"]["sfdc_user_id"]:
-            reasons["outside_named_accounts"] = "Only existing Salesforce Accounts owned by Operator are in scope"
+        scope = prospecting["event"].get("outreach_owner_scope", {})
+        if contact["account_id"] and contact["account_owner_id"] == prospecting["identity"]["sfdc_user_id"]:
+            contact["scope"] = "named_account"
+        elif contact.get("outreach_owner_marked") is True and (
+            (contact["account_id"] and contact["account_owner_id"] in scope.get("house_owner_ids", []))
+            or (not contact["account_id"] and scope.get("include_missing_account") is True)
+        ):
+            contact["scope"] = "outreach_owner"
+        else:
+            reasons["outside_named_accounts"] = "Outside Operator-owned Accounts and the approved outreach-owner scope"
     if contact["opportunities_checked"] is not True or contact["open_opportunity"] is None:
         gaps.append("Open-Opportunity evidence not completely checked")
     if contact["open_opportunity"] is True:
@@ -158,7 +170,9 @@ def exclusions(contact, prospecting, tooling, as_of):
         elif contact["apollo_crm_linked"] is True:
             if not contact["apollo_crm_owner_id"]:
                 gaps.append("Existing Apollo contact linked CRM record has no checked owner")
-            elif contact["apollo_crm_owner_id"] != prospecting["identity"]["sfdc_user_id"]:
+            elif contact["apollo_crm_owner_id"] != prospecting["identity"]["sfdc_user_id"] and not (
+                    contact["scope"] == "outreach_owner" and contact["apollo_crm_owner_id"] in
+                    prospecting["event"].get("outreach_owner_scope", {}).get("house_owner_ids", [])):
                 gaps.append("Existing Apollo contact is linked to another owner's CRM record")
         elif contact["apollo_crm_owner_id"]:
             gaps.append("Existing Apollo contact CRM owner conflicts with no-link evidence")
@@ -200,12 +214,20 @@ def exclusions(contact, prospecting, tooling, as_of):
     return reasons, gaps, verified, email_gaps
 
 
-def prepare(rows, policy, as_of, overrides=None):
+def prepare(rows, policy, as_of, overrides=None, *, outreach_owner_column=None, outreach_owner_value=None,
+            outreach_owner_column_ambiguous=False):
     if not isinstance(rows, list):
         raise ValueError("Event input must be a list of contact rows")
     if as_of.tzinfo is None or as_of.utcoffset() is None:
         raise ValueError("Run timestamp requires an explicit timezone offset")
+    if bool(clean(outreach_owner_column)) != bool(clean(outreach_owner_value)):
+        raise ValueError("Outreach-owner column and Operator's value must be supplied together")
     prospecting = policy["prospecting"]
+    scope = prospecting["event"].get("outreach_owner_scope", {})
+    if (not isinstance(scope, dict) or not isinstance(scope.get("house_owner_ids", []), list)
+            or any(not isinstance(item, str) or not item.strip() for item in scope.get("house_owner_ids", []))
+            or type(scope.get("include_missing_account", False)) is not bool):
+        raise ValueError("Invalid outreach-owner scope policy types")
     configured = prospecting["event"]["exclude"]
     overrides = overrides if overrides is not None else {}
     if not isinstance(overrides, dict):
@@ -215,6 +237,15 @@ def prepare(rows, policy, as_of, overrides=None):
     seen = {}
     for position, row in enumerate(rows, 1):
         contact = normalize(row)
+        contact.update(outreach_owner_marked=False, outreach_owner_issue=None)
+        if outreach_owner_column:
+            marker = row.get(outreach_owner_column)
+            if outreach_owner_column_ambiguous or outreach_owner_column not in row or not isinstance(marker, (str, int, float, bool)):
+                contact.update(outreach_owner_marked=None, outreach_owner_issue="Outreach-owner column is missing or ambiguous")
+            else:
+                contact["outreach_owner_marked"] = clean(str(marker)) == clean(outreach_owner_value)
+                if outreach_owner_column not in contact:
+                    contact[outreach_owner_column] = marker
         row_id = f"event-{position}"
         keys = []
         if contact["email"]:
@@ -229,7 +260,7 @@ def prepare(rows, policy, as_of, overrides=None):
                 matches.append(seen[key])
         if matches:
             original = matches[0]
-            comparison = (*ALIASES, *EVIDENCE_FIELDS, "reply_timestamp_present")
+            comparison = (*ALIASES, *EVIDENCE_FIELDS, "reply_timestamp_present", "outreach_owner_marked", "outreach_owner_issue")
             for match in matches:
                 match["handoff_required"] = match["handoff_required"] or contact["open_opportunity"] is True
                 if len(matches) > 1 or any(match[field] != contact[field] for field in comparison):
@@ -285,6 +316,7 @@ def prepare(rows, policy, as_of, overrides=None):
             contact.update(label="enroll", reason="Reviewed checks pass or named per-list exclusions were overridden, still requires exact enrollment approval")
     counts = dict(Counter(contact["label"] for contact in contacts))
     return {"status": "needs-input" if counts.get("needs_input") else "review-ready",
+            "outreach_owner_column": outreach_owner_column, "outreach_owner_value": outreach_owner_value,
             "as_of": as_of.isoformat(), "input_rows": len(rows), "unique_contacts": len(contacts),
             "duplicate_rows": len(duplicates), "counts": counts, "contacts": contacts, "duplicates": duplicates,
             "enrichment_candidates": [contact["row_id"] for contact in contacts if contact["enrichment_needed"]],
@@ -298,15 +330,22 @@ def main(argv=None):
     parser.add_argument("--as-of", required=True, help="Run-start timestamp with explicit local offset")
     parser.add_argument("--policy", type=Path, default=Path(__file__).resolve().parents[5] / "_core" / "policy.yaml")
     parser.add_argument("--overrides", type=Path, help="This list only, row-ID to explicit exclusion-name lists")
+    parser.add_argument("--outreach-owner-column", help="Outreach-owner column from the event list Operator named")
+    parser.add_argument("--outreach-owner-value", help="Exact value marking Operator in that column")
     parser.add_argument("--output", type=Path, help="Sandbox JSON output, otherwise stdout")
     args = parser.parse_args(argv)
+    ambiguous_column = False
     if args.input.suffix.lower() == ".csv":
         with args.input.open(newline="", encoding="utf-8-sig") as handle:
-            rows = list(csv.DictReader(handle))
+            reader = csv.DictReader(handle)
+            ambiguous_column = bool(args.outreach_owner_column and (reader.fieldnames or []).count(args.outreach_owner_column) > 1)
+            rows = list(reader)
     else:
         rows = json.loads(args.input.read_text())
     result = prepare(rows, yaml.safe_load(args.policy.read_text()), timestamp(args.as_of),
-                     json.loads(args.overrides.read_text()) if args.overrides else None)
+                     json.loads(args.overrides.read_text()) if args.overrides else None,
+                     outreach_owner_column=args.outreach_owner_column, outreach_owner_value=args.outreach_owner_value,
+                     outreach_owner_column_ambiguous=ambiguous_column)
     rendered = json.dumps(result, indent=2)
     if args.output:
         args.output.write_text(rendered + "\n")

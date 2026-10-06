@@ -27,7 +27,8 @@ class EventListPrep(unittest.TestCase):
             "identity": {"sfdc_user_id": "synthetic-operator"},
             "event": {"exclude": ["open_opportunity", "outside_named_accounts", "recent_reply", "unverified_email", "catch_all_email",
                                   "active_sequence", "event_app_invite"],
-                      "recent_reply_days": 14}}, "tooling": {"generic_email_domains": ["personal.example"]}}
+                      "recent_reply_days": 14,
+                      "outreach_owner_scope": {"house_owner_ids": ["synthetic-house"], "include_missing_account": True}}}, "tooling": {"generic_email_domains": ["personal.example"]}}
 
     def row(self, **changes):
         result = {"first_name": "Aster", "last_name": "Sample", "email": "aster.sample@synthetic.example",
@@ -106,6 +107,130 @@ class EventListPrep(unittest.TestCase):
     def test_house_owner_and_completed_no_account_match_are_excluded(self):
         for changes in ({"account_owner_id": "synthetic-house"}, {"account_id": "", "account_owner_id": ""}):
             self.assertEqual(self.prepare([self.row(**changes)])["counts"], {"outside_named_accounts": 1})
+
+    def scoped(self, row, **kwargs):
+        return self.prepare([row], outreach_owner_column="Outreach Owner", outreach_owner_value="Operator", **kwargs)
+
+    def test_flagged_house_owned_row_is_in_scope_and_roundtrips_its_marker(self):
+        result = self.scoped(self.row(account_owner_id="synthetic-house", **{"Outreach Owner": "Operator"}))
+        contact = result["contacts"][0]
+        self.assertEqual(contact["scope"], "outreach_owner")
+        self.assertEqual(contact["label"], "enroll")
+        self.assertEqual(contact["Outreach Owner"], "Operator")
+        self.assertEqual(self.scoped(contact)["counts"], {"enroll": 1})
+        self.assertEqual(result["outreach_owner_column"], "Outreach Owner")
+        self.assertEqual(result["outreach_owner_value"], "Operator")
+
+    def test_flagged_missing_account_requires_completed_lookup_and_policy_permission(self):
+        row = self.row(account_id="", account_owner_id="", **{"Outreach Owner": "Operator"})
+        self.assertEqual(self.scoped(row)["contacts"][0]["scope"], "outreach_owner")
+        self.assertEqual(self.scoped(row)["counts"], {"enroll": 1})
+        self.policy["prospecting"]["event"]["outreach_owner_scope"]["include_missing_account"] = False
+        self.assertEqual(self.scoped(row)["counts"], {"outside_named_accounts": 1})
+        self.policy["prospecting"]["event"]["outreach_owner_scope"]["include_missing_account"] = True
+        row["account_checked"] = False
+        contact = self.scoped(row)["contacts"][0]
+        self.assertEqual(contact["label"], "needs_input")
+        self.assertIsNone(contact["scope"])
+
+    def test_outreach_marker_never_admits_other_sellers_inactive_owners_or_unflagged_house_rows(self):
+        for owner, marker in (("synthetic-other", "Operator"), ("synthetic-inactive", "Operator"),
+                              ("synthetic-house", "Other seller")):
+            with self.subTest(owner=owner, marker=marker):
+                row = self.row(account_owner_id=owner, **{"Outreach Owner": marker})
+                self.assertEqual(self.scoped(row)["counts"], {"outside_named_accounts": 1})
+        row = self.row(account_owner_id="synthetic-house", **{"Outreach Owner": "Operator"})
+        self.assertEqual(self.prepare([row])["counts"], {"outside_named_accounts": 1})
+
+    def test_flagged_open_opportunity_retains_pipeline_handoff(self):
+        result = self.scoped(self.row(account_owner_id="synthetic-house", open_opportunity=True, **{"Outreach Owner": "Operator"}))
+        self.assertEqual(result["contacts"][0]["scope"], "outreach_owner")
+        self.assertEqual(result["counts"], {"open_opportunity": 1})
+        self.assertEqual(result["pipeline_handoff"], ["event-1"])
+
+    def test_house_owner_scope_and_marker_values_come_from_policy_and_per_run_arguments(self):
+        self.policy["prospecting"]["event"]["outreach_owner_scope"]["house_owner_ids"] = ["synthetic-custom-house"]
+        row = self.row(account_owner_id="synthetic-custom-house", Assigned="Designated owner")
+        result = self.prepare([row], outreach_owner_column="Assigned", outreach_owner_value="Designated owner")
+        self.assertEqual(result["contacts"][0]["scope"], "outreach_owner")
+        row["account_owner_id"] = "synthetic-house"
+        self.assertEqual(self.prepare([row], outreach_owner_column="Assigned", outreach_owner_value="Designated owner")["counts"],
+                         {"outside_named_accounts": 1})
+
+    def test_missing_ambiguous_columns_and_conflicting_duplicate_markers_are_held(self):
+        for marker in (None, ["Operator", "Other seller"], {"owner": "Operator"}):
+            row = self.row(account_owner_id="synthetic-house", **{"Outreach Owner": marker})
+            contact = self.scoped(row)["contacts"][0]
+            self.assertEqual(contact["label"], "needs_input")
+            self.assertIn("Outreach-owner column is missing or ambiguous", contact["needs_input"])
+        self.assertEqual(self.scoped(self.row(account_owner_id="synthetic-house"))["counts"], {"needs_input": 1})
+        rows = [self.row(account_owner_id="synthetic-house", **{"Outreach Owner": marker}) for marker in ("Operator", "Other seller")]
+        for ordered in (rows, list(reversed(rows))):
+            result = self.prepare(ordered, outreach_owner_column="Outreach Owner", outreach_owner_value="Operator")
+            self.assertEqual(result["counts"], {"needs_input": 1})
+            self.assertTrue(result["contacts"][0]["duplicate_conflict"])
+
+    def test_account_ambiguity_and_enrichment_gates_are_not_bypassed(self):
+        for changes in ({"account_checked": None}, {"account_id": "", "account_owner_id": "synthetic-house"}):
+            row = self.row(**changes, **{"Outreach Owner": "Operator"})
+            self.assertEqual(self.scoped(row)["counts"], {"needs_input": 1})
+        row = self.no_email_row(account_owner_id="synthetic-house", **{"Outreach Owner": "Operator"})
+        result = self.scoped(row)
+        self.assertEqual(result["counts"], {"needs_input": 1})
+        self.assertEqual(result["enrichment_candidates"], ["event-1"])
+        self.assertEqual(result["contacts"][0]["scope"], "outreach_owner")
+
+    def test_scope_loss_at_launch_is_outside_and_never_overridable(self):
+        row = self.row(account_owner_id="synthetic-house", **{"Outreach Owner": "Operator"})
+        self.assertEqual(self.scoped(row)["counts"], {"enroll": 1})
+        row["account_owner_id"] = "synthetic-other"
+        self.assertEqual(self.scoped(row)["counts"], {"outside_named_accounts": 1})
+        with self.assertRaisesRegex(ValueError, "scope cannot be overridden"):
+            self.scoped(row, overrides={"event-1": ["outside_named_accounts"]})
+
+    def test_outreach_owner_arguments_are_paired(self):
+        with self.assertRaisesRegex(ValueError, "supplied together"):
+            self.prepare([self.row()], outreach_owner_column="Outreach Owner")
+        with self.assertRaisesRegex(ValueError, "supplied together"):
+            self.prepare([self.row()], outreach_owner_value="Operator")
+
+    def test_cli_scope_and_duplicate_csv_headers_fail_closed(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            policy_path, input_path, output_path = root / "policy.yaml", root / "input.csv", root / "result.json"
+            policy_path.write_text(yaml.safe_dump(self.policy))
+            row = self.row(account_owner_id="synthetic-house", **{"Outreach Owner": "Operator"})
+            arguments = [str(input_path), "--policy", str(policy_path), "--as-of", self.as_of.isoformat(),
+                         "--outreach-owner-column", "Outreach Owner", "--outreach-owner-value", "Operator", "--output", str(output_path)]
+            for duplicate in (False, True):
+                fields = list(row) + (["Outreach Owner"] if duplicate else [])
+                with input_path.open("w", newline="") as handle:
+                    writer = csv.DictWriter(handle, fieldnames=fields)
+                    writer.writeheader()
+                    writer.writerow(row)
+                prep.main(arguments)
+                result = json.loads(output_path.read_text())
+                self.assertEqual(result["counts"], {"needs_input": 1} if duplicate else {"enroll": 1})
+                if duplicate:
+                    self.assertIn("missing or ambiguous", result["contacts"][0]["reason"])
+
+    def test_disabled_and_legacy_scope_preserve_owned_account_only_behavior(self):
+        for scope in ({'house_owner_ids': [], 'include_missing_account': False}, None):
+            if scope is None:
+                self.policy['prospecting']['event'].pop('outreach_owner_scope', None)
+            else:
+                self.policy['prospecting']['event']['outreach_owner_scope'] = scope
+            for changes in ({'account_owner_id': 'synthetic-house'}, {'account_id': '', 'account_owner_id': ''}):
+                self.assertEqual(self.scoped(self.row(**changes, **{'Outreach Owner': 'Operator'}))['counts'],
+                                 {'outside_named_accounts': 1})
+            self.assertEqual(self.prepare([self.row()])['counts'], {'enroll': 1})
+
+    def test_invalid_scope_policy_types_reject(self):
+        for scope in (None, [], {'house_owner_ids': 'synthetic-house'}, {'house_owner_ids': [1]},
+                      {'include_missing_account': 'true'}, {'include_missing_account': 1}):
+            self.policy['prospecting']['event']['outreach_owner_scope'] = scope
+            with self.subTest(scope=scope), self.assertRaisesRegex(ValueError, 'scope policy types'):
+                self.scoped(self.row())
 
     def test_account_scope_cannot_be_overridden_or_omitted_by_old_configuration(self):
         for changes in ({"account_owner_id": "synthetic-other"}, {"account_owner_id": "synthetic-house"},
@@ -383,6 +508,47 @@ class EventListPrep(unittest.TestCase):
         row = self.row(apollo_contact_id="synthetic-apollo", apollo_contact_email="ASTER.SAMPLE@SYNTHETIC.EXAMPLE",
                        apollo_crm_linked=True, apollo_crm_owner_id="synthetic-operator")
         self.assertEqual(self.prepare([row])["contacts"][0]["label"], "enroll")
+
+    def test_outreach_owner_house_crm_link_is_eligible_from_policy(self):
+        for house_owner in ("synthetic-house", "synthetic-custom-house"):
+            with self.subTest(house_owner=house_owner):
+                self.policy["prospecting"]["event"]["outreach_owner_scope"]["house_owner_ids"] = [house_owner]
+                row = self.row(account_owner_id=house_owner, apollo_contact_id="synthetic-apollo",
+                               apollo_contact_email="aster.sample@synthetic.example", apollo_crm_linked=True,
+                               apollo_crm_owner_id=house_owner, **{"Outreach Owner": "Operator"})
+                contact = self.scoped(row)["contacts"][0]
+                self.assertEqual(contact["scope"], "outreach_owner")
+                self.assertEqual(contact["label"], "enroll")
+                self.assertNotIn("another owner's CRM record", contact["reason"])
+
+    def test_outreach_owner_other_seller_crm_link_is_held(self):
+        row = self.row(account_owner_id="synthetic-house", apollo_contact_id="synthetic-apollo",
+                       apollo_contact_email="aster.sample@synthetic.example", apollo_crm_linked=True,
+                       apollo_crm_owner_id="synthetic-other", **{"Outreach Owner": "Operator"})
+        contact = self.scoped(row)["contacts"][0]
+        self.assertEqual(contact["scope"], "outreach_owner")
+        self.assertEqual(contact["label"], "needs_input")
+        self.assertIn("another owner's CRM record", contact["reason"])
+
+    def test_named_account_house_crm_link_is_held_even_with_outreach_marker(self):
+        row = self.row(apollo_contact_id="synthetic-apollo", apollo_contact_email="aster.sample@synthetic.example",
+                       apollo_crm_linked=True, apollo_crm_owner_id="synthetic-house", **{"Outreach Owner": "Operator"})
+        contact = self.scoped(row)["contacts"][0]
+        self.assertEqual(contact["scope"], "named_account")
+        self.assertEqual(contact["label"], "needs_input")
+        self.assertIn("another owner's CRM record", contact["reason"])
+
+    def test_unflagged_house_crm_link_is_unchanged(self):
+        for account_owner in ("synthetic-operator", "synthetic-house"):
+            with self.subTest(account_owner=account_owner):
+                row = self.row(account_owner_id=account_owner, apollo_contact_id="synthetic-apollo",
+                               apollo_contact_email="aster.sample@synthetic.example", apollo_crm_linked=True,
+                               apollo_crm_owner_id="synthetic-house", **{"Outreach Owner": "Someone else"})
+                original = self.prepare([row])
+                result = self.scoped(row)
+                for field in ("scope", "label", "reason"):
+                    self.assertEqual(result["contacts"][0][field], original["contacts"][0][field])
+                self.assertIn("another owner's CRM record", result["contacts"][0]["reason"])
 
     def test_active_sequence_requires_complete_native_evidence_and_explicit_override(self):
         row = self.row(active_sequence=True)

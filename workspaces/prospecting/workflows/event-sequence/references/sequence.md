@@ -5,8 +5,11 @@
 Use `policy.prospecting.event.steps`, `policy.prospecting.event.step_gap_days`, and `policy.prospecting.event.last_touch_before_event_days` as defaults.
 Default touches are emails followed by a LinkedIn task. The task creates manual work, not an automated LinkedIn message.
 Anchor the final touch to the first attendance date minus the configured last-touch days. Work backwards by the configured gap for each preceding step.
-Show every absolute local date and time with timezone, not just relative offsets. The exact schedule is chosen and approved by Operator, never inferred from the sandbox timezone.
-If any touch is in the past or the event dates conflict, stop for an exact revised schedule. Do not send immediately or compress gaps without approval.
+Build the sequence in Apollo interval mode on a named sending schedule, not exact datetimes. Email 1 waits 0 days from enrollment and later steps wait the configured gap.
+Show each step's expected local send date and window with timezone, not just relative offsets. The exact schedule is chosen and approved by Operator, never inferred from the sandbox timezone.
+Project sends using the named schedule's actual allowed days and windows, intended enrollment timing and timezone.
+If enrollment or any projected touch is in the past, event dates conflict, or the schedule misses the event deadline, stop for an exact revised schedule.
+Do not send immediately or compress gaps without approval.
 Draft every subject, full email body, and LinkedIn task instruction using `policy.email_voice` and the event ask. Never invent a relationship, attendance, or recipient fact.
 Apply advisory `policy.prospecting.outreach.lint`. Disclose lint flags without treating them as sending permission.
 Show the resolved mailbox ID, address, and provider from `apollo_email_accounts_index`. A default mailbox remains a proposal until approved.
@@ -18,11 +21,13 @@ Label it E1. Edits or changed evidence use the next unused E label. Accept only 
 
 - Event name, Operator's attendance dates, location, and ask.
 - Original rows, normalized contacts, duplicates, proposed enrollments, needs-input rows, and exclusion counts.
+- Count outreach-owner rows with no Account and disclose that Apollo's CRM sync may create Salesforce Contacts for them.
 - Exact contacts and emails to enroll, with every exclusion and its reason. Include each named per-list override and the approval evidence for it.
 - The bounded reply-check summary from `references/prep.md` "Salesforce and reply checks", with window, query shapes, contacts checked, replies found, holds, and the retrieval limit.
   Attach the saved receipt file to the E1 thread message, not a sandbox-path link.
 - Exact subject and full body for every email, and the full LinkedIn task instruction. Include all personalization or rendered variants, not an unspecified template.
-- Every step's local send date and time, timezone, gap, schedule window, and first-send time.
+- Native interval mode, named sending schedule and timezone, intended enrollment timing, zero-day first email and later gaps.
+- Each step's expected local send date and window. Distinguish projections from native configured settings. Zero days does not prove immediate delivery.
 - Sending mailbox ID and address, sequence target, stop-on-reply setting, and the enrollment and scheduled-message counts expected on readback.
 - Enrichment receipts and spend approvals, scrub PASS, audit PASS, batch reconciliation, and all held domain mismatches.
 - Apollo existing-contact identity holds and reasons, active_sequence evidence, and event_app_invite matches or the explicit statement that no invite export was checked.
@@ -30,7 +35,7 @@ Label it E1. Edits or changed evidence use the next unused E label. Accept only 
 
 Ask Operator to approve the exact contact list, sequence copy, sending mailbox, and schedule under `rules#event_sequence`, or edit or skip.
 State the displayed E label as the response that approves this complete snapshot. `skip` declines it.
-Named-account scope cannot be overridden. Operator may override other named exclusions for a named contact in this list.
+Named-account scope, including the outreach-owner rule, cannot be overridden. Operator may override other named exclusions for a named contact in this list.
 Display that override with the exact recipient, reason, copy, mailbox, and schedule.
 Edits or changed evidence require a new exact proposal except the narrowing-only reply recheck in "Enrollment". Unanswered, skipped, needs-input, and unapproved contacts never enter enrollment.
 Do not rely on a past campaign's approval, mailbox defaults, helper labels, or a generic approval of the event idea.
@@ -39,13 +44,15 @@ Apollo add-to-sequence sends real email and cannot be undone once sent. Say so b
 ## Enrollment
 
 Immediately before writing, re-read Account ownership and open Opportunities for every approved contact, with complete pages.
-Only existing Accounts still owned by `policy.prospecting.identity.sfdc_user_id` can enroll. No revised proposal or list override expands that scope.
+Existing Accounts still owned by `policy.prospecting.identity.sfdc_user_id` can enroll. Approved outreach-owner rows also qualify only while their Account remains house-owned or missing under policy.
+No revised proposal or other list override expands that scope. Repeat the completed missing-Account lookup, never assume yesterday's absence still holds.
 If either changes, those guard reads fail, or recipient identity, copy, mailbox, or schedule differs, stop and present a revised exact proposal. No silent scope expansion or inherited override.
 Re-run the bounded reply check per `references/prep.md` "Salesforce and reply checks" from the saved window end through the recheck time, inclusive, for each approved Contact.
 Keep sender-only inbound searches, separate sent searches, full thread reads, timestamp classification, and complete cursors. Incomplete reply evidence holds that Contact, not the entire list.
 Update `replies_checked` from the recheck, never reuse the earlier true marker. Any incomplete recheck sets it false or unknown before rerunning the helper.
 Merge the recheck with saved reply evidence, retaining the newest substantive reply. Save the current recheck time with an explicit offset.
 Re-run `policy.tooling.scripts.event_list_prep` on the same saved reviewed rows in their original order, with `--as-of` set to that recheck time, never the old run start.
+Pass the same `--outreach-owner-column` and `--outreach-owner-value` marker inputs used in List Prep.
 For a newer reply, do not carry a prior recent_reply override forward. Drop approved Contacts newly labeled `recent_reply` and hold Contacts whose reply recheck is incomplete.
 Intersect the remaining eligible Contacts with the exact approved recipient snapshot. Enroll the rest without re-approval under `rules#event_sequence`, never add or replace a Contact.
 Preserve the approved copy, mailbox, schedule, and other explicit overrides. The reply recheck only narrows the list and authorizes no enrichment or other writes.
@@ -55,11 +62,14 @@ Only after Operator approves the original snapshot perform these operations on i
 
 1. `apollo_contacts_bulk_create` for only approved contacts. Reuse returned existing contacts when supported, and reconcile every approved recipient to its exact Apollo Contact ID.
    A returned identity mismatch stops enrollment for a revised proposal, never silently accept a different or personal email or another owner's CRM link.
-2. `apollo_sequences_create` for one sequence, or `apollo_sequences_update` only on the exact existing sequence Operator approved. Set the approved copy, steps, mailbox, schedule, and stop on reply.
+   A house-owner CRM link on an outreach-owner row is not another owner's link.
+2. `apollo_sequences_create` for one sequence, or `apollo_sequences_update` only on the exact existing sequence Operator approved.
+   Set the approved copy, steps, mailbox, interval settings, named schedule, timezone and stop on reply.
    Save the full create or update response in the sandbox, including native steps, touches, and templates with subject and body, for copy readback.
    Never substitute the approved proposal for returned native copy evidence.
    Before step 3, compare the saved response with the approved snapshot using `references/readback.md` "Readback" copy rules.
-   Compare steps, touches, subject and body templates, merge variables, schedule and stop on reply. Normalize only the HTML Apollo sanitizes and require exact merge variables.
+   Compare steps, touches, subject and body templates, merge variables, interval settings, named schedule, timezone and stop on reply.
+   Normalize only the HTML Apollo sanitizes and require exact merge variables.
    If the response has no templates, stop before step 3 and ask Operator. Never enroll copy that has not been compared.
    Any mismatch or unexplained difference stops before step 3 with one fix proposal. Never call add_contact_ids or approve on unmatched copy.
 3. `apollo_emailer_campaigns_add_contact_ids` with only the approved Contact IDs and that approved sequence. This is the real-send boundary, not a harmless list upload.

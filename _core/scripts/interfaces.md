@@ -10,6 +10,7 @@ Resolve each helper from its path in `policy.tooling.scripts`. Workflow helpers 
 |---|---|
 | `onboard` | setup validates one answer file and creates an absent separate destination. questions prints company schema. integrations prints every system interview. check reports routes, choices and pending live verification. |
 | `rehearse` | --scratch takes an absent external directory. Configures demo, runs generic tests in a clean copy and all workflow scenarios with local doubles. No live connector calls. |
+| `event_list_prep`, ownership | Optional paired `--outreach-owner-column` and `--outreach-owner-value` mark exact rows. Policy controls house IDs and missing inclusion. Preserve both inputs on fresh Launch rechecks. Labels never approve enrollment. |
 | `event_list_prep` | `<input.csv\|input.json> --as-of <local-offset timestamp> [--overrides <list-only.json>] [--output <sandbox.json>]`. Labels reviewed exclusions, enrichment candidates, Apollo identity holds, and catch-all sources. No network or customer writes, never authorizes enrollment. |
 | `event_scrub_leads` | `scrub <eligible.csv> --output-dir <fresh-dir> --clean-column-profile full`, then `audit-clean-output <clean_chunks> --report <audit.json>`. Both reports must PASS. Retain Website for batch checks. Uses adjacent email_rules.json. |
 | `event_make_batches` | `<clean_chunks> --code <event-code> --output-dir <fresh-dir> [--allow <approved-emails.txt>]`. Review counts and domain_mismatch.csv. Missing fields and domain mismatches remain held. Batches never authorize real sends. |

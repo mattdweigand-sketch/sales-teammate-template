@@ -92,6 +92,9 @@ Install `pdftoppm` or another PDF rasterizer and inspect both pages after the sc
 Audio needs the actual runtime media skill and speech guide. Joining needs FFmpeg or the skill's equivalent when the summary exceeds the provider input limit.
 A missing local prerequisite stays pending. Local helpers use saved evidence and documented policy options. They do not authenticate or call customer systems.
 
+Verify optional Event house users and complete missing-Account lookups in Salesforce. Verify Apollo CRM-owner evidence, interval mode and named schedule readback.
+These eligibility settings stay in policy. Integration metadata and local setup never substitute for native verification.
+
 ## Thread delivery
 
 The included Perplexity adapter verifies current-project thread identity and record linkage before routing evidence.

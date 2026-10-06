@@ -66,6 +66,7 @@ Open a workspace above to see the jobs it handles. For guidance on changing the 
 Each workspace keeps its workflows together. Shared references and helpers used only within Prospecting or Pipeline live in that workspace's `references/` and `scripts/` folders.
 Repo-wide resources, policy, rules, the helper catalog and tests live in `_core/`.
 
-Prospecting works only on existing Salesforce Accounts owned by the user. Signal Prospecting groups Research, Outreach and Follow-up.
+Signal Prospecting works only on existing Salesforce Accounts owned by the user and groups Research, Outreach and Follow-up.
+Event Sequence may include explicitly marked house-owned or missing Accounts under optional configured policy. Both branches default off.
 Event Sequence coordinates List Prep, Sequence Plan and Launch. Each stage loads only its scoped Inputs and preserves its approval and handoff gates.
 The Prospecting context routes these two workflows. Named Signal skills go directly to their stages through root `AGENTS.md`. Event Sequence enters through its coordinator.

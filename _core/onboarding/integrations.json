@@ -114,7 +114,7 @@
     ],
     "setup": "Configure salesforce_rest_api or an equivalent connector for the company tenant. Map each custom field by object and review standard objects, field types, record types, stages, picklists, validation rules, Contact Roles, revenue and formula semantics. Supply the organization guide under configured-crm-guide or update its contract route.",
     "authentication": "Use company OAuth or the approved Salesforce connection. Separate read access from approved record-write permissions.",
-    "verify": "Run get-current-user and compare ID and email with policy. Read owned Accounts and describe Account, Contact, Opportunity, Task, Event, OpportunityContactRole, Pricebook2, Product2 and line items. Check complete query pages and native record readback. Identity maps are unverified until describe matches.",
+    "verify": "Run get-current-user and compare ID and email with policy. Read owned Accounts and describe Account, Contact, Opportunity, Task, Event, OpportunityContactRole, Pricebook2, Product2 and line items. Check complete query pages and native record readback. Identity maps are unverified until describe matches. Verify selected house User IDs and Account ownership interpretation with current native records. A missing Account requires complete paginated exact lookups.",
     "settings": {
       "schema_review": {
         "question": "External reference for the object, field, stage, picklist and validation review?",
@@ -324,7 +324,7 @@
     ],
     "setup": "Connect the company Apollo account. Map contact search, people bulk match and waterfall, contacts bulk create, sequences create/update, mailbox index, campaign add/approve/show, message search and get_content. Verify sender mailbox and native copy, schedule and stop-on-reply capabilities. LinkedIn touches remain manual tasks.",
     "authentication": "Configure native OAuth or the required Apollo API key directly in the runtime. Review credits and CRM sync. Every enrichment spend and enrollment retains its exact approval gate.",
-    "verify": "Read account, sender ID/address/provider, existing contact ownership, sequence templates and stop-on-reply. Inspect native copy and campaign/message readback capabilities without spending credits or enrolling anyone for setup.",
+    "verify": "Read account, sender ID/address/provider, existing contact ownership, sequence templates and stop-on-reply. Inspect native copy and campaign/message readback capabilities without spending credits or enrolling anyone for setup. Verify CRM-linked contact ownership, configured house owners, native interval mode, named sending schedules, timezone and complete interval/schedule readback.",
     "settings": {
       "sender_mailbox": {
         "question": "Actual approved Apollo sending mailbox ID or reference?",

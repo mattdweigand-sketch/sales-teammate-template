@@ -19,8 +19,15 @@ Fetch complete candidate Accounts under exact OwnerId or verified AccountId filt
 Normalize Website and input hosts by removing scheme, www, and path, then compare exact hosts.
 Match the normalized Website host or exact Contact email domain. Do not collapse subdomains to a root domain. Review any subdomain alias explicitly, with its evidence, before matching.
 Read Opportunities for each resolved Account using `policy.prospecting.salesforce.open_opportunity`, regardless of Opportunity owner.
-Only an existing Account owned by `policy.prospecting.identity.sfdc_user_id` is eligible. A completed no-match, house owner, inactive other owner, or other seller is outside_named_accounts.
-Missing or ambiguous identity stays needs-input. No list override can expand named-account scope.
+An existing Account owned by `policy.prospecting.identity.sfdc_user_id` is eligible.
+Event lists Operator names also admit rows marked with Operator as outreach owner when the Account is unassigned or missing.
+Unassigned means its owner is in `policy.prospecting.event.outreach_owner_scope.house_owner_ids`.
+Missing means a completed lookup found no Account and `policy.prospecting.event.outreach_owner_scope.include_missing_account` is true.
+Other sellers' Accounts, including inactive other owners, and unflagged house-owned or missing-Account rows are outside_named_accounts.
+Ambiguous identity or an incomplete lookup stays needs-input. No other list override can expand it.
+The run names the outreach-owner column and Operator's value from the list Operator named. A missing or ambiguous column is needs-input, never an inferred outreach owner.
+Retain that column in saved reviewed rows. Pass `--outreach-owner-column <column>` and `--outreach-owner-value <Operator's value>` on every helper run, including launch rechecks.
+An existing CRM link to a configured house owner is allowed only for a row qualified as outreach_owner. Named-account rows retain the existing hold.
 Before E1 run `apollo_contacts_search` by each exact email, following all cursors and reading contact data.
 Record a complete no-match explicitly and resolve duplicate Apollo matches before proceeding.
 Hold an existing Apollo contact with a different or personal email, or a CRM link owned by another seller. Personal domains use `policy.tooling.generic_email_domains`. Show each hold reason in E1.
@@ -106,4 +113,5 @@ The coordinator completes `references/readback.md` "Handoff and close" and repor
 Boolean fields accept true/false JSON booleans or true/false CSV strings. Unknown values are not checked. Reply timestamps need an explicit offset and cannot be in the future.
 Use `--overrides <overrides.json>` for a JSON object from normalized row ID to the exact exclusion names Operator overrode for this list. outside_named_accounts is never allowed.
 The output preserves matched exclusions and reasons, applied overrides, source row IDs, enrollment labels, enrichment_candidates, catchall_source, event_app_invite_status, and Pipeline handoffs.
+Eligible outreach-owner rows have `scope: outreach_owner`. The output records the selected column and value. Every other eligibility and approval gate still applies.
 These outputs are proposals. No helper knows whether Operator approved a real write, and none can authorize enrollment.

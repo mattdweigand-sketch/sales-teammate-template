@@ -32,8 +32,12 @@ Collect actual company settings. Required questions have no fictional defaults. 
 | `crm_field_map` | CRM sample-to-actual API names as a JSON map? | Mapped API names in policy, scripts and references |
 | `warehouse_table_map` | Warehouse sample-to-actual table names as JSON map? | Mapped API names in policy, scripts and references |
 
+| `event_house_owner_ids` | Verified Salesforce house-owner User IDs allowed for explicitly marked event rows, or [] to disable? | prospecting.event.outreach_owner_scope.house_owner_ids |
+| `event_include_missing_account` | Allow explicitly marked event rows when a complete Salesforce lookup finds no Account? Default false. | prospecting.event.outreach_owner_scope.include_missing_account |
 | `integration_setup` | Explicit configuration choice and non-secret settings for all 21 integrations? | template.integrations and named setting targets |
 
+Event options default to [] and false. Selecting either changes eligibility, grants no enrollment approval and verifies no connection.
+The terminal accepts actual JSON true or false for the boolean. House IDs must be distinct verified User IDs other than the operator.
 Warehouse and Slack routing answers may be omitted when their integration is deferred or unused.
 Review every system anyway and record a concrete reason. The selected workflow still needs its required capabilities before live use.
 

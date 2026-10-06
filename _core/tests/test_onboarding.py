@@ -112,6 +112,57 @@ class OnboardingTests(unittest.TestCase):
         self.assertNotIn('Example Product',text)
         self.assertNotIn('Next_Steps__c',(self.destination/'_core/scripts/hygiene_check.py').read_text())
 
+    def test_optional_event_answers_legacy_defaults_and_enabled_mapping(self):
+        legacy = self.company_answers()
+        legacy.pop('event_house_owner_ids')
+        legacy.pop('event_include_missing_account')
+        values = onboard.validate(legacy)
+        self.assertEqual(values['event_house_owner_ids'], [])
+        self.assertIs(values['event_include_missing_account'], False)
+        answers = self.company_answers()
+        owners = ['005123456789013ABC', '005123456789014ABC']
+        answers.update(event_house_owner_ids=owners, event_include_missing_account=True)
+        onboard.instantiate(answers, self.destination)
+        policy = yaml.safe_load((self.destination/'_core/policy.yaml').read_text())
+        self.assertEqual(policy['prospecting']['event']['outreach_owner_scope'],
+                         {'house_owner_ids': owners, 'include_missing_account': True})
+        self.assertFalse(policy['template']['external_ready'])
+        self.assertFalse(policy['template']['auto_date_move'])
+        self.assertFalse(policy['prospecting']['approval']['unattended_writes'])
+        self.assertEqual(onboard.check(self.destination), 0)
+        self.assertNotIn('house_owner_ids', policy['template']['integrations']['salesforce'].get('settings', {}))
+
+    def test_event_settings_fail_before_any_destination_is_created(self):
+        bad = [('event_include_missing_account', value) for value in ('true', 1, 0, None, [])]
+        bad += [('event_house_owner_ids', value) for value in (
+            '005123456789013ABC', [1], ['005bad'], ['006123456789013ABC'],
+            ['005000000000002AAA'], ['005123456789012ABC'],
+            ['005123456789013ABC', '005123456789013ABC'])]
+        for key, value in bad:
+            with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                onboard.instantiate({**self.company_answers(), key: value}, self.destination)
+            self.assertFalse(self.destination.exists())
+
+    def test_manual_event_policy_edits_fail_and_absent_legacy_scope_is_disabled(self):
+        onboard.instantiate(self.company_answers(), self.destination)
+        path = self.destination/'_core/policy.yaml'
+        policy = yaml.safe_load(path.read_text())
+        for scope in (None, {'house_owner_ids': '005123456789013ABC'},
+                      {'house_owner_ids': ['bad']}, {'include_missing_account': 'true'},
+                      {'house_owner_ids': ['005123456789012ABC']},
+                      {'house_owner_ids': ['005123456789013ABC']*2}):
+            policy['prospecting']['event']['outreach_owner_scope'] = scope
+            path.write_text(yaml.safe_dump(policy, sort_keys=False))
+            with self.subTest(scope=scope), mock.patch('sys.stdout', new=io.StringIO()):
+                self.assertEqual(onboard.check(self.destination), 1)
+        policy['prospecting']['event'].pop('outreach_owner_scope')
+        path.write_text(yaml.safe_dump(policy, sort_keys=False))
+        with mock.patch('sys.stdout', new=io.StringIO()):
+            self.assertEqual(onboard.check(self.destination), 0)
+        # Reserved fictional house IDs require explicit simulation.
+        demo = {**self.answers, 'event_house_owner_ids': ['005000000000002AAA']}
+        self.assertEqual(onboard.validate(demo, simulation=True)['event_house_owner_ids'], demo['event_house_owner_ids'])
+
     def test_repeat_refuses_without_changing_destination(self):
         self.instantiate_fixture(self.answers,self.destination)
         policy=self.destination/'_core/policy.yaml';before=policy.read_bytes()

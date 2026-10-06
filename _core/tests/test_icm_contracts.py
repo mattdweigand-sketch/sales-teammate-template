@@ -1126,6 +1126,17 @@ class TriageSinglePassApproval(unittest.TestCase):
 
 
 class EventSequenceContract(unittest.TestCase):
+    def test_copy_timing_uses_approved_interval_mode_and_expected_local_windows(self):
+        timing = "\n".join(sections(self.sequence)["Copy and timing"])
+        approved = (
+            "Build the sequence in Apollo interval mode on a named sending schedule, not exact datetimes. "
+            "Email 1 waits 0 days from enrollment and later steps wait the configured gap.\n"
+            "Show each step's expected local send date and window with timezone, not just relative offsets. "
+            "The exact schedule is chosen and approved by Operator, never inferred from the sandbox timezone."
+        )
+        self.assertEqual(timing.count(approved), 1)
+        self.assertNotIn("Show every absolute local date and time with timezone, not just relative offsets.", self.sequence)
+
     def setUp(self):
         self.workflow = workflow_path("event-sequence")
         self.contract = (self.workflow / "CONTEXT.md").read_text()
@@ -1161,7 +1172,8 @@ class EventSequenceContract(unittest.TestCase):
                         "active_sequence", "event_app_invite"],
             "recent_reply_days": 14, "enrich": "missing_or_unverified",
             "enrich_order": ["apollo_match", "apollo_waterfall"], "stop_on_reply": True,
-            "steps": ["email", "email", "linkedin_task"], "step_gap_days": 3, "last_touch_before_event_days": 2})
+            "steps": ["email", "email", "linkedin_task"], "step_gap_days": 3, "last_touch_before_event_days": 2,
+            "outreach_owner_scope": {"house_owner_ids": [], "include_missing_account": False}})
         self.assertEqual(policy["prospecting"]["approval"]["never"],
                          ["send email outside rules#event_sequence", "create Opportunity", "change deal stage or amount"])
         for key, filename in (("event_list_prep", "event_list_prep.py"), ("event_scrub_leads", "scrub_leads.py"),
@@ -1180,6 +1192,37 @@ class EventSequenceContract(unittest.TestCase):
         self.assertIn("Both reports must say PASS", self.prep)
         self.assertIn("--clean-column-profile full", self.prep)
         self.assertIn("domain_mismatch.csv", self.prep)
+
+    def test_outreach_owner_policy_insert_and_scope_rule_are_exact(self):
+        policy_text = (CORE / "policy.yaml").read_text()
+        insertion = ('    outreach_owner_scope:\n'
+                     '      house_owner_ids: []\n'
+                     '      include_missing_account: false\n')
+        self.assertEqual(policy_text.count(insertion), 1)
+        self.assertIn("    last_touch_before_event_days: 2\n" + insertion + "\n  outreach:", policy_text)
+        agents = (WORKSPACES / "prospecting/AGENTS.md").read_text()
+        rule = "For an event list Operator names, rows marked with Operator as outreach owner are in scope when the Salesforce Account is unassigned or missing. Other sellers' Accounts stay out."
+        self.assertEqual(agents.count(rule), 1)
+        self.assertIn("Event Sequence uses the same named-account scope.\n" + rule, agents)
+        for phrase in ("prospecting.event.outreach_owner_scope.house_owner_ids", "completed lookup found no Account",
+                       "prospecting.event.outreach_owner_scope.include_missing_account", "Other list overrides cannot expand it."):
+            self.assertIn(phrase, agents)
+
+    def test_outreach_owner_contracts_keep_fresh_scope_marker_and_sync_disclosure(self):
+        self.assertIn("`prospecting.event.outreach_owner_scope`", self.contract)
+        for phrase in ("outreach-owner column and Operator's value", "missing or ambiguous column is needs-input",
+                       "--outreach-owner-column", "--outreach-owner-value", "on every helper run, including launch rechecks",
+                       "Other sellers' Accounts, including inactive other owners", "scope: outreach_owner",
+                       "No other list override can expand it."):
+            self.assertIn(phrase, self.prep)
+        self.assertIn("except approved outreach-owner rows", (self.workflow / "01-list-prep/CONTEXT.md").read_text())
+        launch = (self.workflow / "03-launch/CONTEXT.md").read_text()
+        self.assertIn("still house-owned or a completed lookup still finds no Account", launch)
+        self.assertIn("Anything else outside named accounts stops", launch)
+        self.assertIn("Named-account scope, including the outreach-owner rule, cannot be overridden", self.sequence)
+        self.assertIn("Count outreach-owner rows with no Account", self.sequence)
+        self.assertIn("Apollo's CRM sync may create Salesforce Contacts for them", self.sequence)
+        self.assertIn("Repeat the completed missing-Account lookup", self.sequence)
 
     def test_event_enrichment_is_apollo_only_and_waterfall_requires_no_verified_email_after_match(self):
         policy_text = (CORE / "policy.yaml").read_text()
@@ -1302,7 +1345,7 @@ class EventSequenceContract(unittest.TestCase):
             self.assertLess(check, send)
         self.assertLess(send, activate)
         for requirement in ('using `references/readback.md` "Readback" copy rules',
-                            "Compare steps, touches, subject and body templates, merge variables, schedule and stop on reply",
+                            "Compare steps, touches, subject and body templates, merge variables, interval settings, named schedule, timezone and stop on reply",
                             "Normalize only the HTML Apollo sanitizes and require exact merge variables",
                             "Never enroll copy that has not been compared", "Never call add_contact_ids or approve on unmatched copy"):
             self.assertIn(requirement, enrollment)
@@ -1311,7 +1354,7 @@ class EventSequenceContract(unittest.TestCase):
         self.assertIn("Copy, before enrollment call", "\n".join(sections(self.launch)["Audit"]))
 
     def test_blocked_campaign_readback_names_schedule_and_mailbox_sources(self):
-        for requirement in ("When campaigns_show is blocked, take steps and exact send times from the stored create or update response",
+        for requirement in ("When campaigns_show is blocked, take steps, native interval settings, named schedule and timezone from the stored create or update response",
                             "saved `apollo_emailer_campaigns_add_contact_ids` response",
                             "each contact's sending account", "After the first send, also check the sender on get_content results",
                             "If neither shows the mailbox", "accepted enrollment request's `send_email_from_email_account_id`",
@@ -1493,7 +1536,7 @@ class EventSequenceContract(unittest.TestCase):
         self.assertIn("next unused E label", self.sequence)
 
     def test_root_event_route_and_migrated_scrubber_authoring_paths(self):
-        self.assertIn("prepare named-account event lists", (ROOT / "CONTEXT.md").read_text())
+        self.assertIn("prepare configured event lists", (ROOT / "CONTEXT.md").read_text())
         scrubber = (self.workflow / "01-list-prep/references/scrubber.md").read_text()
         self.assertIn("adjacent `scripts/email_rules.json`", scrubber)
         self.assertIn("-m unittest _core.tests.test_event_scrub_leads", scrubber)

@@ -10,7 +10,9 @@ Report the pre-enrollment comparison result against the approved snapshot, inclu
 Missing templates stop before enrollment and require Operator's input. Never infer native copy or send without the completed comparison.
 Read `apollo_emailer_campaigns_show` for the exact approved campaign and sequence when accessible. Compare native steps, mailbox, and schedule against Operator's approved snapshot.
 On a permission error only, quote the error and use available Apollo campaign and message search tools with complete pages for counts, active state, stop on reply, and first send.
-When campaigns_show is blocked, take steps and exact send times from the stored create or update response and compare them with approval.
+When campaigns_show is blocked, take steps, native interval settings, named schedule and timezone from the stored create or update response and compare them with approval.
+Never fabricate absolute send timestamps. Missing required settings or unsupported interval readback stays partial.
+Compare available native scheduled-message timestamps with the approved expected local windows. Report discrepancies before claiming verified timing.
 Take the mailbox from the saved `apollo_emailer_campaigns_add_contact_ids` response if it returns each contact's sending account. After the first send, also check the sender on get_content results.
 If neither shows the mailbox, use the accepted enrollment request's `send_email_from_email_account_id`, labeled "mailbox from accepted enrollment request".
 That mailbox source counts as verified only when the enrollment call succeeded with no errors and the ID matches the approved mailbox. Missing sources or any mismatch stay partial.
@@ -26,7 +28,8 @@ Otherwise state "first send pending, sent-content check not yet run". Never use 
 Reconcile the original approved recipient set as remaining approved Contacts plus reported drops and holds. Compare actual enrolled Contact IDs and email addresses with only the remaining set.
 Report unexpected missing, duplicate, extra, or errored recipients explicitly. Documented reply drops and holds are not unexplained enrollment failures.
 Reconcile scheduled-message counts to the approved steps, actual email steps, and remaining approved recipients. LinkedIn tasks are not email messages.
-Report the native first-send date and time with timezone, sending mailbox, enrolled count versus approved count, and stop-on-reply setting.
+Report the native first-send date and time with timezone when available, sending mailbox, enrolled count versus approved count, and stop-on-reply setting.
+With a pending first send and no native timestamp, report pending plus matched intervals, schedule and expected windows. Do not invent an exact datetime.
 Enrollment may already have sent real email. Say what native evidence proves sent versus scheduled, not that every email is unsent.
 Readback is verified when the create or update response copy, scheduled subjects, counts, active state, stop on reply, and first send all match approval.
 Matching steps, mailbox, schedule, recipient reconciliation, and sent-content checks when applicable are also required.
@@ -40,7 +43,7 @@ For partial results show one exact fix proposal and wait for its approval. Never
 | Scope | Event, source list, approved snapshot and link, no direct Salesforce writes, with Apollo CRM sync disclosed |
 | Enrollment | Original approved, remaining after recheck, and actual recipient counts, exact set differences, and returned sequence/campaign references |
 | Reply recheck | When run, window, query shapes, contacts checked, replies found, dropped Contacts and reasons, holds and reasons, and attached saved receipt file |
-| Delivery | Mailbox, first send with timezone, exact steps, scheduled-message count, and any native sent evidence |
+| Delivery | Mailbox, intervals, named schedule, timezone, expected windows, native first send when available, exact steps, scheduled-message count and native sent evidence |
 | Copy | Pre-enrollment comparison result, stored create/update steps, touches and templates, normalized-copy comparison, complete scheduled-subject checks, and sent-content results or first send pending, sent-content check not yet run |
 | Stop | Native stop-on-reply setting and evidence source |
 | CRM sync | Native CRM push status when available, with its source, otherwise not checked |

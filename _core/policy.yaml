@@ -324,6 +324,9 @@ prospecting:
     steps: [email, email, linkedin_task]   # default touches. Copy approved per event
     step_gap_days: 3
     last_touch_before_event_days: 2
+    outreach_owner_scope:
+      house_owner_ids: []
+      include_missing_account: false
 
   outreach:
     # signal-outreach. One Gmail draft from one qualified bundle. Never sends.

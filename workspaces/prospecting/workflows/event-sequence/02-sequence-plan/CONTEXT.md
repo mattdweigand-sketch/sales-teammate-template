@@ -24,7 +24,8 @@ Empty preparation outcomes return to the coordinator before entry. Every enrichm
 1. Require the viable prepared list and complete supporting receipts from this run. Missing evidence stops entry and returns the gap to the coordinator.
 2. Draft exact copy and timing per `../references/sequence.md` "Copy and timing", using event policy and email_voice with advisory outreach lint.
 3. Present one exact enrollment proposal with the Apollo CRM-sync disclosure per `../references/sequence.md` "Approval".
-   Attach the bounded reply-check receipt. Show exact contacts, exclusions and reasons, copy, mailbox, schedule, expected counts and every listed override.
+   Attach the bounded reply-check receipt.
+   Show exact contacts, exclusions and reasons, copy, mailbox, named schedule, intervals, timezone, expected local windows, intended enrollment, counts and every listed override.
 4. Wait for approval of that exact E proposal under `rules#approval`. Edits require a revised exact proposal and approval. No C approval substitutes for E.
 5. Hand Launch the saved exact E snapshot and matching native approval in this same run thread, with prepared evidence and receipts. Do not load Launch here.
 
@@ -41,7 +42,7 @@ Empty preparation outcomes return to the coordinator before entry. Every enrichm
 | Intake | Prepared evidence is viable and complete. Every exclusion and hold has a reason and scrub/batch counts reconcile |
 | Proposal | Exact list, copy, mailbox and schedule shown under rules#event_sequence, with bounded reply-check receipt and CRM-sync disclosure |
 | Approval | Native approval in this same run thread matches this exact E snapshot. A skipped, unapproved or revised proposal cannot enter Launch |
-| Scope, throughout | No Apollo calls, direct Salesforce writes or customer messages. Preserve named-account scope and distinct C and E approvals |
+| Scope, throughout | No Apollo calls, direct Salesforce writes or customer messages. Preserve configured event scope and distinct C and E approvals |
 
 ## Outputs
 

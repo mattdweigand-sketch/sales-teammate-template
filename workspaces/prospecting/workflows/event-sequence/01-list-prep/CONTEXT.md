@@ -27,7 +27,7 @@ Keep this run's immutable run_start. Enrichment spend never grants enrollment ap
 1. Intake per `../references/prep.md` "Intake", including the list, event, attendance dates, location and ask.
 2. Prep read-only per `../references/prep.md` "Salesforce and reply checks". Complete exact Account matching, Apollo identity, active-sequence, invite-export and reply checks.
    With no usable email, defer only exact-email checks until enrichment returns an address. Complete them and rerun the helper before E1. Unchecked rows stay needs_input.
-   Exclude every Account outside Operator's named accounts. Missing evidence stays needs-input.
+   Exclude every Account outside Operator's named accounts except approved outreach-owner rows per shared prep. Missing evidence stays needs-input.
 3. Enrich only helper enrichment_candidates whose sole exclusion is unverified_email per `../references/prep.md` "Enrichment".
    Each C proposal discloses Apollo CRM sync and requires separate exact count and estimated-credit approval. Waterfall has its own approval.
 4. Run `policy.tooling.scripts.event_list_prep` on reviewed evidence per `../references/prep.md` "Helper evidence".

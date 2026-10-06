@@ -7,7 +7,8 @@ next: Pipeline thread for open-Opportunity contacts, Operator for replies, then 
 
 # Event Sequence
 
-Coordinate Operator's named-account event list of any size. Only existing Operator-owned Salesforce Accounts are eligible.
+Coordinate Operator's named-account event list of any size. Existing Operator-owned Salesforce Accounts are eligible.
+Event lists Operator names also admit explicitly marked house-owned or missing Accounts under configured outreach-owner policy.
 Apollo sends only under `rules#event_sequence`. A reply stops that contact and Operator takes over.
 
 ## Pipeline
@@ -22,7 +23,7 @@ Apollo sends only under `rules#event_sequence`. A reply stops that contact and O
 
 | Source | File/Location | Section/Scope | Why |
 |---|---|---|---|
-| Core policy | `_core/policy.yaml` | `prospecting.identity`, `prospecting.event`, `prospecting.approval` | Account scope and approval boundary |
+| Core policy | `_core/policy.yaml` | `prospecting.identity`, `prospecting.event`, `prospecting.event.outreach_owner_scope`, `prospecting.approval` | Account scope and approval boundary |
 | Core rules | `_core/rules.md` | `rules#run_start`, `rules#event_sequence`, `rules#approval`, `rules#write_protocol`, `rules#not_checked_means` | Existing permission and evidence gates |
 | Stage | `01-list-prep/CONTEXT.md` | Full contract only on List Prep entry | Intake and reviewed preparation |
 | Stage | `02-sequence-plan/CONTEXT.md` | Full contract only with viable prepared evidence | Exact E proposal |
@@ -55,7 +56,7 @@ Early close has no customer-system writes. It may deliver the existing Pipeline 
 | Entry | Selected stage has this run's complete evidence. Same-thread native approval matches the exact E snapshot before Launch |
 | No enrollment | With no recipients and no remaining enrichment, close directly. Never load Plan or Launch, audit nonexistent files or run a reply recheck for the receipt |
 | Loading | Only the entered stage and the coordinator's own Inputs are read. Shared references are not preloaded as a union of stage Inputs |
-| Scope, throughout | Only Operator-owned Accounts. No direct Salesforce writes. Apollo CRM sync disclosed in every C and E proposal. Separate approvals for enrichment and real sends |
+| Scope, throughout | Operator-owned Accounts or approved outreach-owner rows, no other scope override. No direct Salesforce writes. Apollo CRM sync disclosed in every C and E proposal. Separate approvals for enrichment and real sends |
 | Receipt | Every source row and actual stage outcome reconcile. Evidence gaps stay needs-input or partial. Pipeline delivery has a native receipt or remains pending |
 
 ## Outputs
