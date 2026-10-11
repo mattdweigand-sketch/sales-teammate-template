@@ -1,7 +1,8 @@
 # Sales Teammate Template build specification
 
 Approved scope is a new generalized template, local and GitHub repositories, complete onboarding, and a scratch simulation of every workflow.
-The source checkout is unchanged. The template has independent Git history. Source revision is `c8387f37bcf43cd82bf517a7da8f457927763da2` with 170 tracked files.
+The source checkout is unchanged. The template has independent Git history.
+This complete port uses source revision `0e887c70104d5d205a8e03c5a1c10642dee6e4cc`. Source history, tenant configuration, collateral and capture records remain excluded.
 
 ## Audience and destination
 
@@ -20,7 +21,7 @@ Git and the verified GitHub revision provide recovery. Scratch and run evidence 
 | Systems | Repository, configuration and health maintenance | Implements authorized domain changes and verifies actual deployment |
 | Shared core | Policy, shared rules, helpers, onboarding, simulator and tests | One canonical owner per value and rule |
 
-Preserve five workspaces and 18 named routes. There are 20 execution or coordination contracts and one Signal routing overview.
+Preserve five workspaces and 19 named routes. There are 21 execution or coordination contracts and one Signal routing overview.
 Prospecting groups Signal Prospecting and Event Sequence, each with three numbered stages and declared evidence handoffs.
 Named Signal skills enter their stage directly. Event Sequence enters its coordinator. Keep external Salesforce, Gmail draft, thread and sandbox handoffs.
 Every contract loads only its scoped Inputs. Onboarding and maintenance do not become routine sales context.
@@ -36,14 +37,14 @@ Default automatic date moves, unattended writes, merges and schedule activation 
 
 ## Onboarding
 
-A company questionnaire and guided integration interview cover persistent settings and all 21 external and local surfaces. Required questions have no fictional defaults.
+A company questionnaire and guided integration interview cover persistent settings and all 22 external and local surfaces. Required questions have no fictional defaults.
 Every integration needs configure, defer or not_used with the declared settings or a reason. Credential values stay in the runtime secret store. There is no mode choice.
 A saved JSON answer file maps each answer to canonical policy or product references. The agent collects actual settings and saves the file outside both workspaces.
 Identity, timezone, internal domains, CRM URL, notes, product messaging, ICP, quarterly targets, warehouse, operation routing and adapter mappings are configurable.
 Configuration creates a fresh workspace at an absent external destination, excludes Git history, preserves the source template, and commits no customer material.
 Validate all answers before copying. Reject unknown answers, invalid types, paths, identity conflicts and invalid mappings without partial destinations.
 Repeat setup refuses overwrites. Normal setup derives configured state and rejects reserved identity and CRM domains.
-All 21 live integration checks remain pending. Deferred capabilities hold their dependent operations.
+All 22 live integration checks remain pending. Deferred capabilities hold their dependent operations.
 Only the scratch rehearsal opts into simulation with fictional answers stored under `_core/tests/fixtures/onboarding/`. Check distinguishes these internal states.
 Generate portable skill pointers for all named routes. Pointers do not install agents, grant permissions or activate schedules.
 
@@ -52,7 +53,7 @@ Generate portable skill pointers for all named routes. Pointers do not install a
 1. Source baseline passes its supported Python suite before copying.
 2. Run one onboarding and research-to-outreach representative task, repair observed defects, then expand the rehearsal.
 3. Configure scratch workspaces with demo and alternative company/timezone/CRM-field answers. Check source bytes remain unchanged.
-4. Simulate all 18 names and every material branch through local connector doubles. Trace actual contract Inputs and handoffs.
+4. Simulate all 19 names and every material branch through local connector doubles. Trace actual contract Inputs and handoffs.
 5. Exercise positive, denial, no-approval, stale-evidence, ownership, duplicates, incomplete retrieval and mismatched readback cases where applicable.
 6. Execute real deterministic helpers and the full inherited suite. Build the two-page pilot PDF and inspect both rendered pages.
 7. Check routes, policy references, source-data leakage, local links, whitespace, placeholders and scratch output boundaries.
@@ -66,3 +67,17 @@ Live CRM, mail, warehouse, runtime permissions, notification delivery and activa
 The complete sanitized repository, this specification, onboarding questionnaire and CLI, typed company answer schema, product and ICP guidance, adapter guide,
 portable skill pointers, fictional test fixtures, deterministic workflow rehearsal, regression tests, scratch report and verified GitHub publication.
 Build and simulation are already authorized by the request. Runtime external writes still require the selected workflow's exact approval.
+
+## Complete mechanism port
+
+Port the five-workspace final behavior with process-capture as the nineteenth route. Shared rules and values retain one canonical home.
+Routine Tasks and next steps belong to triage, with the selected post-call, Close, proven-send and typed-command exceptions. Pipeline review stays weekly or requested.
+Native write preflights retain exact approval, fresh owner/status/link reads, duplicate prevention, partial-result honesty and native readback.
+Configured Git freshness binds actual deployment repository, remote, branch and consumed instructions in a format-2 snapshot. Onboarding remains Git-less and inactive.
+Forecast Held rows leave call totals incomplete and remain in qualified pipeline inventory when their original stage/date scope qualifies. Optional Slides D uses revision control and visual readback.
+Customer review uses first-win milestones and ignores legacy renewal receipts. Pilot PDF production retains licensed fonts and cross-platform Chromium discovery.
+Prospecting preserves named Account ownership, no-open-deal gates, proven sends, aggregate adoption privacy and staged Event approval/readback. House scope stays opt-in.
+Systems capture records stay generalized. Current native history, complete paging, bounded review and authorized wording govern maintenance, without importing source approvals.
+Onboarding records an external operating-policy review. The size floor and Slides target stay unset until reviewed and configured. The AI taxonomy remains a sample market profile.
+Verify all named routes, new helpers, positive and failure cases, configured target changes, nondefault company/schema/timezone and full scratch PDF production before release.
+Existing adopters preserve tenant policy, credentials, targets and schema mappings. Fresh proposals replace stale legacy snapshots. No release activates runtime schedules or connectors.

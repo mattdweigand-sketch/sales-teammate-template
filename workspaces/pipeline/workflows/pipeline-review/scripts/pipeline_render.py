@@ -1,92 +1,38 @@
 #!/usr/bin/env python3
-"""Render the pipeline-review report, question walk, write receipt, and notification.
+"""Render weekly pipeline-review report, questions, receipts and notification.
 
-Usage (run from the sandbox root with explicit sandbox paths):
-  pipeline_render.py report       --run RUN.json --coverage COVERAGE.json [--sources DIR] [--policy PATH]
-  pipeline_render.py question     --run RUN.json --label Q1 [--sources DIR] [--policy PATH]
-  pipeline_render.py receipt      --run RUN.json [--labels 1,Q1-a,A] [--final] [--sources DIR] [--policy PATH]
-  pipeline_render.py notification --run RUN.json --coverage COVERAGE.json [--sources DIR] [--policy PATH]
---sources is the saved tool-call folder, default the current run's call_external_tool folder.
-
-This file owns the exact presentation. The workflow writes one reviewed run file per run
-in the sandbox, and passes the saved `coverage_check --json` output for this run and scope.
-The helper validates structure, reconciles counts, and checks labels. It never infers sales
-facts, chooses actions, grants approval, or writes to any system. A clean render is not a
-ready run: coverage and process status come from the inputs and are printed as given.
-
-Exit 0 rendered to stdout. Exit 1 validation failed, errors on stderr, nothing on stdout.
-Exit 2 unreadable input or usage error.
-
-Run file keys
-  run        id, date (YYYY-MM-DD), branch (weekday|friday), coverage_scope
-             (pipeline-daily on weekday, pipeline on Friday), process_status (complete|incomplete),
-             process_gaps (list, required when incomplete), thread_url and schedule (notification)
-             slack_coverage_notes (optional list of {deal, name, contacts [names], reason}, one per deal)
-  counts     open (Collect count, all stages), reviewed (hygiene plus Friday qualification), not_checked
-  deals      every flagged deal once: id (006...), name, flags (trigger names)
-  routed     optional list of {deal, name (Account), thread_url, reason}, owned by deal threads,
-             counted separately from flagged deals and never eligible for local proposals
-  today_actions  weekday report candidates from the existing reads, each with deal,
-                 name, kind (buyer_reply|meeting|due|date_at_risk), date (YYYY-MM-DD),
-                 reason (one line), evidence (list), size under policy.forecast.amount_field.
-                 buyer_reply adds reply_reviewed true; blank size never falls back to Amount
-  withheld   list of {deal, reason}; required, possibly empty, when coverage is not ready. It holds every
-             flagged deal in the coverage `affected` list, or every flagged deal when `affected` is null
-  blocks     clear recommendations: label ("1", "2"...), deal, status, next_step {current,
-             proposed or null, optional current_full and proposed_full for a history change},
-             changes (list), evidence (list), optional depends_on_unknown, superseded_by
-  questions  label ("Q1"...), deal, status, context, question, next_step_current, evidence,
-             options: label ("Q1-a"...), text, status, changes (empty for a factual answer)
-  friday     Friday only: qualification [{deal, name, stage, action, summary, reviewed date/evidence}],
-             rollup {stages [{stage, count, amount}], forecast {Commit, Best Case,
-             Pipeline, Omitted}, this_quarter {count, amount}, later {count, amount}},
-             since ("M/D"), delta [{kind, deal, text}], letters [{label "A"..., deal,
-             deal_name, status, change, evidence, basis}]
-  writes     one per record field attempted: label, object, id, field ("create" for a Task
-             create), outcome (written|rejected|unverified|not_attempted), detail. Each write
-             must match an approved change of its label; a change with no write is not attempted.
-A change is {object Opportunity|Task, id, field, current, proposed, name}. Opportunity fields in
-blocks and options: Next_Steps__c plus policy.pipeline required_fields and conditional_fields.
-Letters add CloseDate, StageName, Amount. Task fields: ActivityDate, Subject, Status, Description.
-Task updates add task_kind and same_action true; task_kind must match the field and value
-(ActivityDate reschedule, Subject rename, Description update, Status Completed complete or
-close_duplicate, other Status update). complete adds completion_evidence; close_duplicate adds
-duplicate_of and appears only in question options.
-mode "prepend" marks a new first line kept above existing text; question options and letters may
-carry Next_Steps__c only this way. A Task create
-is {object Task, action create, fields {Subject, ActivityDate, Status, WhoId, WhatId}, who_name,
-linkage_verified true, candidates_refreshed true}. Salesforce, Operator, and Pilot report evidence is {date,
-source, who, title, fact}. Gmail and Calendar evidence is {source, who, fact, source_id}, where source_id is an
-email_id or event_id in the saved results; the helper fills date, title, and link from that record and rejects
-them in the run file. Gmail evidence adds quote, copied verbatim from the saved message body. source_id and
-quote are checked, never rendered.
-Slack evidence is {date, source Slack, who, title, link, fact}, with its date and permalink from the saved message.
-A block, option, or letter that changes Next_Steps__c carries a Task create or ActivityDate
-reschedule, or followup_task: the Id of the kept open Task already on the new due date, or on a
-letter the label of the letter holding the Task change (rules#followup_task).
-Optional retained_milestones on a block, option, or letter is a list of
-{task_id, event_id, due_date (YYYY-MM-DD), reason, action_verified true}. These are
-reviewed later Tasks kept alongside the current follow-up, never a substitute for it.
-Statuses: proposed, approved, written, partial, failed, skipped, deferred, superseded; questions
-use open, answered, skipped, deferred, superseded.
+Usage: pipeline_render.py report|question|receipt|notification --run RUN.json
+       [--coverage COVERAGE.json] [--sources DIR] [--policy PATH]
+All runs use run.branch=friday and coverage_scope=pipeline, including requested runs.
+Input counts, deals, routed, blocks, questions, friday and writes retain their shapes.
+Blocks/options fill blank required or conditional Opportunity fields. Friday letters
+add StageName, CloseDate, Amount and a narrow dated size-floor exception Description. No next-step or Task change is accepted anywhere.
+next_step {current,proposed:null} and next_step_current are display-only context.
+triage is read-only {deal,name,reason,triage_next_step:true|triage_task_gap:true|
+triage_owned_task:<native open Task>}, with no changes, labels or delivery.
+friday.qualification actions are closed_lost, triage or needs_input. closed_lost needs
+reviewed silence, operator_stated_no {quote,date}, or explicitly reviewed lost_path_size.
+Size-floor facts are caller-reviewed inputs, not inferred buyer intent or history.
+Saved Gmail/Calendar source IDs and Gmail body quotes use shared evidence checks.
+Statuses, counts, approved exact changes and readback outcomes still gate rendering.
+No network, writes, approval inference or sales judgment. Exit 1 reports errors only.
 """
 import argparse
 import html
 import json
 import re
 import sys
-from datetime import date, datetime, timedelta
-from decimal import Decimal, InvalidOperation
-from email.utils import parseaddr
+from copy import deepcopy
+from datetime import date, datetime
 from pathlib import Path
-from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[5] / "_core" / "scripts"))
-from _saved_json import load_saved, parse_email_date, resolve_calls_dir
-from hygiene_check import closed_lost_silence_eligible, is_blank
+from _saved_json import resolve_calls_dir
+from hygiene_check import closed_lost_silence_eligible, is_blank, parse_mdy
+from report_evidence import EvidenceMixin, load_sources, md, RETRIEVED_SOURCES
 
 ROOT = Path(__file__).resolve().parents[5]
 DEFAULT_POLICY = ROOT / "_core" / "policy.yaml"
@@ -96,21 +42,14 @@ QUESTION_STATUSES = {"open", "answered", "skipped", "deferred", "superseded"}
 WRITE_OUTCOMES = {"written", "rejected", "unverified", "not_attempted"}
 OUTCOME_RANK = ("rejected", "unverified", "not_attempted", "written")
 OUTCOME_TEXT = {"written": "Written", "rejected": "Rejected", "unverified": "Unverified", "not_attempted": "Not attempted"}
-TASK_KINDS = {"reschedule", "rename", "complete", "update", "close_duplicate"}
-TASK_FIELD_KINDS = {"ActivityDate": {"reschedule"}, "Subject": {"rename"}, "Description": {"update"}}
-LETTER_ONLY_FIELDS = {"CloseDate", "StageName", "Amount"}
-SCOPE_FOR_BRANCH = {"weekday": "pipeline-daily", "friday": "pipeline"}
-CREATE_FIELDS = ("Subject", "ActivityDate", "Status", "WhoId", "WhatId")
+LETTER_ONLY_FIELDS = {"CloseDate", "StageName", "Amount", "Description"}
+SCOPE_FOR_BRANCH = {"friday": "pipeline"}
 COVERAGE_HIDDEN_PREFIXES = ("Domain-matched ", "Coverage ready.", "Report not ready:")
 COVERAGE_FILE_LINE = re.compile(r"^\S+\.json: ")
-QUOTE_MIN_CHARS = 12
-ID_PREFIX = {"Opportunity": "006", "Task": "00T", "Contact": "003", "Event": "00U"}
+ID_PREFIX = {"Opportunity": "006", "Task": "00T", "Contact": "003", "Event": "00U", "User": "005"}
 BLOCK_LABEL = re.compile(r"^[1-9]\d*$")
 QUESTION_LABEL = re.compile(r"^Q[1-9]\d*$")
 LETTER_LABEL = re.compile(r"^[A-Z]{1,2}$")
-EVIDENCE_SOURCES = {"Gmail", "Calendar", "Slack", "Salesforce", "Operator", "Pilot report"}
-RETRIEVED_SOURCES = {"Gmail", "Calendar"}
-TODAY_ACTION_ORDER = {"buyer_reply": 0, "meeting": 1, "due": 2, "date_at_risk": 3}
 
 LIMITATION = "Email, Calendar, and Slack evidence is the retrieved set, not full history."
 HISTORY_NOTE = "Only the latest next-step entry is shown. Older history stays unchanged."
@@ -121,10 +60,8 @@ WALK_NOTE = "I walk these one at a time after the clear recommendations."
 NO_CHANGES = "No Salesforce changes proposed."
 NO_NEXT_STEP_CHANGE = "No next-step change."
 SKIP_OPTION = "skip · Leave unchanged. Named at close."
-APPROVE_WEEKDAY = "**Reply with numbers, ranges, all, or skip. all covers the numbered clear recommendations only.**"
 APPROVE_FRIDAY = ("**Reply with numbers, ranges, all, letters, or skip. all covers the numbered clear "
                   "recommendations only. Each letter approves one record.**")
-TITLE_WEEKDAY = "Pipeline review · {d}"
 TITLE_FRIDAY = {"ready": "Friday pipeline review ready for approval",
                 "complete": "Friday pipeline review complete",
                 "incomplete": "Friday pipeline review incomplete"}
@@ -134,28 +71,8 @@ class RenderError(Exception):
     pass
 
 
-def plain(text):
-    """Comparable text: tags removed, entities decoded, whitespace collapsed."""
-    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", str(text or ""))).split())
 
 
-def load_sources(folder):
-    """Index saved Gmail messages by email_id and Calendar events by event_id. Unreadable files are skipped."""
-    found = {"Gmail": {}, "Calendar": {}}
-    for path in sorted(Path(folder).glob("output_*.json")) if Path(folder).is_dir() else []:
-        try:
-            result = load_saved(path)
-        except (OSError, ValueError):
-            continue
-        if not isinstance(result, dict):
-            continue
-        for key, rows, source, rid in (("email_results", "emails", "Gmail", "email_id"),
-                                       ("calendar_event_list", "events", "Calendar", "event_id")):
-            page = result.get(key)
-            for rec in (page.get(rows) if isinstance(page, dict) else None) or []:
-                if isinstance(rec, dict) and rec.get(rid):
-                    found[source][rec[rid]] = rec
-    return found
 
 
 def load_json(path):
@@ -165,8 +82,6 @@ def load_json(path):
         raise RenderError(f"cannot read {path}: {exc}") from exc
 
 
-def md(d):
-    return f"{d.month}/{d.day}/{d.strftime('%y')}"
 
 
 def display(text):
@@ -199,18 +114,8 @@ def write_key(w):
 
 
 def expected_keys(item):
-    """Record fields a label approves: a block's next step and changes, a letter's change, an option's changes."""
-    keys = [change_key(c) for c in ([item["change"]] if isinstance(item.get("change"), dict) else item.get("changes") or [])]
-    if (item.get("next_step") or {}).get("proposed") is not None:
-        keys.insert(0, ("Opportunity", item.get("deal"), "Next_Steps__c"))
-    return keys
-
-
-def task_kinds_for(field, proposed):
-    """The task_kind values a Task field and proposed value can honestly carry, or None for a field never changed here."""
-    if field == "Status":
-        return {"complete", "close_duplicate"} if proposed == "Completed" else {"update"}
-    return TASK_FIELD_KINDS.get(field)
+    """Record fields a label approves: a block's changes, a letter's change, an option's changes. Never Next_Steps__c."""
+    return [change_key(c) for c in ([item["change"]] if isinstance(item.get("change"), dict) else item.get("changes") or [])]
 
 
 def record_outcomes(rows):
@@ -222,15 +127,18 @@ def record_outcomes(rows):
             for v in grouped.values()]
 
 
-class Run:
+class Run(EvidenceMixin):
     def __init__(self, data, policy, coverage=None, sources=None):
+        data = deepcopy(data)
         self.data = data
+        self.resolved_evidence = set()
         self.policy = policy
         self.coverage = coverage
         self.sources = sources or {"Gmail": {}, "Calendar": {}}
-        tz = ((policy.get("pipeline") or {}).get("schedule") or {}).get("daily", {}).get("tz")
+        tz = ((policy.get("pipeline") or {}).get("schedule") or {}).get("friday", {}).get("tz")
         self.tz = ZoneInfo(tz) if tz else None
         self.errors = []
+        self._task_ownership_states: dict[str, tuple[object, object, object]] = {}
         sf = policy.get("salesforce", {})
         self.record_url = sf.get("record_url", "").replace("{instance_url}", sf.get("instance_url", ""))
         self.url_objects = set(sf.get("record_url_objects", []))
@@ -250,7 +158,7 @@ class Run:
             self.date = None
         self.entry_prefix = prefix.replace("M/D/YY", md(self.date)) if self.date else None
         pp = policy.get("pipeline") or {}
-        self.block_fields = {"Next_Steps__c"}
+        self.block_fields = set()
         for fields in (pp.get("required_fields") or {}).values():
             self.block_fields |= set(fields or [])
         self.block_fields |= {c.get("field") for c in pp.get("conditional_fields") or [] if c.get("field")}
@@ -285,90 +193,43 @@ class Run:
     def process_complete(self):
         return self.run.get("process_status") == "complete"
 
+    def routing_rows(self, status):
+        return [row for row in self.data.get("routed") or [] if row["delivery"]["status"] == status]
+
     # ---- validation
     def check_id(self, obj, rid, where):
         pre = ID_PREFIX.get(obj)
         if not isinstance(rid, str) or len(rid) not in (15, 18) or (pre and not rid.startswith(pre)):
             self.err(f"{where}: {obj} id {rid!r} is not a valid {obj} Id")
 
-    def check_evidence(self, items, where, required=True):
-        if required and not items:
-            self.err(f"{where}: needs at least one evidence item")
-        for n, e in enumerate(items or [], 1):
-            w = f"{where} evidence {n}"
-            if e.get("source") in RETRIEVED_SOURCES:
-                self.resolve_retrieved(e, w)
-            if not e.get("date") or not e.get("fact"):
-                self.err(f"{w}: date and fact are required")
-            if e.get("source") not in EVIDENCE_SOURCES:
-                self.err(f"{w}: source must be one of {sorted(EVIDENCE_SOURCES)}")
-            if e.get("source") == "Slack" and not all(e.get(key) for key in ("who", "title", "link")):
-                self.err(f"{w}: Slack evidence needs a sender, title, and returned permalink")
-            link = e.get("link")
-            if link and not re.match(r"^https://\S+$", link):
-                self.err(f"{w}: link must be a returned https URL, never constructed")
-            if link and not e.get("title"):
-                self.err(f"{w}: a link needs a title to display")
 
-    def resolve_retrieved(self, e, w):
-        """Gmail and Calendar evidence must point at a saved record. Date, title, and link come from it."""
-        src = e["source"]
-        if "_resolved" in e:
-            return
-        supplied = [k for k in ("date", "title", "link") if e.get(k)]
-        if supplied:
-            self.err(f"{w}: {', '.join(supplied)} must come from the saved {src} record; remove from the run file")
-        rec = self.sources[src].get(e.get("source_id"))
-        if rec is None:
-            self.err(f"{w}: source_id {e.get('source_id')!r} is not in this run's saved {src} results")
-            return
-        if src == "Gmail":
-            quote = plain(e.get("quote"))
-            bodies = [plain(rec.get(k)) for k in ("body_uncompressed", "body")]
-            if len(quote) < QUOTE_MIN_CHARS:
-                self.err(f"{w}: Gmail evidence needs a quote of at least {QUOTE_MIN_CHARS} characters from the message body")
-            elif not any(quote in b for b in bodies):
-                self.err(f"{w}: quote is not in the saved message body for {e.get('source_id')}")
-            when = parse_email_date(rec.get("date"))
-            title, link = rec.get("subject"), rec.get("web_link")
-        else:
-            start = str(rec.get("start") or "")
-            when = datetime.fromisoformat(start.replace("Z", "+00:00")) if "T" in start else date.fromisoformat(start[:10])
-            title, link = rec.get("title"), rec.get("html_link") or rec.get("web_link")
-        if isinstance(when, datetime) and self.tz:
-            when = when.astimezone(self.tz)
-        e.update(date=md(when), title=title or None, link=link if link and str(link).startswith("https://") else None,
-                 _resolved=True)
 
-    def check_change(self, c, where, letter=False, option=False):
+    def check_evidence(self, evidence, where):
+        super().check_evidence(evidence, where)
+        if any(isinstance(item, dict) and item.get("source") == "Pilot report" for item in evidence or []):
+            if self.date is None or self.date.weekday() != 4:
+                self.err(f"{where}: Pilot report input is Friday-only under rules#pilot_handoff")
+
+    def check_change(self, c, where, letter=False):
         obj = c.get("object")
-        if obj not in ("Opportunity", "Task"):
-            self.err(f"{where}: object must be Opportunity or Task")
+        if obj == "Task":
+            self.err(f"{where}: pipeline-review cannot propose a Task change")
+            return
+        if c.get("field") == "Next_Steps__c":
+            self.err(f"{where}: pipeline-review cannot propose a next-step change")
+            return
+        if not letter and not is_blank(c.get("current")):
+            self.err(f"{where}: clear recommendations only fill blank required or conditional fields")
+        if obj != "Opportunity":
+            self.err(f"{where}: object must be Opportunity")
             return
         if c.get("action") == "create":
-            if obj != "Task":
-                self.err(f"{where}: only a Task can be created")
-                return
-            f = c.get("fields") or {}
-            for key in CREATE_FIELDS:
-                if not f.get(key):
-                    self.err(f"{where}: Task create needs {key}")
-            extra = sorted(set(f) - set(CREATE_FIELDS))
-            if extra:
-                self.err(f"{where}: Task create fields {extra} are not displayed; remove them or propose them separately")
-            if f.get("WhoId"):
-                self.check_id("Contact", f["WhoId"], where)
-            if f.get("WhatId"):
-                self.check_id("Opportunity", f["WhatId"], where)
-            if c.get("linkage_verified") is not True:
-                self.err(f"{where}: Task create needs linkage_verified true")
-            if c.get("candidates_refreshed") is not True:
-                self.err(f"{where}: Task create needs candidates_refreshed true, refresh open Tasks first")
-            if not c.get("who_name"):
-                self.err(f"{where}: Task create needs who_name")
+            self.err(f"{where}: only existing Opportunity fields can be changed")
             return
         self.check_id(obj, c.get("id"), where)
         field = c.get("field")
+        if not letter and field in LETTER_ONLY_FIELDS:
+            self.err(f"{where}: Opportunity {field} needs a Friday letter")
         if not field:
             self.err(f"{where}: field is required")
         elif obj == "Opportunity" and field not in self.block_fields | (LETTER_ONLY_FIELDS if letter else set()):
@@ -380,49 +241,93 @@ class Run:
             self.err(f"{where}: mode must be prepend when set")
         if c.get("mode") != "prepend" and "current" not in c:
             self.err(f"{where}: current value is required, use null for empty")
-        if obj == "Opportunity" and c.get("field") == "Next_Steps__c":
-            if not (letter or option):
-                self.err(f"{where}: put Next_Steps__c in next_step, not changes")
-            elif c.get("mode") != "prepend":
-                self.err(f"{where}: a Next_Steps__c change adds a first entry with mode prepend, history unchanged")
-        if obj == "Task":
-            kind = c.get("task_kind")
-            if kind not in TASK_KINDS:
-                self.err(f"{where}: Task update needs task_kind {sorted(TASK_KINDS)}")
-            honest = task_kinds_for(field, c.get("proposed"))
-            if honest is None:
-                self.err(f"{where}: Task {field} is not a permitted change; only {sorted(TASK_FIELD_KINDS) + ['Status']}")
-            elif kind in TASK_KINDS and kind not in honest:
-                self.err(f"{where}: task_kind {kind} does not match {field} → {c.get('proposed')}; expected {sorted(honest)}")
-            if c.get("same_action") is not True:
-                self.err(f"{where}: Task update needs same_action true, never retarget a Task to another action")
-            if kind == "complete" and not c.get("completion_evidence"):
-                self.err(f"{where}: Task complete needs completion_evidence")
-            if kind == "close_duplicate":
-                if not option:
-                    self.err(f"{where}: closing a duplicate Task is a question option, never a clear recommendation")
-                self.check_id("Task", c.get("duplicate_of"), where)
-                if c.get("duplicate_of") == c.get("id"):
-                    self.err(f"{where}: duplicate_of must name a different Task")
-            if not c.get("name"):
-                self.err(f"{where}: Task update needs name (Subject)")
+        if letter and field == "StageName":
+            self.check_stage_move(c, where)
 
-    def check_followup(self, item, changes, where, task_letters=()):
-        """rules#followup_task: a next-step change carries its Task change or names the kept Task."""
-        if any(c.get("object") == "Task" and (c.get("action") == "create" or c.get("task_kind") == "reschedule")
-               for c in changes):
+    def check_stage_move(self, c, where):
+        """Every StageName change is checked against its source stage, in proposal and receipt modes alike.
+
+        Closed Won and upward moves from policy.pipeline.early_stages are never proposed here, with or without a
+        qualification row. Downward moves, S2+ upward moves and Closed Lost keep their other gates."""
+        current, proposed = c.get("current"), c.get("proposed")
+        source = re.match(r"S([0-5])(?:\b|\s|-)", current) if isinstance(current, str) else None
+        if not source:
+            self.err(f"{where}: StageName change needs its current source stage")
             return
-        keep = item.get("followup_task")
-        if keep and str(keep) in task_letters:
+        if proposed == "Closed Won":
+            self.err(f"{where}: pipeline-review never proposes Closed Won")
             return
-        if keep:
-            self.check_id("Task", keep, where)
+        target = re.fullmatch(r"S([0-5])", proposed) if isinstance(proposed, str) else None
+        if not target and proposed != "Closed Lost":
+            self.err(f"{where}: StageName proposal must be a policy stage or Closed Lost")
             return
-        self.err(f"{where}: a next-step change needs a Task create or reschedule, or followup_task "
-                 f"naming the kept open Task (rules#followup_task)")
+        early = self.policy["pipeline"].get("early_stages", [])
+        if f"S{source.group(1)}" in early and target and int(target.group(1)) > int(source.group(1)):
+            self.err(f"{where}: pipeline-review never proposes an upward stage move from an early stage")
+
+    def _check_task_ownership(self, task_state: object, expected_id: object, where: str) -> bool | None:
+        """Classify reviewed native Task state without treating missing dates as undated evidence."""
+        if not isinstance(task_state, dict):
+            self.err(f"{where}: native task_state must include Id, OwnerId, IsClosed and ActivityDate")
+            return None
+        self.check_id("Task", task_state.get("Id"), where)
+        if task_state.get("Id") != expected_id:
+            self.err(f"{where}: task_state Id does not match the named Task")
+        owner_id = task_state.get("OwnerId")
+        user_id = self.run.get("user_id")
+        for owner in (owner_id, user_id):
+            if not isinstance(owner, str) or not re.fullmatch(r"[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?", owner):
+                self.err(f"{where}: readable OwnerId and run.user_id required; Task needs-input")
+                return None
+        if not user_id.startswith("005"):
+            self.err(f"{where}: run.user_id must identify the native run user; Task needs-input")
+            return None
+        if task_state.get("IsClosed") is not False or "ActivityDate" not in task_state:
+            self.err(f"{where}: native task_state requires IsClosed false and ActivityDate")
+            return None
+        task_id = task_state.get("Id")
+        if isinstance(task_id, str):
+            key = task_id[:15]
+            snapshot = (owner_id[:15], task_state["ActivityDate"], task_state["IsClosed"])
+            if key in self._task_ownership_states and self._task_ownership_states[key] != snapshot:
+                self.err(f"{where}: contradictory native Task ownership states; Task needs-input")
+                return None
+            self._task_ownership_states[key] = snapshot
+        activity_date = task_state["ActivityDate"]
+        if activity_date is None:
+            return owner_id[:15] == user_id[:15]
+        if not isinstance(activity_date, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", activity_date):
+            self.err(f"{where}: task_state ActivityDate must be ISO date or null")
+            return None
+        try:
+            date.fromisoformat(activity_date)
+        except ValueError:
+            self.err(f"{where}: task_state ActivityDate must be a valid date")
+            return None
+        if self.date is None:
+            self.err(f"{where}: valid run.date required for Task ownership")
+            return None
+        return owner_id[:15] == user_id[:15]
+
 
     def check_milestones(self, item, changes, where):
         """Show the reviewed exception without allowing it to replace the current follow-up."""
+        if "triage_owned_task" in item:
+            triage_task = item["triage_owned_task"]
+            task_id = triage_task.get("Id") if isinstance(triage_task, dict) else None
+            owned = self._check_task_ownership(triage_task, task_id, where)
+            if owned is False:
+                self.err(f"{where}: triage_owned_task must be a Operator-owned open Task")
+            if item.get("followup_task"):
+                self.err(f"{where}: triage_owned_task and followup_task are alternative ownership paths")
+        if "triage_task_gap" in item:
+            self.check_id("User", self.run.get("user_id"), where)
+            if not isinstance(self.run.get("user_id"), str) or not re.fullmatch(r"005[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?", self.run["user_id"]):
+                self.err(f"{where}: readable native run.user_id required for a Task gap")
+            if item["triage_task_gap"] is not True:
+                self.err(f"{where}: triage_task_gap must be true; a handoff label, never write authority")
+            if "triage_owned_task" in item or item.get("followup_task"):
+                self.err(f"{where}: Task gap and existing Task are alternative ownership paths")
         milestones = item.get("retained_milestones", [])
         if not isinstance(milestones, list):
             self.err(f"{where}: retained_milestones must be a list")
@@ -456,110 +361,8 @@ class Run:
             if not milestone.get("reason") or milestone.get("action_verified") is not True:
                 self.err(f"{where}: retained milestone needs reason and action_verified true after Event linkage review")
 
-    def today_action_size(self, item):
-        value = item.get(self.policy["forecast"]["amount_field"])
-        if value is None or value == "":
-            return None
-        if isinstance(value, bool):
-            raise ValueError("size must be numeric")
-        try:
-            amount = Decimal(str(value))
-        except InvalidOperation as error:
-            raise ValueError("size must be numeric") from error
-        if not amount.is_finite() or amount < 0:
-            raise ValueError("size must be finite and nonnegative")
-        return amount
 
-    def check_today_actions(self):
-        """Validate reviewed candidates without inferring buyer intent or new work."""
-        candidates = self.data.get("today_actions")
-        if not isinstance(candidates, list):
-            self.err("weekday report needs today_actions as a list, empty when no supported action exists")
-            return
-        for item in candidates:
-            if not isinstance(item, dict):
-                self.err("today_actions entries must be objects")
-                continue
-            where = f"today action {item.get('deal')}"
-            try:
-                self.today_action_size(item)
-            except ValueError as error:
-                self.err(f"{where} {error}")
-            self.check_id("Opportunity", item.get("deal"), where)
-            for field in ("name", "reason"):
-                value = item.get(field)
-                if not isinstance(value, str) or not value.strip() or any(c in value for c in "\r\n"):
-                    self.err(f"{where} needs a one-line {field}")
-            if isinstance(item.get("reason"), str) and any(c in item["reason"] for c in ";—:"):
-                self.err(f"{where} reason must use plain prose without semicolons, em dashes, or colons")
-            if item.get("deal") in self.deals and item.get("name") != self.deals[item["deal"]].get("name"):
-                self.err(f"{where} name must match the deal record")
-            kind = item.get("kind")
-            if kind not in TODAY_ACTION_ORDER:
-                self.err(f"{where} needs a supported action kind")
-            evidence = item.get("evidence") or []
-            self.check_evidence(evidence, where)
-            sources = {e.get("source") for e in evidence}
-            allowed = {"buyer_reply": {"Gmail"}, "meeting": {"Calendar", "Salesforce"},
-                       "due": {"Salesforce"}, "date_at_risk": {"Salesforce"}}.get(kind, set())
-            if not sources or not sources <= allowed:
-                self.err(f"{where} evidence must support its action kind using existing workflow sources")
-            if kind == "buyer_reply" and item.get("reply_reviewed") is not True:
-                self.err(f"{where} needs reply_reviewed true after reading the thread in both directions")
-            try:
-                when = date.fromisoformat(item.get("date", ""))
-                if when.isoformat() != item["date"]:
-                    raise ValueError("date format")
-            except (TypeError, ValueError):
-                self.err(f"{where} needs date YYYY-MM-DD")
-                continue
-            if self.date:
-                if kind == "meeting" and when not in (self.date, self.date + timedelta(days=1)):
-                    self.err(f"{where} meeting must be today or tomorrow")
-                if kind in ("due", "buyer_reply") and when > self.date:
-                    self.err(f"{where} cannot use a future due date or email")
-            for e in evidence:
-                if e.get("source") in RETRIEVED_SOURCES and e.get("_resolved") and e.get("date") != md(when):
-                    self.err(f"{where} date must match the saved source in the run timezone")
-                if kind == "buyer_reply" and e.get("source") == "Gmail":
-                    record = self.sources["Gmail"].get(e.get("source_id"), {})
-                    sender = parseaddr(record.get("from_") or "")[1].lower()
-                    if "@" not in sender or sender.rsplit("@", 1)[1] in self.policy["tooling"]["internal_domains"]:
-                        self.err(f"{where} buyer reply needs an external sender in the saved message")
 
-    def today_action_lines(self):
-        """Rank candidates and show only the strongest reason for each deal."""
-        withheld = {item["deal"] for item in self.data.get("withheld") or []}
-        if not self.coverage_ready():
-            affected = (self.coverage or {}).get("affected")
-            withheld.update(affected if affected is not None else [item["deal"] for item in self.data["today_actions"]])
-        def ranking(item):
-            size = self.today_action_size(item)
-            return (TODAY_ACTION_ORDER[item["kind"]], item["date"], size is None,
-                    -size if size is not None else Decimal(0), item["name"].casefold(), item["deal"], item["reason"])
-
-        candidates = sorted(self.data["today_actions"], key=ranking)
-        selected, seen = [], set()
-        for item in candidates:
-            if item["deal"] in withheld or not self.process_complete():
-                continue
-            if item["deal"] not in seen:
-                selected.append(item)
-                seen.add(item["deal"])
-            if len(selected) == 3:
-                break
-        lines = ["## Top 3 actions today", ""]
-        for rank, item in enumerate(selected, 1):
-            deal = self.link("Opportunity", item["deal"], item["name"])
-            owner = " · in deal thread" if item["deal"] in {row["deal"] for row in self.data.get("routed") or []} else ""
-            lines.append(f"- Priority {rank} · {deal}{owner} · {item['reason']}")
-        if selected:
-            lines += ["", "Use the proposal labels below for approvals."]
-            if self.uses_retrieved([item["evidence"] for item in selected]):
-                lines += ["", LIMITATION]
-        else:
-            lines.append("No supported actions to prioritize today.")
-        return lines + [""]
 
     def record_key(self, c):
         if c.get("action") == "create":
@@ -572,15 +375,15 @@ class Run:
             self.err(f"{where}: next_step needs current and proposed (null when unchanged)")
             return
         p = ns.get("proposed")
+        if p is not None or ns.get("proposed_full") is not None:
+            self.err(f"{where}: pipeline-review cannot propose a next-step change")
         if p is not None and self.entry_prefix and not str(p).startswith(self.entry_prefix):
             self.err(f"{where}: proposed next step must start with {self.entry_prefix!r}")
 
     def validate(self, mode):
-        if mode == "report" and self.run.get("branch") == "weekday":
-            self.check_today_actions()
         r = self.run
         if r.get("branch") not in SCOPE_FOR_BRANCH:
-            self.err("run.branch must be weekday or friday")
+            self.err("run.branch must be friday for every weekly or requested run")
         if self.date is None:
             self.err("run.date must be YYYY-MM-DD")
         if not r.get("id"):
@@ -654,10 +457,8 @@ class Run:
                 self.err("routed entries must be objects")
                 continue
             self.check_id("Opportunity", row.get("deal"), "routed")
-            if not isinstance(row.get("deal"), str):
-                continue
-            if not re.fullmatch(r"006[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?", row["deal"]):
-                self.err("routed needs a valid Opportunity Id")
+            if row.get("kind") != "deal_context":
+                self.err("routed.kind must be deal_context; Task issues belong to triage")
             if row.get("deal") in routed_ids:
                 self.err("routed: each deal appears once")
             routed_ids.add(row.get("deal"))
@@ -665,17 +466,46 @@ class Run:
                 value = row.get(field)
                 if not isinstance(value, str) or not value.strip() or any(char in value for char in "\r\n"):
                     self.err(f"routed needs a one-line {field}")
-            link = row.get("thread_url")
-            try:
-                parsed = urlparse(link) if isinstance(link, str) else None
-                valid = (parsed is not None and parsed.scheme == "https" and parsed.hostname
-                         and not parsed.username and not parsed.password and not re.search(r"\s", link))
-            except ValueError:
-                valid = False
-            if not valid:
+            if not isinstance(row.get("thread_url"), str) or not row["thread_url"].startswith("https://"):
                 self.err("routed needs an https deal-thread link")
             if row.get("deal") in self.deals:
                 self.err("routed deals must be counted separately from local flagged deals")
+            delivery = row.get("delivery")
+            if not isinstance(delivery, dict):
+                self.err("routed needs a delivery object")
+            else:
+                if delivery.get("command") != "mail_send":
+                    self.err("routed delivery.command must be mail_send")
+                if delivery.get("status") not in ("delivered", "failed"):
+                    self.err("routed delivery.status must be delivered or failed")
+
+        triage_deals = set()
+        triage_rows = self.data.get("triage", [])
+        if not isinstance(triage_rows, list):
+            self.err("triage must be a read-only list")
+            triage_rows = []
+        for row in triage_rows:
+            if not isinstance(row, dict):
+                self.err("triage entries must be objects")
+                continue
+            self.check_id("Opportunity", row.get("deal"), "triage")
+            if not isinstance(row.get("deal"), str) or row["deal"] not in set(self.deals) | routed_ids:
+                self.err("triage must name a reviewed flagged or routed deal")
+            else:
+                triage_deals.add(row["deal"])
+            for field in ("name", "reason"):
+                value = row.get(field)
+                if not isinstance(value, str) or not value.strip() or any(char in value for char in "\r\n"):
+                    self.err(f"triage needs a one-line {field}")
+            if any(field in row for field in ("changes", "delivery", "label")):
+                self.err("triage findings have no writes, delivery commands or approval labels")
+            if "triage_owned_task" not in row and "triage_task_gap" not in row and row.get("triage_next_step") is not True:
+                self.err("triage needs native triage_owned_task, triage_task_gap true or triage_next_step true")
+            self.check_milestones(row, [], "triage")
+            native_task = row.get("triage_owned_task")
+            if isinstance(native_task, dict) and isinstance(native_task.get("ActivityDate"), str) and self.date:
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", native_task["ActivityDate"]) and native_task["ActivityDate"] > self.date.isoformat():
+                    self.err("triage: future Tasks never enter triage findings; only pre-create duplicate checks")
 
         labels = {}
 
@@ -708,8 +538,6 @@ class Run:
             for n, c in enumerate(b.get("changes") or [], 1):
                 self.check_change(c, f"{where} change {n}")
             self.check_milestones(b, b.get("changes") or [], where)
-            if ns.get("proposed") is not None and b.get("status") != "superseded":
-                self.check_followup(b, b.get("changes") or [], where)
             self.check_evidence(b.get("evidence"), where)
 
         question_deals = set()
@@ -744,11 +572,8 @@ class Run:
                 if not o.get("text"):
                     self.err(f"{owhere}: text is required")
                 for n, c in enumerate(o.get("changes") or [], 1):
-                    self.check_change(c, f"{owhere} change {n}", option=True)
+                    self.check_change(c, f"{owhere} change {n}")
                 self.check_milestones(o, o.get("changes") or [], owhere)
-                if o.get("status") != "superseded" and any(
-                        c.get("field") == "Next_Steps__c" for c in o.get("changes") or []):
-                    self.check_followup(o, o.get("changes") or [], owhere)
             self.check_evidence(q.get("evidence"), where)
 
         if self.letters and r.get("branch") != "friday":
@@ -770,9 +595,9 @@ class Run:
                 self.err(f"{where}: status must be one of {sorted(ITEM_STATUSES)}")
             if isinstance(l.get("change"), dict):
                 self.check_change(l["change"], where, letter=True)
+                if l["change"].get("field") == "Description":
+                    self.check_size_exception_letter(l)
                 self.check_milestones(l, [l["change"]], where)
-                if l["change"].get("field") == "Next_Steps__c" and l.get("status") != "superseded":
-                    self.check_followup(l, [], where, task_letters)
             else:
                 self.err(f"{where}: one change, one record per letter")
             if not l.get("basis"):
@@ -812,10 +637,7 @@ class Run:
 
         def keys_of(item):
             changes = [item["change"]] if isinstance(item.get("change"), dict) else item.get("changes") or []
-            keys = [self.record_key(c) for c in changes]
-            if (item.get("next_step") or {}).get("proposed") is not None:
-                keys.insert(0, ("Opportunity", item.get("deal"), "Next_Steps__c"))
-            return keys
+            return [self.record_key(c) for c in changes]
 
         for b in self.active(self.blocks):
             owner = f"block {b.get('label')}"
@@ -859,7 +681,7 @@ class Run:
                 self.err(f"label {item.get('label')}: deal {deal} is withheld; remove the proposal or the withheld entry")
 
         flagged = set(self.deals)
-        covered = block_deals | question_deals | {w.get("deal") for w in self.data.get("withheld") or []}
+        covered = block_deals | question_deals | triage_deals | {w.get("deal") for w in self.data.get("withheld") or []}
         missing = flagged - covered
         if missing:
             self.err(f"flagged deals with no clear recommendation, question, or withheld entry: {sorted(missing)}")
@@ -905,9 +727,11 @@ class Run:
         questions = self.active(self.questions)
         k, u = self.counts["reviewed"], self.counts["not_checked"]
         f = len(self.deals)
-        routed = len(self.data.get("routed") or [])
+        routed = len(self.routing_rows("delivered"))
+        failed = len(self.routing_rows("failed"))
         return {"open": self.counts["open"], "reviewed": k, "flagged": f, "not_checked": u,
-                "no_trigger": k - f - routed - u, "routed": routed, "blocks": len(blocks), "questions": len(questions),
+                "no_trigger": k - f - routed - failed - u, "routed": routed, "routing_failed": failed,
+                "blocks": len(blocks), "questions": len(questions),
                 "letters": len(self.active(self.letters)),
                 "written": sum(record_outcomes(self.reconciled(lab)).count("written")
                                for lab in dict.fromkeys(str(w.get("label")) for w in self.writes))}
@@ -969,6 +793,12 @@ class Run:
     def kept_task(self, item):
         rid = item.get("followup_task")
         lines = [f"Task kept · {self.link('Task', rid, 'Task ' + rid)}"] if rid and str(rid).startswith("00T") else []
+        triage_task = item.get("triage_owned_task")
+        if item.get("triage_task_gap") is True:
+            lines.append("Triage owns the Task gap · no Task change")
+        if triage_task:
+            task_id = triage_task["Id"]
+            lines.append(f"Triage owns Task {task_id} · {self.link('Task', task_id, 'Task')} · no Task change")
         for milestone in item.get("retained_milestones") or []:
             lines.append(f"Later milestone Task kept · {self.link('Task', milestone['task_id'], 'Task ' + milestone['task_id'])}"
                          f" · due {milestone['due_date']} · {self.link('Event', milestone['event_id'], 'Event ' + milestone['event_id'])}"
@@ -980,7 +810,7 @@ class Run:
         out = [f"{b['label']}. {self.deal_link(b['deal'])}", "", "### Current next steps"]
         full = ns.get("proposed_full") is not None
         out.append(display(ns.get("current_full") if full else ns.get("current")))
-        out += ["", "### Recommended next steps"]
+        out += ["", "### Field recommendations"]
         if full:
             out.append(exact(ns["proposed_full"]))
         else:
@@ -1035,6 +865,86 @@ class Run:
             lines += [f"Run incomplete · {g}" for g in self.run.get("process_gaps") or []]
         return lines
 
+    def operator_statement_valid(self, stated):
+        if not isinstance(stated, dict) or not self.date:
+            return False
+        quote = stated.get("quote")
+        if not isinstance(quote, str) or not quote.strip():
+            return False
+        try:
+            return date.fromisoformat(stated.get("date")) <= self.date
+        except (TypeError, ValueError):
+            return False
+
+    def size_floor_exception(self, description):
+        if description is None:
+            return False
+        if not isinstance(description, str) or not self.date:
+            return None
+        phrase = "Size floor exception, kept open by Operator "
+        stamp = r"\d{1,2}/\d{1,2}/\d{2}"
+        suffix = re.escape(self.policy["salesforce"]["note_prefix"].replace("M/D/YY", "", 1))
+        pattern = rf"(?:(?P<prefix>{stamp}){suffix})?{re.escape(phrase)}(?P<decision>{stamp})"
+        ambiguous = False
+        for line in description.splitlines():
+            if phrase not in line:
+                continue
+            match = re.fullmatch(pattern, line.strip())
+            if match:
+                try:
+                    dates = [parse_mdy(value) for value in match.groups() if value]
+                    if all(value <= self.date for value in dates):
+                        return True
+                except ValueError:
+                    pass
+            ambiguous = True
+        return None if ambiguous else False
+
+    def lost_path_destination(self, reviewed):
+        if not isinstance(reviewed, dict):
+            return None
+        if reviewed.get("reason") not in {"buyer_deferral", "departed_sponsor"}:
+            return None
+        if not isinstance(reviewed.get("from_stage"), str) or not re.fullmatch(r"S[2-5]", reviewed["from_stage"]):
+            return None
+        if reviewed.get("evidence_complete") is not True or reviewed.get("buyer_step_within_three_months") is not False:
+            return None
+        if "employees" not in reviewed or "description" not in reviewed:
+            return None
+        employees = reviewed["employees"]
+        if employees in (None, ""):
+            answer = reviewed.get("operator_employee_count")
+            if not self.operator_statement_valid(answer):
+                return None
+            employees = answer.get("value")
+        floor = self.policy["pipeline"].get("worth_growing_min_employees")
+        if type(employees) is not int or employees < 0 or type(floor) is not int or floor <= 0:
+            return None
+        exception = self.size_floor_exception(reviewed["description"])
+        if exception is None:
+            return None
+        return "S1" if exception or employees >= floor else "Closed Lost"
+
+    def check_size_exception_letter(self, letter):
+        change = letter["change"]
+        statement = letter.get("operator_size_exception")
+        if not self.operator_statement_valid(statement):
+            self.err("size-floor exception needs Operator's reviewed quote and dated instruction")
+            return
+        if "current" not in change or change["current"] is not None and not isinstance(change["current"], str):
+            self.err("size-floor exception needs the exact native Description baseline")
+        existing = self.size_floor_exception(change.get("current"))
+        if existing is None:
+            self.err("size-floor exception needs an unambiguous native Description baseline")
+        elif existing is True:
+            self.err("size-floor exception already exists, do not duplicate it")
+        decision = date.fromisoformat(statement["date"])
+        dated = lambda value: f"{value.month}/{value.day}/{value.year % 100:02d}"
+        prefix = self.policy["salesforce"]["note_prefix"].replace("M/D/YY", dated(self.date), 1)
+        expected = prefix + "Size floor exception, kept open by Operator " + dated(decision)
+        if change.get("mode") != "prepend" or change.get("proposed") != expected:
+            self.err("size-floor exception only permits the exact dated marker prepended with the note prefix")
+
     def check_qualification(self):
         if not isinstance(self.qualification, list):
             self.err("friday.qualification must be a complete reviewed list")
@@ -1057,29 +967,48 @@ class Run:
                 self.err("qualification needs name and summary")
             action = row.get("action")
             if action == "closed_lost":
-                if not self.date or not closed_lost_silence_eligible(
+                if "lost_path_size" in row:
+                    if row.get("stage") != "S1" or self.lost_path_destination(row["lost_path_size"]) != "Closed Lost":
+                        self.err("qualification Closed Lost needs reviewed lost-path size below the floor without an exception")
+                elif "operator_stated_no" in row:
+                    if not self.operator_statement_valid(row.get("operator_stated_no")):
+                        self.err("qualification Closed Lost on Operator's stated no needs his quote and a date on or before the run date")
+                elif not self.date or not closed_lost_silence_eligible(
                         row.get("last_buyer_activity"), datetime.combine(self.date, datetime.min.time()), self.policy,
                         row.get("evidence_complete"), row.get("upcoming_event")):
                     self.err("qualification Closed Lost needs reviewed silence and no upcoming Event")
-            elif action == "next_step":
-                try:
-                    due = date.fromisoformat(row.get("next_step_date", ""))
-                    if self.date and due < self.date:
-                        raise ValueError("past date")
-                except (TypeError, ValueError):
-                    self.err("qualification next step needs a current or future next_step_date")
+            elif action == "triage":
+                if identifier not in {item["deal"] for item in self.data.get("triage", [])}:
+                    self.err("qualification triage must name a read-only triage finding")
             elif action == "needs_input":
                 if not any(question.get("deal") == identifier and question.get("status") == "open" for question in self.questions):
                     self.err("qualification needs_input must name an existing open question")
             else:
-                self.err("qualification action must be closed_lost, next_step, or needs_input")
+                self.err("qualification action must be closed_lost, triage, or needs_input")
         items = self.blocks + self.letters + [{**option, "deal": question.get("deal")} for question in self.questions
                                              for option in question.get("options") or []]
         for item in items:
             row = rows.get(item.get("deal"))
-            if not row or item.get("status") == "superseded":
+            if item.get("status") == "superseded":
                 continue
             changes = item.get("changes") or ([item["change"]] if item.get("change") else [])
+            basis = item.get("lost_path_size") if "lost_path_size" in item else (row or {}).get("lost_path_size")
+            if "lost_path_size" in item and "lost_path_size" in (row or {}) and basis != row["lost_path_size"]:
+                self.err("lost-path size letter and qualification must use the same reviewed facts")
+            if "lost_path_size" in item or "lost_path_size" in (row or {}):
+                destination = self.lost_path_destination(basis)
+                for change in changes:
+                    if change.get("field") == "StageName":
+                        current = change.get("current")
+                        stage = re.match(r"S([0-5])(?:\b|\s|-)", current) if isinstance(current, str) else None
+                        if not stage or int(stage.group(1)) < 1 or not destination or change.get("proposed") != destination:
+                            self.err("lost-path size StageName proposal needs the supported size-floor destination")
+                        elif int(stage.group(1)) >= 2 and basis["from_stage"] != "S" + stage.group(1):
+                            self.err("lost-path size origin must match the current S2+ stage")
+                        elif stage.group(1) == "1" and destination == "S1":
+                            self.err("lost-path size already at S1 stays open without a redundant stage proposal")
+            if not row:
+                continue
             for change in changes:
                 if change.get("object") != "Opportunity":
                     continue
@@ -1133,16 +1062,22 @@ class Run:
         if blocks or questions:
             head.append(HISTORY_NOTE + (" " + LEGACY_NOTE if self.shows_legacy() else ""))
         out = [f"# Pipeline review · {d}", "", "  \n".join(head), ""]
-        if self.run["branch"] == "weekday":
-            out += self.today_action_lines()
         out += ["## Routed to deal threads", ""]
-        routed = self.data.get("routed") or []
+        routed = self.routing_rows("delivered")
         if routed:
             out += [f"{len(routed)} routed · counted separately from local proposals", ""]
-            out += [f"- [{display(row['name'])}]({row['thread_url']}) · {display(row['reason'])}" for row in routed]
+            out += [f"- [{display(row['name'])}]({row['thread_url']}) · {display(row['reason'])}"
+                    f" · routed via {row['delivery']['command']}" for row in routed]
             out += [""]
         else:
             out += ["None.", ""]
+        if self.data.get("triage"):
+            out += ["## Triage owns Tasks and next steps", ""]
+            for row in self.data["triage"]:
+                deal = self.link("Opportunity", row["deal"], display(row["name"]))
+                out += [f"- {deal} · {display(row['reason'])}"]
+                out += [f"  - {line}" for line in self.kept_task(row)]
+            out += [""]
         out += ["## Clear recommendations", ""]
         if blocks:
             for b in blocks:
@@ -1152,19 +1087,24 @@ class Run:
         else:
             out += [EMPTY_BLOCKS, ""]
         out += ["## Needs your input", ""]
+        failed = self.routing_rows("failed")
+        if failed:
+            out += [f"- [{display(row['name'])}]({row['thread_url']}) · routing failed, needs input"
+                    f" · {row['delivery']['command']} · {display(row['reason'])}" for row in failed]
+            out += [""]
         if questions:
             out += ["  \n".join(f"{q['label']} · {self.deal_link(q['deal'])} · {display(q['context'])}" for q in questions), ""]
             if self.uses_retrieved([q["evidence"] for q in questions]):
                 out += [LIMITATION, ""]
             out += [WALK_NOTE, ""]
-        else:
+        elif not failed:
             out += [EMPTY_QUESTIONS, ""]
         if self.run["branch"] == "friday":
             out += self.friday_lines() + [""]
         out += ["## Coverage", "", "  \n".join(self.coverage_lines()), ""]
         out += [f"{n(c['no_trigger'], 'reviewed deal', 'reviewed deals')} had no trigger · {c['not_checked']} not checked", ""]
         if c["blocks"] or c["letters"]:
-            out.append(APPROVE_FRIDAY if self.run["branch"] == "friday" and c["letters"] else APPROVE_WEEKDAY)
+            out.append(APPROVE_FRIDAY)
         else:
             out.append(NO_CHANGES)
         return "\n".join(out).rstrip() + "\n"
@@ -1272,31 +1212,25 @@ class Run:
     def notification(self):
         c = self.count_values()
         d = md(self.date)
-        ready = self.coverage_ready() and self.process_complete()
+        ready = self.coverage_ready() and self.process_complete() and not c["routing_failed"]
         url = self.run["thread_url"]
         proposals = c["blocks"] + c["letters"]
-        if self.run["branch"] == "weekday":
-            if ready and proposals == 0 and c["questions"] == 0:
-                return {"send": False, "status": "clean",
-                        "reason": "No clear recommendations, no questions, and coverage ready."}
-            status = "action" if ready else "incomplete"
-            body = " · ".join(([] if ready else self.gap_summary()) + [self.counts_line()])
-            payload = {"title": TITLE_WEEKDAY.format(d=d), "body": f"{body} · {url}", "channels": ["in_app"]}
+        open_q = sum(1 for q in self.active(self.questions) if q.get("status") == "open")
+        if ready and open_q == 0:
+            status = "ready" if proposals else "complete"
         else:
-            open_q = sum(1 for q in self.active(self.questions) if q.get("status") == "open")
-            if ready and open_q == 0:
-                status = "ready" if proposals else "complete"
-            else:
-                status = "incomplete"
-            parts = [self.counts_line()]
-            if status == "incomplete":
-                gaps = self.gap_summary()
-                if not self.process_complete():
-                    gaps += [f"Run incomplete · {g}" for g in self.run.get("process_gaps") or []]
-                if open_q:
-                    gaps.append(f"Needs input · {n(open_q, 'open question', 'open questions')}")
-                parts = gaps + parts
-            payload = {"title": TITLE_FRIDAY[status], "body": " · ".join(parts + [url]), "channels": ["in_app"]}
+            status = "incomplete"
+        parts = [self.counts_line()]
+        if status == "incomplete":
+            gaps = self.gap_summary()
+            if not self.process_complete():
+                gaps += [f"Run incomplete · {g}" for g in self.run.get("process_gaps") or []]
+            if open_q:
+                gaps.append(f"Needs input · {n(open_q, 'open question', 'open questions')}")
+            if c["routing_failed"]:
+                gaps.append(f"Needs input · {n(c['routing_failed'], 'failed delivery', 'failed deliveries')}")
+            parts = gaps + parts
+        payload = {"title": TITLE_FRIDAY[status], "body": " · ".join(parts + [url]), "channels": ["in_app"]}
         if self.run.get("schedule"):
             payload["schedule_description"] = self.run["schedule"]
         return {"send": True, "status": status, **payload}

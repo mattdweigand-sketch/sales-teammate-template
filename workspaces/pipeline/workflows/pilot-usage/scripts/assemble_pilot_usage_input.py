@@ -4,6 +4,9 @@ Called by build_pilot_usage_report.py. Nothing here talks to a connector.
 
 `load_marked_results` reads three explicitly selected Snowflake submit handles. Their marker,
 organization, fixed report dates, and complete terminal results must match; no fallback to older calls.
+A positive failure or incomplete marker on the saved wrapper or the selected inner result fails that
+handle, even when another page or partition looks successful. Explicit complete zero rows stay valid.
+A response for another handle never poisons the selected one.
 `assemble_input` applies the review file the user approved in chat and returns the input for
 compute_pilot_usage_report.py. Roster rows and tasks whose email domain is in
 `policy.tooling.internal_domains` are dropped, as are tasks outside pilot_start..data_through.
@@ -71,14 +74,19 @@ def _merge_partitions(handle: str, pages: dict[int, dict[str, Any]]) -> list[dic
     return [dict(zip(columns, row)) for row in data]
 
 
-def _marked_failed(result: dict[str, Any]) -> bool:
-    """True when the saved page carries a failure marker, whatever rows it also carries."""
-    status = str(result.get("status") or result.get("state") or "").upper()
-    return bool(result.get("error")) or any(word in status for word in ("FAIL", "ABORT", "CANCEL", "ERROR"))
+def _failure_marker(saved: dict[str, Any], result: dict[str, Any]) -> str | None:
+    """The positive failure or incomplete marker on the saved wrapper or the selected inner result, else None.
 
-
-def _failure_text(result: dict[str, Any]) -> str:
-    return str(result.get("error") or result.get("message") or result.get("status") or result.get("state"))
+    Checked before any row is accepted, whatever rows the page also carries. `error`, `isError` and `truncated`
+    count only when truthy, so `error: null`, `isError: false` and `truncated: false` are not failures by presence."""
+    for where, record in (("wrapper", saved), ("result", result)):
+        status = str(record.get("status") or record.get("state") or "").upper()
+        if record.get("error") or record.get("isError") or any(word in status for word in ("FAIL", "ABORT", "CANCEL", "ERROR")):
+            return f"{where}: " + str(record.get("error") or record.get("message") or record.get("status") or record.get("state")
+                                     or "isError")
+        if record.get("truncated"):
+            return f"{where}: truncated"
+    return None
 
 
 def _verify_statement(statement: str, marker: str, organization_uuid: str,
@@ -144,9 +152,10 @@ def load_marked_results(tool_calls_dir: Path, statement_handles: dict[str, str],
         handle = result.get("statement_handle")
         if handle not in statement_handles.values():
             continue
-        # A failure page may carry `data: null`; check the marker before the row shape.
-        if _marked_failed(result):
-            failed[handle] = _failure_text(result)
+        # A failure page may carry `data: null`; check wrapper and inner markers before the row shape.
+        marker = _failure_marker(saved, result)
+        if marker is not None:
+            failed[handle] = marker
             completed.pop(handle, None)
             continue
         if handle in failed or not isinstance(result.get("data"), list):

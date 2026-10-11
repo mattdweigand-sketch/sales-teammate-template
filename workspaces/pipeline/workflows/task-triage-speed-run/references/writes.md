@@ -1,55 +1,66 @@
 # Writes and close
 
-"Auto date moves" runs before the section walk. "Writes" applies to the approved full pass or remaining batch. "Close" runs once, at the end.
-
-## Auto date moves
-
-Apply only qualifying rows per `references/grouping.md` "Auto date moves" and `rules#auto_date_move`, before the section walk without a question.
-Display each Task link, current and next-business-day dates, qualifying sent-message evidence, and the exact `rules#note_prefix` note line before writing.
-Fresh-read the Task and recheck ownership and qualifying evidence immediately before writing. Rerun both bounded reply checks before the write.
-Recheck Slack per `references/collect.md` "Slack replies" and rerun the helper with fresh reviewed receipts. Any substantive Slack reply at or after the send blocks the move.
-For this triage pre-write reply recheck per `rules#run_start`, record a fresh local-offset time as the search window end and helper `--as-of`, not the original run start.
-Apply the same lookback and pagination checks.
-If the note, Contact, date, status, or evidence changed, skip and reassess without writing. A Task in `Pipeline review owns` never qualifies.
-Require both the full thread read and fully paginated targeted inbound search per `references/collect.md` "Gather evidence" item 8 to pass.
-Any tool error, timeout, unread thread, incomplete check, or substantive inbound since the qualifying send means needs-input with no automatic write.
-Change only Task `ActivityDate` to the computed next business day and prepend the displayed reason to Description, keeping its history. No other field or action is pre-approved.
-Date the new note with the run-start local date. It becomes the newest note, so the same sent email cannot qualify again.
-If the Task already has that date, do not write or call it moved. Follow `rules#write_protocol` for each write and read both ActivityDate and Description back.
-Combine verified results in the stage receipt as `Auto-moved` with each Task link, old-to-new date, and reason. Report failed or unverified writes as pending with the tool message.
-Each verified receipt line names both `full thread read passed` and `targeted inbound search passed`, with the sent-message link and search window.
-Never label an unverified write `Auto-moved`, never automatically retry it, and never include a verified move in a later date or completion map.
+"Writes" applies only to the approved full pass or remaining batch. "Close" runs once at the end. No write is automatic.
 
 ## Writes
 
-Apply `references/grouping.md` "Pipeline ownership" before every write. Active-deal-thread Tasks, Pipeline-owned current-action Tasks and ambiguous candidates get no Task write in triage.
-Recheck ownership immediately before a Task write. If it is now owned elsewhere or ambiguous, skip it and place it in the appropriate ownership group with its Opportunity link.
-Never take ownership after failed delivery.
-An approved Gmail draft for such a Task does not authorize a date move, completion, or Task note.
+Apply approvals per `references/walk.md` "Section walk", never another approval per group, draft or paired Task create and completion.
+Every proposal snapshots its actual sources per `rules#repo_currency`. Immediately before each approved write, require the unchanged saved scope and all native record gates.
+Fresh-read the exact old Task, its native linkage and all related open Tasks before a completion or create. Stop on changed Status, ActivityDate, LastModifiedDate, Subject or Description.
+Recheck action evidence and ownership. A closed Task, changed owner or ambiguous linkage stops the old proposal. Re-propose with fresh evidence, never reuse approval after a material change.
+Skip Tasks interaction-sync already handled, verified against fresh native state and its receipt. A changed date alone does not prove handling. Never freeze every Task modified today.
+Recheck Slack with fresh reviewed receipts before each write per `rules#run_start`. Record a fresh local-offset search window end and helper `--as-of`, without changing the original run start.
+Use replies only as evidence of the matching Task action. Missing or incomplete results never prove absence or authorize a write.
+Preserve history per `rules#note_prefix`. Every changed Task gets the displayed reason and source note, with raw existing Description below it unchanged.
 
-Apply approvals to the full proposal per `references/walk.md` "Section walk", never one approval per group or per draft and date map.
-An approved numbered draft row covers its displayed Task date and note, but create and verify the draft per `references/drafts.md` before either Task write.
-A failed or unverified draft gets no Task date or note write. Report it without blocking the other approved rows.
-Recycle requires `approved` with its Task number. `all` never covers Recycle or CRM corrections, and an unresolved Push or Recycle choice authorizes no write.
-CRM corrections follow the main pass with one record per approval per `references/crm-corrections.md`.
+- **Complete plus next Task.** Scheduled completion needs matching sent email, held call, reply, or a verified triage-created Gmail draft.
+  One-deal source permission follows `rules#task_date_coordination`.
+  Display the old Task payload and either the new Task's full payload or the verified existing next-action Task's Id and linkage in the same numbered row.
+  A new Task has a new Subject and date, correct OwnerId, WhatId and WhoId, and Not Started status. Recheck duplicates before any create.
+  When an open Task already holds the next action, name it as `reuse existing`. After approval, verify it still holds that action, write and read back any displayed next step, then complete the
+  evidenced due Task and read it back. Create nothing.
+  A next Task discovered after display changes the create payload. Re-propose completion with that Id for fresh approval, then complete without a duplicate. It is not a permanent completion blocker.
+  Write and read the approved next step first for a deal pair. Create and read back the matching Task only when none already holds the next action.
+  Then complete the old Task with its approved note and read it back.
+  A failed create or readback leaves the old Task open and due. A completion failure after a verified create is partial. Report both actual records, never imply rollback or retry automatically.
+  Apply this same pair to deal Tasks and the unthreaded Opportunity branch. Triage may create their approved follow-up Gmail drafts, never send email or write other Opportunity fields.
+  For each deal current-action row, write its displayed Next_Steps__c entry first per `rules#next_steps` and `rules#next_steps_format`, preserving history.
+  Then its matching Task and old Task completion follow the pair write order.
+- **Task gap.** Re-read the Opportunity's next step and all related open Tasks immediately before the approved create. Require complete native reads and unchanged owner, links, action and date.
+  A suitable Task discovered after display stops the create without a duplicate. Show the actual Task and revised outcome, never complete another Task under a gap approval.
+  Create only the displayed Operator-owned Not Started Task and verify every field by native readback. A gap row never completes an old Task. Its displayed next-step entry and new Task follow the same
+  pair write order.
+- **Draft-backed pair.** Includes deal Task follow-ups. Wait for its displayed row's approval. Create and verify the exact Gmail draft per `references/drafts.md` before any paired Task write.
+  A failed or unverified draft gets no next-step, completion or next-Task write. Existing drafts or notes that say a draft exists do not qualify as triage-created action evidence.
+  Save the verified draft id and thread link in the next Task's approved note. Its Subject first checks whether that exact draft was sent; if not, flag `Draft not sent`.
+- **Date move.** Displayed next-step entry first, then matching Task ActivityDate plus required note, with its quoted source per `rules#task_date_coordination`, including its one-deal exception only.
+  Run `task_reschedule_check --phase proposal` before display and save baseline, baseline_links and exact payload. Immediately prewrite require fresh native reads and ready with that same payload.
+  Follow `rules#task_date_coordination` and its native hasMore completeness, current-action review, note history and readback gates.
+- **Recycle.** Requires `approved` with its Task number. `all` never covers Recycle or CRM corrections. An unresolved choice authorizes no write.
+  Contact cooldown marking follows the displayed `policy.salesforce.cooldown_marker` and `policy.followup.cooldown_days`, preserving Description history.
+  Recycle by itself never completes a due Task or changes its date. Completion still needs action evidence and the next Task in the same approval.
+- **CRM corrections.** Follow the main pass, one record per approval per `references/crm-corrections.md`. Neither `all` nor main-pass selections approve them.
 
-- Every Task change carries a note: a `rules#note_prefix` line on Task `Description` stating the change and the reason. Show it in the approved map or automatic move display.
-- Date move: Task `ActivityDate` plus the note.
-- Complete: Task `Status` = `Completed` plus the note.
-- Recycle: complete the Task with its note, then prepend `policy.salesforce.cooldown_marker` to Contact `Description`, keeping existing text.
-- Re-read each record immediately before writing. If its date or status changed since the proposal, skip it and say so.
-- Read every changed record back, including `Description`. Report `Verified in Salesforce` only after readback. Report an unverified write as pending. A failed row does not block other rows.
+Before any paired write, fresh-read Next_Steps__c and stop for a changed baseline. Read Next_Steps__c back before its matching Task write, preserving all history.
+Contact-only, meeting-prep and later milestone rows have no Opportunity next-step write. Read every changed record back, including `Description`. Verify every new Task field and every changed field
+before `Verified in Salesforce`.
+If a Task write fails after the next step was written, mark the row partial with the actual state of both sides and one corrective proposal. Never claim both applied.
+Never repeat verified draft creation or a verified record write. Failed writes stay pending with the native error, actual state and one corrective proposal.
+Skip an already-satisfied change without another note. No email is sent. Fresh reads are not an atomic lock or rollback mechanism.
 
-Post one combined receipt for the approved pass, then keep unapproved or failed rows in one remaining batch with their original numbers or owned Task links.
-Accept follow-up approval on that batch without re-walking. Reread failed or unverified writes before any retry proposal. Never repeat verified draft creation or a verified record write.
+**Receipts.** After approved writes, post the combined run receipt to Operator first with verified changes, skipped rows, partial pairs and failures.
+Then send each affected deal thread a receipt of at most 3 lines with verified old/new Task links or partial results. Never ask it to act on triage items or ask Operator.
+State the verified written next step and Task links in the receipt, never a request for another field or Task proposal.
+Use the saved matcher session id. Send each deal receipt once with `pplx tm mail send <session id> "<message>"`.
+Record the transport and outcome, never claim delivery without success.
+Never wait, sleep or poll for a rate limit. A deal receipt never delays the run receipt or any write.
+Run every `pplx` command as its own top-level line, never inside a script, function, loop or conditional, so its credentials apply.
+List undelivered receipts in a follow-up line. Failed receipt delivery does not undo verified writes or authorize replay.
 
 ## Close
 
-Before the close summary, re-run the `workspaces/pipeline/workflows/task-triage-speed-run/references/collect.md` "Collect the run" query and save the result.
-Then run `policy.tooling.scripts.closeout_check <saved JSON> --as-of <run start with local offset>`; it exits nonzero when any open Task is still due today, overdue, or undated.
-Report the helper's actual result, including a nonzero result when owned Tasks remain. Recheck their ownership on fresh Opportunity and Task records.
-The triage run is complete only when the check passes or every remaining row has verified pipeline ownership or an explicit user deferral with its reason recorded.
-List each owned row with its verified deal-thread or pipeline-review destination and actual delivery or blocker, not as completed or user-deferred. Keep ambiguous candidates held with the reason.
-Report the final query result in the close summary. Any other remaining row without an explicit deferral needs a decision before close.
-
-List: drafts created (unsent), Tasks completed, Tasks moved, Contacts recycled, CRM corrections applied, Tasks left for manual follow-through with reasons. End with `No emails sent.`
+Fresh-query the run queue and run `closeout_check` with the current local-offset time. A nonempty due, overdue or undated queue still fails. Never loosen the helper or push dates to make it pass.
+Show every remaining Task once with its blocker, missing evidence or explicit deferral. Ownership or a prepared action is not completion.
+Report verified changes, partial pairs and remaining approvals in one combined receipt and remaining batch before deal receipts per "Writes" receipt instructions.
+List any later undelivered receipts in a follow-up line. Keep native evidence in the sandbox.
+Finish with `No emails sent.`. Daily notification suppression follows `references/daily.md`, never hides blockers, proposals or incomplete evidence.

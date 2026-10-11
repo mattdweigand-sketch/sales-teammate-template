@@ -3,8 +3,10 @@
 
 Keeps exactly First Name, Last Name, Email. Drops rows missing any of them,
 in-run duplicates, and emails listed in --exclude (e.g. Salesforce matches).
-Holds rows whose email domain does not match the company website column in
+Holds rows whose email domain does not match the Website column in
 domain_mismatch.csv, unless the email is listed in --allow.
+Only the Website column is compared. A chunk without it, or a row with an empty
+Website, is reported as domain not checked, never compared against the email's own domain.
 Writes '<CODE> 1.csv', '<CODE> 2.csv', ... and batches_report.json.
 """
 import argparse
@@ -14,7 +16,7 @@ import re
 from pathlib import Path
 
 COLS = ["First Name", "Last Name", "Email"]
-SITE_HINTS = ("website", "domain")
+SITE_COLUMN = "Website"
 
 
 def site_domain(value):
@@ -46,12 +48,15 @@ def main():
     exclude = read_emails(a.exclude)
     allow = read_emails(a.allow)
 
-    rows, seen, mismatches = [], set(), []
-    counts = {"input": 0, "missing_name_or_email": 0, "duplicate": 0, "excluded": 0, "domain_mismatch": 0}
+    rows, seen, mismatches, missing_site_files = [], set(), [], []
+    counts = {"input": 0, "missing_name_or_email": 0, "duplicate": 0, "excluded": 0, "domain_mismatch": 0,
+              "domain_not_checked": 0}
     for f in sorted(Path(a.clean_dir).glob("*.csv")):
         with open(f, newline="", encoding="utf-8-sig") as fh:
             reader = csv.DictReader(fh)
-            site_col = next((h for h in reader.fieldnames or [] if any(k in h.lower() for k in SITE_HINTS)), None)
+            site_col = next((h for h in reader.fieldnames or [] if h.strip().lower() == SITE_COLUMN.lower()), None)
+            if site_col is None:
+                missing_site_files.append(f.name)
             for r in reader:
                 counts["input"] += 1
                 vals = [(r.get(c) or "").strip() for c in COLS]
@@ -66,7 +71,9 @@ def main():
                     counts["excluded"] += 1
                     continue
                 site = site_domain(r.get(site_col)) if site_col else ""
-                if site and key not in allow and not domain_matches(key.split("@")[-1], site):
+                if not site:
+                    counts["domain_not_checked"] += 1
+                elif key not in allow and not domain_matches(key.split("@")[-1], site):
                     counts["domain_mismatch"] += 1
                     mismatches.append(vals + [r.get("Company Name", ""), site])
                     continue
@@ -90,7 +97,10 @@ def main():
             w.writerow(COLS + ["Company Name", "Website"])
             w.writerows(mismatches)
 
-    report = {"counts": counts, "final_rows": len(rows), "batches": files,
+    domain_check = "checked" if not counts["domain_not_checked"] else "not checked for some rows"
+    if missing_site_files:
+        domain_check = f"not checked, no {SITE_COLUMN} column in {', '.join(missing_site_files)}"
+    report = {"counts": counts, "final_rows": len(rows), "batches": files, "domain_check": domain_check,
               "domain_mismatch_file": str(out / "domain_mismatch.csv") if mismatches else None}
     (out / "batches_report.json").write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))

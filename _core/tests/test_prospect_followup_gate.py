@@ -9,6 +9,8 @@ from pathlib import Path
 from unittest import mock
 from zoneinfo import ZoneInfo
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "_core"
 SCRIPTS = ROOT / "workspaces" / "prospecting" / "workflows" / "signal-prospecting" / "03-followup" / "scripts"
@@ -18,15 +20,16 @@ import prospect_common  # noqa: E402
 import prospect_followup_gate as fg  # noqa: E402
 
 POLICY = prospect_common.load_policy()
-OPERATOR = POLICY["identity"]["sfdc_user_id"]
+MATT = POLICY["identity"]["sfdc_user_id"]
 TODAY = date(2026, 9, 21)
 
 BASE = {
     "sent": [{"message_id": "m1", "thread_id": "t1", "subject": "Context engineering inside Acme",
               "sent_at": "2026-09-21T14:05:00-07:00", "to": "casey@example.com"}],
-    "account": {"id": "001A", "owner_id": OPERATOR},
+    "account": {"id": "001A", "owner_id": MATT},
     "contacts": [{"id": "003A", "email": "Casey@Example.com"}],
     "tasks": [{"id": "00T1", "subject": "LinkedIn - Connected", "description": ""}],
+    "open_opportunities": [],
     "signal": {"signal_type": "ai_exec_appointment", "angle": "Model flexibility"},
 }
 
@@ -45,7 +48,7 @@ class Allow(unittest.TestCase):
         self.assertEqual(t["Subject"], "Follow up: Context engineering inside Acme")
         self.assertEqual(t["WhoId"], "003A")
         self.assertEqual(t["WhatId"], "001A")
-        self.assertEqual(t["OwnerId"], OPERATOR)
+        self.assertEqual(t["OwnerId"], MATT)
         self.assertEqual(t["Status"], "Not Started")
         self.assertEqual(t["TaskSubtype"], "Task")
         self.assertEqual(t["ActivityDate"], "2026-09-28")
@@ -179,6 +182,32 @@ class Block(unittest.TestCase):
         self.assertEqual(len(out["reasons"]), 2)
 
 
+class OpenOpportunities(unittest.TestCase):
+    """V1, W5-03. The gate needs the complete open Opportunity read and blocks when the Account has an open deal."""
+
+    def test_missing_null_or_wrong_type_blocks(self):
+        p = copy.deepcopy(BASE); del p["open_opportunities"]
+        for packet in (p, {**copy.deepcopy(BASE), "open_opportunities": None},
+                       {**copy.deepcopy(BASE), "open_opportunities": {"id": "006A"}}):
+            with self.subTest(packet=packet.get("open_opportunities", "missing")):
+                out = fg.check(packet, POLICY, today=TODAY)
+                self.assertEqual(out["verdict"], "block")
+                self.assertTrue(any(r.startswith("open_opportunities missing or not a list") for r in out["reasons"]))
+
+    def test_open_opportunity_blocks_and_names_it(self):
+        out = run(open_opportunities=[{"id": "006A"}, {"id": "006B"}])
+        self.assertEqual(out["verdict"], "block")
+        self.assertEqual(out["reasons"], ["open Opportunity 006A, 006B on the Account. Pipeline owns this account"])
+
+    def test_open_opportunity_blocks_alongside_other_reasons(self):
+        out = run(open_opportunities=[{"id": "006A"}], tasks=None)
+        self.assertEqual(out["verdict"], "block")
+        self.assertEqual(len(out["reasons"]), 2)
+
+    def test_empty_list_allows(self):
+        self.assertEqual(run(open_opportunities=[])["verdict"], "allow")
+
+
 class TasksAndTimestamp(unittest.TestCase):
     def test_tasks_missing_blocks(self):
         p = copy.deepcopy(BASE); del p["tasks"]
@@ -264,6 +293,23 @@ class Cli(unittest.TestCase):
         out = json.loads(p.stdout)
         self.assertEqual(out["verdict"], "error")
         self.assertIn("account must be an object", out["reason"])
+
+    def test_core_supplies_both_policy_reads(self):
+        fixture = copy.deepcopy(POLICY)
+        fixture["salesforce"] = dict(fixture.get("salesforce") or {}, note_prefix="M/D/YY QA - ")
+        with tempfile.TemporaryDirectory() as td:
+            core = Path(td) / "core"
+            core.mkdir()
+            (core / "policy.yaml").write_text(yaml.safe_dump(fixture))
+            p = self.run_gate(BASE, "--core", str(core))
+            self.assertEqual(p.returncode, 0, p.stdout)
+            self.assertTrue(json.loads(p.stdout)["task"]["Description"].startswith("9/21/26 QA - "), p.stdout)
+            del fixture["salesforce"]["note_prefix"]
+            (core / "policy.yaml").write_text(yaml.safe_dump(fixture))
+            p = self.run_gate(BASE, "--core", str(core))
+            self.assertEqual(p.returncode, 2, p.stdout)
+            self.assertEqual(json.loads(p.stdout)["verdict"], "error")
+        self.assertTrue(fg.check(copy.deepcopy(BASE), POLICY, today=TODAY)["task"]["Description"].startswith("9/21/26 SR - "))
 
 if __name__ == "__main__":
     unittest.main()

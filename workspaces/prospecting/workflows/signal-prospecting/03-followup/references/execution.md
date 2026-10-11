@@ -2,18 +2,22 @@
 
 ## Send proof
 
-Operator names a recipient, a subject, or a Gmail draft from this thread. Run a live Gmail `from:<policy.prospecting.identity.owner_email> in:sent to:<email>` search and keep hits whose subject and
+Operator names a recipient, a subject, or a Gmail draft. Run a live Gmail `from:<policy.prospecting.identity.owner_email> in:sent to:<email>` search and keep hits whose subject and
 date match. Record message id, thread id, subject, aware sent timestamp, recipient. A draft, a thread summary, or memory is never proof.
+A send whose computed due date is before today is blocked. The due date is the send date in `policy.prospecting.identity.timezone` plus `policy.prospecting.followup.due_calendar_days`.
+Do not move that date forward to bypass the gate.
 
 ## Salesforce reads
 
 Account by the recipient's domain (Id, OwnerId). Contacts on that Account where `Email = '<recipient>'` (Id, Email). Tasks on those Contacts, any status (Id, Subject, Status, Description).
-Read only. Exactly one current Account owned by `policy.prospecting.identity.sfdc_user_id` and one matching Contact are required. Missing or ambiguous Accounts stop.
+Open Opportunities on the Account where `policy.prospecting.salesforce.open_opportunity` (Id). Pass the complete list as `open_opportunities`, empty when there are none.
+Read only. Exactly one current Account owned by `policy.prospecting.identity.sfdc_user_id` and one matching Contact are required. Missing or ambiguous Accounts or Contacts stop.
 
 ## Packet and gate
 
-Build the packet in the shape from the gate docstring. `signal.signal_type` and `signal.angle` come from the outreach gate's allow verdict shown in this thread. Preserve the label as approved
-then. Do not look it up in today's talk track. Absent in the thread, ask Operator, never guess.
+Build the packet in the shape from the gate docstring. `signal.signal_type` and `signal.angle` preserve the historical labels from the approved outreach verdict.
+Use the verdict shown in this thread. Operator may supply those historical labels here when the outreach ran elsewhere.
+Absent in the thread, ask Operator, never guess. Do not read another session or infer labels from the sent body. Do not look them up in today's talk track.
 Run `policy.tooling.scripts.prospect_followup_gate --packet <p.json>`. Any
 `block` ends the run. Report the reasons. Do not work around them.
 
@@ -51,6 +55,4 @@ Created: <Task Id> | readback: match / mismatch on <fields>
 
 ## Sales authority
 
-Use rules#approval and rules#write_protocol for each exact proposal, approval and native readback. Never treat a live policy mirror as independent approval.
-An open Opportunity belongs to Pipeline. Re-read current owner, open Opportunities and duplicates before proposals and again before every approved write.
-Never retry a failed or mismatched create blindly. Report the actual partial result and one corrective proposal for approval.
+Approval, native readback and failed-write handling follow rules#approval and rules#write_protocol.

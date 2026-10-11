@@ -25,20 +25,21 @@ Claim boundaries. Without one, leave the sentence out. For a `paid_individuals_p
 ## Recipient
 
 Prefer the person named in the signal. Sources in `policy.prospecting.outreach.recipient_sources` order. Query Salesforce Contacts on the Account with Email and Id. A Salesforce recipient needs
-its Contact Id. Search Gmail for prior threads with the person, then Apollo. If Operator explicitly supplies the address here, record `Operator supplied in this conversation`. Never guess an
-address or
+its Contact Id. Search Gmail for prior threads with the person, then Apollo. If Operator explicitly supplies the address here, record `Operator supplied in this conversation`.
+Never guess an address or
 relabel its source.
 
 ## Activity
 
 Read Salesforce Tasks and Events on the Account and Contact inside `policy.prospecting.outreach.activity_lookback_days`, including date, target, and each Task's status and subtype. Search Gmail
 `in:sent to:<address>` for the same window. Both completed reads go into the packet unfiltered. Missing or failed reads stop. They are not empty results. Preserve unknown targets so the gate can
-suppress conservatively.
+suppress conservatively. A successful sent search with no retrieved hit may clear Gmail suppression only under the `rules#absence_conclusions` signal-outreach exception. State its retrieved-set limit.
 
 ## Angle
 
-Choose one messaging angle from `workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md` for the verified initiative and recipient's evidenced responsibility.
-State the persona/responsibility in ordinary language and give one sentence explaining the connection. Titles are search aids, not proof of ownership or authority. If responsibility is unknown,
+Choose one messaging angle from `workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md`
+for the verified initiative and recipient's evidenced responsibility. State the
+persona/responsibility in ordinary language and give one sentence explaining the connection. Titles are search aids, not proof of ownership or authority. If responsibility is unknown,
 research it or ask Operator. Do not
 fabricate a rationale.
 
@@ -84,14 +85,11 @@ Limits: <material inference, uncertainty, or unresolved style issue; omit when n
 ## Boundaries
 
 - Sending email, replying, or forwarding. Ever (rules#approval).
-- A recipient address that is guessed, pattern-built, or from a source not in policy.prospecting.
+- A recipient address that is guessed, pattern-built, or from a source not in policy.prospecting.outreach.recipient_sources.
 - Unsupported product claims or wording that exceeds the talk track's Claim boundaries. An angle label or passing gate does not establish claim support.
 - Any Salesforce write. Follow-up Tasks belong to `signal-followup`.
 - Ledgers or files written to the project. Gmail is the record of what was drafted.
 
 ## Sales authority
 
-Use rules#approval and rules#write_protocol for each exact proposal, approval and native readback. Never treat a live policy mirror as independent approval.
-An open Opportunity belongs to Pipeline. Re-read current owner, open Opportunities and duplicates before proposals and again before every approved write.
-Canonical draft, body and voice rules apply with policy.email_voice. A conflicting rule holds the proposal for Operator.
-Never retry a failed or mismatched create blindly. Report the actual partial result and one corrective proposal for approval.
+Approval, native readback and failed-write handling follow rules#approval and rules#write_protocol.

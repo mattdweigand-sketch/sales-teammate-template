@@ -5,14 +5,17 @@ Read only the scoped sections named by the selected contract. Save identities, s
 ## Search
 
 Use verified Salesforce Contact emails for the selected deal or Task contacts. Deduplicate by Contact. Never guess identity from a name.
-- Use the `slack_direct` connector and `slack_search_users` with the Contact's email as `query`. Accept only an exact email match, paging through all returned cursors.
+- Use the `slack_direct` connector and `slack_search_users` with the Contact's last name as a `keywords` array and full name as `natural_language_query`.
+  Wrap a multi-word last-name keyword in double quotes. Use `response_format="detailed"` and `limit=20`, paging through all returned cursors.
+  Accept only a returned `Email:` value that exactly matches the verified Salesforce Contact email, case-insensitive. The name is only the search key, never identity proof.
   No Slack user means that contact is `not checked` for Slack per `rules#not_checked_means`. Ambiguous matches, unread results, and tool errors also remain not checked.
   A Slack user is verified only after an exact Contact email match. A failed identity lookup does not establish a verified Slack user.
 - Compute the window from run start minus `policy.tooling.slack_lookback_days` through run start in the run timezone, then convert both bounds to Unix epoch seconds.
   Call `slack_search_public_and_private` with those bounds as string `after` and `before` parameters, `content_types="messages"`, `include_bots=false`, and `include_context=true`.
-  Keep date words and date filters out of `query`. Check returned message `ts` values against the numeric bounds.
-- Search DMs and group DMs with `query="with:<@SlackUserId>"` and `channel_types="im,mpim"`.
-  Search shared channels with `query="from:<@SlackUserId>"` and `channel_types="public_channel,private_channel"`.
+  Use `keywords=[]` and `natural_language_query=""` for message searches. Keep date words and date filters out of `keywords`, `filters` and `natural_language_query`.
+  Check returned message `ts` values against the numeric bounds.
+- Search DMs and group DMs with `filters="with:<@SlackUserId>"` and `channel_types="im,mpim"`.
+  Search shared channels with `filters="from:<@SlackUserId>"` and `channel_types="public_channel,private_channel"`.
   Keep only verified Slack Connect channels and messages about that deal. Verify shared-channel context from the returned results or state the gap.
   Read the returned context before using a message as evidence, including relevant replies in either direction. Exclude bot messages from evidence and context.
 - Page each search using only its own returned cursor until none remains. Save all search inputs, pages, and identity results in the sandbox.
@@ -45,4 +48,4 @@ Save reviewed substantive replies as a JSON list for `gmail_contact_stats --slac
 | `is_bot` | `false` for a buyer reply |
 
 The helper reports a positive veto when a qualifying Slack reply is at or after the last sent email. A false veto is not evidence of no reply or automatic approval.
-No receipt or Slack retrieval gap never substitutes for either required Gmail reply check. Recheck Slack evidence immediately before an automatic date write.
+No receipt or Slack retrieval gap never substitutes for either required Gmail reply check.

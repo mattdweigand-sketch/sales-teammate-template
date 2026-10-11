@@ -7,6 +7,8 @@ Read at the matching Process step. Each section is one source. Save every result
 - Named person or company: calendar search by name, `policy.tooling.calendar_lookback_days` behind to `policy.tooling.calendar_lookahead_days` ahead.
   If no event, prep from Salesforce and say `No meeting found on the calendar.`
 - Window ("today", "tomorrow", "this week", "each of these"): calendar search over that range. Keep events with at least one attendee whose domain is not in `policy.tooling.internal_domains`.
+- For "next external call" without a window, search from run start through `policy.tooling.calendar_lookahead_days` ahead and choose the earliest future external event.
+  State the searched window if none is found.
 - Calendar retrieval per `rules#calendar_search`. Record per call: title, start, duration, link, external attendees with emails, internal attendees, booking-form text if present in the description.
 
 ## Salesforce
@@ -45,7 +47,7 @@ Counts and newest-thread claims are bounded by `rules#absence_conclusions`. Read
 Search Momentum per `rules#momentum`. Take: date, attendees, buyer-stated facts as short quotes, commitments by either side, open questions.
 If the search errors, write `Prior call transcripts not checked: <error>` per `rules#not_checked_means`.
 
-## Example Product footprint
+## Product footprint
 
 Call `policy.tooling.org_lookup_tool` for each external attendee email per `rules#org_lookup`.
 Report `org_name`, `org_service_type`, `billing_status`, `billing_quantity`, and `member_count` as returned. A 404 or error writes `Org status unverified for <email>: <response>`.

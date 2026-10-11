@@ -49,8 +49,8 @@ Read at verify: `Sync_Free_Trial_to_ADMIN__c`, `Admin_Last_Sync_Time__c`, `ADMIN
 ## Line items (preflight)
 
 `SELECT Product2.Name, Quantity, UnitPrice, ListPrice, Discount, TotalPrice FROM OpportunityLineItem WHERE OpportunityId = '<Id>'`. Required at Closed Won. Check seats and credits equal the agreement.
-Credits per `policy.close.credits`. Line items are edited by hand in Salesforce, not proposed here. A mismatch or missing line item is needs-input naming who fixes it, Deal Desk or Operator, and
-holds A.
+Credits per `policy.close.credits`. Line items are edited by hand in Salesforce, not proposed here.
+A mismatch or missing line item is needs-input naming who fixes it, Deal Desk or Operator, and holds A.
 
 ## Win fields (proposal A)
 

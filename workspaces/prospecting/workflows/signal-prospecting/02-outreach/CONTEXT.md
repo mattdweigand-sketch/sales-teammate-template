@@ -1,6 +1,6 @@
 ---
 cadence: one-off
-reads: references/, _core/policy.yaml (prospecting, tooling, email_voice, template), _core/rules.md and current run evidence
+reads: references/, _core/policy.yaml (prospecting, tooling, template, email_voice, followup), _core/rules.md and current run evidence
 writes: unsent Gmail draft after approval
 next: Pipeline when an open Opportunity exists, otherwise Outputs handoff
 ---
@@ -8,14 +8,17 @@ next: Pipeline when an open Opportunity exists, otherwise Outputs handoff
 # Outreach
 
 Turns one qualified bundle into one Gmail draft (`policy.prospecting.outreach.max_drafts_per_run`). The bundle arrives as fenced JSON in the thread from a scan stage. This stage never finds
-signals, never sends, and never writes to Salesforce. Product facts come from policy.template.
-Wording follows `workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md`.
+signals, never sends, and never writes to Salesforce. Product wording comes only from `workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md`.
 
 ## Inputs
 
 | Source | File/Location | Section/Scope | Why |
 |---|---|---|---|
-| Policy | `_core/policy.yaml` | prospecting.outreach, prospecting.identity, prospecting.user_scan, template | Set bundle age, verified recipient sources, suppression and draft limits |
+| Core freshness | `_core/rules.md`, `_core/scripts/interfaces.md` | `rules#repo_currency`, `workflow_revision_check`, "Workflow revisions" | Scoped proposal and prewrite evidence |
+| Policy | `_core/policy.yaml` | `tooling.scripts.workflow_revision_check` | Shared freshness helper path |
+| Policy | `_core/policy.yaml` | prospecting.outreach, prospecting.identity, prospecting.user_scan | Set bundle age, verified recipient sources, suppression and draft limits |
+| Policy | `_core/policy.yaml` | prospecting.salesforce.open_opportunity | Current open-deal routing guard |
+| Policy | `_core/policy.yaml` | prospecting.approval.never, prospecting.approval.readback_required, prospecting.approval.unattended_writes | Authority mirrors for the draft and its readback |
 | Reference | `workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/talk-track.md` | Core messaging, applicable Match the angle row, Claim boundaries, supporting evidence only for claims used | Select supported product wording and keep claims within the chosen angle |
 | Reference | `workspaces/prospecting/references/icp.md` | Relevant Target personas section | Connect the initiative to the recipient responsibility supported by sources |
 | Tool | `workspaces/prospecting/workflows/signal-prospecting/02-outreach/scripts/prospect_outreach_gate.py` | Docstring and CLI | Check evidence age, recipient, suppression and the exact proposed draft |
@@ -24,17 +27,16 @@ Wording follows `workspaces/prospecting/workflows/signal-prospecting/02-outreach
 | External skill | draft-anti-slop | Advisory style review named in step 6 | Surface advisory cold-email style warnings without overriding approved wording |
 | Working | Qualified bundle in this thread, recipient sources and current Salesforce/Gmail activity reads | No bundle reconstruction from memory or summaries | Bind this draft to its actual bundle, verified recipient and completed suppression reads |
 | Reference | `workspaces/prospecting/workflows/signal-prospecting/02-outreach/references/execution.md` | Full file | Apply bundle intake, recipient checks, suppression and exact Gmail readback |
-| Rules | `_core/rules.md` | rules#approval, rules#write_protocol, rules#absence_conclusions, rules#not_checked_means | Require exact approval and native readback, and separate unread evidence from absence |
+| Company profile | `_core/policy.yaml` | template.icp, template.product_name, template.product_value, template.product_evidence, template.product_review_date | Adopter-reviewed product and fit |
+| Rules | `_core/rules.md` | rules#approval, rules#write_protocol, rules#absence_conclusions, rules#not_checked_means, rules#handoff_delivery | Require exact approval and native readback, and separate unread evidence from absence |
 | Rules | `_core/rules.md` | rules#email_body | Check customer draft wording and re-read linked security evidence before answering |
-| Policy | `_core/policy.yaml` | email_voice, tooling | Shared draft review and tool paths |
+| Policy | `_core/policy.yaml` | email_voice, tooling, followup.breakup_after_unanswered | Shared draft review, unanswered ladder and tool paths |
 
 ## Process
 
 1. Load the scoped Inputs.
 2. Intake the same-thread fenced bundle for the signal Operator chooses using Intake. Confirm one current Operator-owned named Account and its scan route, refresh stale source evidence,
-   never reconstruct missing fields. Any open
-   Opportunity hands
-evidence to Pipeline and stops prospecting.
+   never reconstruct missing fields. Any open Opportunity hands evidence to Pipeline and stops prospecting.
 3. Resolve the recipient and verified address using Recipient.
 4. Complete and preserve all Salesforce and Gmail suppression reads using Activity.
 5. Choose one supported messaging angle for the evidenced responsibility using Angle.

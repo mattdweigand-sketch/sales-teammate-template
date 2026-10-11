@@ -32,10 +32,14 @@ Read at the two Collect steps. Save every result in the sandbox.
 
 ## Calendar and Gmail
 
-Evidence scope: every S2+ deal with CloseDate in the current quarter, plus next-quarter S2+ deals with `policy.forecast.amount_field` set. Never fall back to Amount. For each Account in that scope:
+Evidence scope: every open deal at or above `policy.forecast.open_min_stage` with CloseDate in the current quarter, plus next-quarter deals at or above that floor with
+`policy.forecast.amount_field` set. That one policy floor also gates `coverage_check --scope forecast` and `qualified_pipeline`. Never fall back to Amount. For each Account in that scope:
 - Contacts: `SELECT Id, Name, Email, AccountId FROM Contact WHERE AccountId IN (<in-scope account ids>) AND Email != null`.
 - Calendar: per `rules#calendar_search`, the Account name as the defined term, `policy.tooling.calendar_lookback_days` back to `policy.tooling.calendar_lookahead_days` ahead.
-  Record held meetings and accepted upcoming ones.
+  Start at local midnight on the first date and end at the next midnight after the last date. Split searches share an exact boundary, never leave a one-second gap.
+  Supplemental Subject searches and date sweeps may cover only the unmatched Events' dates. They do not replace the full-window defined search.
+  Record held meetings and accepted upcoming ones. Latest activity is the newest held meeting or buyer message on or before as-of and feeds `last_activity_date`.
+  An accepted upcoming meeting is next-meeting evidence in the packet, never `last_activity_date`. The helper rejects a future activity date.
 - Gmail: one search per Account, `from:@<account domain> after:<quarter start>`, then by Contact name when empty (`policy.forecast.gmail_query`). Page until no `next_cursor`.
   On a timeout, rerun that query once with `after:<run date minus policy.forecast.activity_days>`, never the full window.
   A successful rerun counts as checked for bucketing, and the report's Not checked line names the Account and the unread earlier window.

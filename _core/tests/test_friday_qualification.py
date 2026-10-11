@@ -20,7 +20,7 @@ class QualificationTriggerTests(unittest.TestCase):
                        "Amount": None, "Next_Steps__c": "10/2/26 SR - Confirm the plan by 10/6/26.",
                        "CloseDate": "2026-12-01"}
 
-    def test_s1_missing_amount_flags_on_friday_only(self):
+    def test_s1_missing_amount_flags_on_weekly_and_requested_days(self):
         for amount in (None, 0, ""):
             self.record["Amount"] = amount
             result = hygiene_check.check(self.record, self.policy, {}, self.friday)
@@ -28,8 +28,8 @@ class QualificationTriggerTests(unittest.TestCase):
             self.assertEqual(result["blank_fields"], ["Amount"])
             self.assertIn("blank_field", result["triggers"])
         result = hygiene_check.check(self.record, self.policy, {}, self.friday + timedelta(days=1))
-        self.assertNotIn("blank_fields", result)
-        self.assertEqual(result["triggers"], [])
+        self.assertEqual(result["blank_fields"], ["Amount"])
+        self.assertIn("blank_field", result["triggers"])
 
     def test_s0_does_not_inherit_s1_or_s2_amount_requirements(self):
         self.record["StageName"] = "S0"
@@ -71,8 +71,12 @@ class QualificationReportTests(unittest.TestCase):
         self.render.tearDown()
 
     def row(self, identifier=render_tests.BIO):
-        return {"deal": identifier, "name": "Early customer", "stage": "S1", "action": "next_step",
-                "next_step_date": "2026-10-05", "summary": "Confirm a dated qualification step."}
+        if identifier not in {row['id'] for row in self.data['deals']}:
+            self.data['deals'].append({'id':identifier,'name':'Early customer','flags':['blank_field']})
+            self.data['counts']['reviewed']+=1
+        self.data.setdefault('triage',[]).append({'deal':identifier,'name':'Early customer','reason':'Triage owns the next step','triage_next_step':True})
+        return {"deal": identifier, "name": "Early customer", "stage": "S1", "action": "triage",
+                "summary": "Triage owns the next step."}
 
     def test_full_count_but_ten_rows_at_most(self):
         self.data["friday"]["qualification"] = [self.row(f"006000000000{number:06d}") for number in range(12)]
@@ -93,6 +97,18 @@ class QualificationReportTests(unittest.TestCase):
             data["friday"]["qualification"][0].update(change)
             self.render.fails("report", data, "reviewed silence")
 
+    def test_closed_lost_accepts_operator_stated_no_with_quote_and_date(self):
+        row = self.row()
+        row.update(action="closed_lost", operator_stated_no={"quote": "No interest in an enterprise contract.", "date": "2026-09-27"},
+                   last_buyer_activity="2026-09-27", evidence_complete=True, upcoming_event=True)
+        self.data["friday"]["qualification"] = [row]
+        self.render.ok("report", self.data)
+        for stated in (None, {}, {"quote": " ", "date": "2026-09-27"}, {"quote": "No.", "date": "bad"},
+                       {"quote": "No.", "date": "2026-09-29"}, {"quote": "No."}, "No."):
+            data = copy.deepcopy(self.data)
+            data["friday"]["qualification"][0]["operator_stated_no"] = stated
+            self.render.fails("report", data, "Operator's stated no")
+
     def test_upward_stage_move_is_rejected_even_with_evidence(self):
         self.data["friday"]["qualification"] = [self.row()]
         self.data["friday"]["letters"][0]["change"].update(field="StageName", current="S1", proposed="S2")
@@ -112,26 +128,120 @@ class QualificationReportTests(unittest.TestCase):
         self.data["friday"]["qualification"][0]["stage"] = "S0"
         self.render.fails("report", self.data, "missing S1 Amount")
 
-    def test_unknowns_require_question_and_next_step_requires_date(self):
+    def test_unknowns_require_question_and_next_step_requires_triage(self):
         self.data["friday"]["qualification"] = [{**self.row(), "action": "needs_input"}]
         self.render.fails("report", self.data, "existing open question")
-        self.data["friday"]["qualification"] = [{**self.row(), "next_step_date": None}]
-        self.render.fails("report", self.data, "next_step_date")
+        self.data["friday"]["qualification"] = [self.row()]
+        self.data["triage"] = []
+        self.render.fails("report", self.data, "read-only triage finding")
 
-    def test_friday_requires_pass_and_weekdays_exclude_it(self):
+    def test_weekly_pass_required_on_requested_weekday_too(self):
         del self.data["friday"]["qualification"]
         self.render.fails("report", self.data, "friday.qualification is required")
         data = render_tests.base()
-        data["friday"] = {"qualification": [self.row()]}
-        self.render.fails("report", data, "qualification is Friday only")
+        del data["friday"]["qualification"]
+        self.render.fails("report", data, "friday.qualification is required")
 
     def test_contract_preserves_evidence_and_approval_gates(self):
         workflow = ROOT / "workspaces/pipeline/workflows/pipeline-review"
         text = (workflow / "references/proposals.md").read_text()
         for phrase in ("buyer evidence", "Never propose moving an early stage up", "non-editable formula", "never ARR__c",
-                       "fresh reads, approval, and readback", "no upcoming Event"):
+                       "fresh reads, approval, and readback", "no upcoming Event", "Operator's stated no"):
             self.assertIn(phrase, text)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StageMoveGateTests(unittest.TestCase):
+    """Closed Won and early-stage upward moves are rejected in proposal and receipt modes, with or without a qualification row."""
+
+    def setUp(self):
+        self.render = render_tests.Render("runTest")
+        self.render.setUp()
+
+    def tearDown(self):
+        self.render.tearDown()
+
+    def letter(self, current, proposed, mode, status="proposed", qualification=None):
+        data = render_tests.friday(render_tests.base())
+        letter = data["friday"]["letters"][0]
+        letter["status"] = status
+        letter["change"].update(field="StageName", current=current, proposed=proposed)
+        if qualification is not None:
+            data["friday"]["qualification"] = qualification
+        if mode == "receipt":
+            data["writes"] = []
+        return data
+
+    def qualification_row(self, stage):
+        return [{"deal": render_tests.BIO, "name": "Acme Devices", "stage": stage, "action": "triage",
+                 "summary": "Triage owns the next step."}]
+
+    def run_mode(self, mode, data, needle=None):
+        coverage = None if mode == "receipt" else render_tests.READY
+        if needle is None:
+            return self.render.ok(mode, data, coverage)
+        return self.render.fails(mode, data, needle, coverage)
+
+    def test_early_stage_upward_move_without_qualification_row_fails_in_both_modes(self):
+        for mode, status in (("report", "proposed"), ("receipt", "approved")):
+            for current, proposed in (("S1", "S2"), ("S0", "S1"), ("S0", "S3"), ("S1 - Qualify", "S2")):
+                with self.subTest(mode=mode, current=current, proposed=proposed):
+                    data = self.letter(current, proposed, mode, status=status)
+                    self.assertEqual(data["friday"]["qualification"], [])
+                    self.run_mode(mode, data, "never proposes an upward stage move from an early stage")
+
+    def test_early_stage_upward_move_with_qualification_row_still_fails(self):
+        for mode, status in (("report", "proposed"), ("receipt", "approved")):
+            with self.subTest(mode=mode):
+                data = self.letter("S1", "S2", mode, status=status, qualification=self.qualification_row("S1"))
+                self.run_mode(mode, data, "never proposes an upward stage move")
+
+    def test_closed_won_is_rejected_in_both_modes(self):
+        for mode, status in (("report", "proposed"), ("receipt", "approved")):
+            for current in ("S3", "S5", "S1"):
+                with self.subTest(mode=mode, current=current):
+                    data = self.letter(current, "Closed Won", mode, status=status)
+                    self.run_mode(mode, data, "never proposes Closed Won")
+
+    def test_stage_change_without_a_readable_source_stage_fails(self):
+        for current in (None, "", "Qualify", 3):
+            with self.subTest(current=current):
+                data = self.letter(current, "S3", "report")
+                self.run_mode("report", data, "needs its current source stage")
+        data = self.letter("S2", "S9", "report")
+        self.run_mode("report", data, "must be a policy stage or Closed Lost")
+
+    def test_s2_to_s3_and_nonblank_amount_corrections_stay_permitted(self):
+        for mode, status in (("report", "proposed"), ("receipt", "approved")):
+            with self.subTest(mode=mode, change="S2 to S3"):
+                self.run_mode(mode, self.letter("S2", "S3", mode, status=status))
+            with self.subTest(mode=mode, change="Amount"):
+                data = render_tests.friday(render_tests.base())
+                letter = data["friday"]["letters"][0]
+                letter["status"] = status
+                letter["change"].update(field="Amount", current=90000, proposed=100000)
+                if mode == "receipt":
+                    data["writes"] = []
+                self.run_mode(mode, data)
+
+    def test_early_stage_gate_follows_policy_not_a_hardcoded_list(self):
+        policy = yaml.safe_load((ROOT / "_core/policy.yaml").read_text())
+        self.assertEqual(policy["pipeline"]["early_stages"], ["S0", "S1"])
+        data = self.letter("S2", "S3", "report")
+        self.run_mode("report", data)
+
+    def test_next_steps_write_is_never_an_approved_change(self):
+        """G1. The renderer has no implicit Next_Steps__c key, so a receipt can never report one as Written."""
+        data = render_tests.base()
+        block = data["blocks"][0]
+        block["status"] = "approved"
+        block["next_step"]["proposed"] = "Next: call Pat · Operator · 10/9/26"
+        data["writes"] = [{"label": "1", "object": "Opportunity", "id": render_tests.BIO, "field": "Next_Steps__c",
+                           "outcome": "written"}]
+        result = self.render.call("receipt", data, None)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("cannot propose a next-step change", result.stderr)
+        self.assertIn("Next_Steps__c is not an approved change of 1", result.stderr)

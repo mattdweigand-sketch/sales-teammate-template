@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic hygiene check for pipeline-review.
+"""Deterministic hygiene check for pipeline-review and task-triage-speed-run.
 
 Usage: hygiene_check.py <opps.json> --as-of ISO_DATETIME_WITH_OFFSET
                         [--tasks tasks.json] [--events events.json] [--policy PATH] [--json]
@@ -18,9 +18,8 @@ policy.pipeline.stages; date_at_risk's stage gate is
 policy.pipeline.date_at_risk_below_stage.
 A required field counts as blank when it is None, '', False, or 0 (Amount 0 is
 blank). Events require end timestamps to count as elapsed. Elapsed does not
-prove held. Deviation from the stale policy text: a date-only (timing-unknown)
-Event and an open Task never count as activity, so stale can fire even when one
-sits inside stale_days. --as-of carries the run's local offset and sets the local
+prove held. A date-only (timing-unknown) Event and an open Task never count as
+activity, so stale can fire even when one sits inside stale_days. --as-of carries the run's local offset and sets the local
 date. A first line in the retired `Next:` format is REVIEW, never parsed. Activity
 evidence retains record IDs and linkage for report verification.
 """
@@ -54,7 +53,7 @@ def note_regexes(prefix=DEFAULT_NOTE_PREFIX):
     )
 
 
-NOTE_RE, DATED_NEXT_STEP_RE = note_regexes()
+DATED_NEXT_STEP_RE = note_regexes()[1]
 NEXT_STEP_DUE_DATE_RE = re.compile(
     r"\b(?:on|by)\s+(?P<date>\d{1,2}/\d{1,2}(?:/\d{2,4})?)(?![\d/])",
     re.I,
@@ -211,7 +210,7 @@ def check(rec, pol, acts, as_of):
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     out = {"Id": rec.get("Id"), "Account": acct, "Stage": stage, "triggers": []}
     scope = {s[:2] for s in pp["stages"]}
-    early_scope = {s[:2] for s in pp.get("early_stages", [])} if today.weekday() == 4 else set()
+    early_scope = {s[:2] for s in pp.get("early_stages", [])}
     note_re, dated_re = note_regexes((pol.get("salesforce") or {}).get("note_prefix") or DEFAULT_NOTE_PREFIX)
 
     if stage[:2] not in scope | early_scope:

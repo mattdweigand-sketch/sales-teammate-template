@@ -70,3 +70,28 @@ Signal Prospecting works only on existing Salesforce Accounts owned by the user 
 Event Sequence may include explicitly marked house-owned or missing Accounts under optional configured policy. Both branches default off.
 Event Sequence coordinates List Prep, Sequence Plan and Launch. Each stage loads only its scoped Inputs and preserves its approval and handoff gates.
 The Prospecting context routes these two workflows. Named Signal skills go directly to their stages through root `AGENTS.md`. Event Sequence enters through its coordinator.
+
+## Recent workflow improvements
+
+Pipeline review uses weekly or requested reports. Task triage owns routine follow-up work and checks native state before approved date changes.
+Forecasts preserve unknown evidence as Held rows. An optional shared Google Slides branch updates only the configured operator slide after exact approval.
+Customer review uses first-win milestones. Legacy renewal receipts remain readable and do not create new renewal work.
+Systems can run `process-capture` to test a reusable procedure on a second case. Only generalized approved capture records enter the repo.
+
+## Configured deployment and upgrades
+
+Onboarding creates a separate company workspace without Git or external activation. Review operating policy and configure the adopter deployment repository, remote and branch.
+Publish those actual configured files through authorized repository maintenance before affected CRM, Gmail draft or Event writes.
+Proposal snapshots bind the selected deployed instructions and target. Old snapshots require a fresh proposal. Fetch and native record reads do not form an atomic lock.
+
+Existing adopters should port approved mechanisms into their own repository. Preserve tenant values, field/table maps, targets, product evidence, house-owner opt-ins and existing permissions.
+Do not rerun onboarding over an existing workspace. Remove legacy auto_date_move settings and obsolete daily Pipeline or renewal schedules through separately authorized configuration.
+Read-only runs, internal-ask polling and unsent manager drafts retain their selected contract scope. This template release does not activate any runtime integration or automation.
+
+Existing run evidence with old actor fields needs a current reviewed proposal using `operator_*` and `operator_typed_command`. Never rewrite historical approval receipts to reuse them.
+Revision snapshots use format 2 and bind the deployed repository, remote and branch. Rebuild affected proposals and 19 skill pointers against the configured deployment.
+Legacy renewal entries are ignored and retained. Migration never automatically reschedules, completes or removes Salesforce Tasks.
+Review the new integration choice and policy fields with the adopter. Keep optional Slides and the size floor disabled until their selected configuration is approved and verified.
+
+Git rollback changes instructions. It does not reverse sent mail, campaign enrollment, provisioning or customer-system writes.
+The responsible workflow reconciles each actual partial external state before any separately approved corrective action.

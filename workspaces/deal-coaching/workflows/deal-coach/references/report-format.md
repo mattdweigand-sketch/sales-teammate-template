@@ -38,7 +38,8 @@ For each deal, lead with its largest gap. Present the score table first, strateg
 |---|---|---|---|
 | Each MEDDICC element | Evidence-backed level | Source and date or timestamp | Minimum from policy and missing evidence |
 
-Answer every strategy question briefly and name the supported risk patterns. End with the single action this week and the person to involve.
+Assess all ten questions internally. Mark unsupported answers unknown. Display material supported facts, major gaps, supported risk patterns, and one next move per deal with the person to involve.
+Show all answers on request. Score table, scoring, stakeholder coverage and count evidence unchanged.
 
 Add one count line to the weekly deal review. `Gaps closed since last deal review <n>. Open gaps on deals closing this quarter <n>.`
 A gap is a MEDDICC element scored below its `policy.coach.stage_gate_minimums` value for the deal's current stage. Label it by element, for example EB or PP.
@@ -51,6 +52,8 @@ If the baseline or current-quarter coverage is incomplete, mark the affected cou
 After the per-deal reviews, add a Stakeholder coverage section. Give one line for every owned open S3 to S5 Opportunity, including deals outside `policy.coach.deal_review_count`.
 Each line names the economic buyer or signer, security or IT reviewer, and legal or procurement contact, each with Contact Roles, Gmail, or Momentum evidence, or marked missing.
 Use dated buyer participation in Gmail or Momentum within the supported review window to identify active contacts. Contact Roles alone do not prove a contact is active.
+Read every Account-filtered Momentum window within `policy.momentum.lookback_days` for this coverage. It is not a target-call lookup and does not stop at the first matching call.
+An Account-filtered window that returns `policy.momentum.sweep.page_size` meetings is capped. Split it and reread, or mark that Account not checked for coverage, never fully covered.
 Flag a deal as single-threaded when only one distinct active contact is evidenced, even when that person holds multiple roles. Unread evidence is not checked, not proof of missing roles or inactivity.
 Suggest a Contact or Contact Role only when a named person has evidence. Send that suggestion as a one-line note to the Pipeline thread per "Output rules", never a write.
 

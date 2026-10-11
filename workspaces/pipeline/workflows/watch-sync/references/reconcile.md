@@ -2,16 +2,19 @@
 
 ## Read
 
-1. Query all open Opportunities owned by `policy.prospecting.identity.sfdc_user_id` in S1 and `policy.pipeline.stages`.
+1. Query all open Opportunities owned by the verified run user, the `userId` from `rules#run_start`, in S1 and `policy.pipeline.stages`.
    Retrieve Account, StageName, CloseDate, Contact Roles, and Customer_Point_of_Contact__c, resolving every contact's email domain.
    Ignore `policy.tooling.generic_email_domains` and list those contacts separately. Missing email or unresolved contact is not checked.
-2. Discover the three active-deal buyer-email automations from the current project's approved configuration inventory.
+2. Read the invoking automation's current prompt and Operator-approved source-thread evidence as the configuration inventory.
+   Discover the three active-deal buyer-email automations from that inventory.
    Read each with `pplx automation get`, including every `from_address contains` filter. Use live IDs, never repo-stored IDs.
-3. Read the account-name condition in the four shared-channel watches for deal desk, GRC help, enterprise security questions, and legal hub.
+3. Read each shared-channel watch's Account-name condition from the account list in its `admission_instructions` with `pplx automation get`.
    Use the same approved inventory to resolve live IDs. Compare only open Opportunities in `policy.pipeline.stages`. One account change applies to all four.
+   No configured Account-name condition means that comparison is not checked, never an empty list. Propose no Account-list changes for that watch.
    A missing, ambiguous, unreadable, or incomplete inventory means the affected comparison is not checked. Do not guess a consumer.
-4. For every Account with an open Opportunity in `policy.pipeline.stages`, search current project sessions by Account name with `pplx project sessions list --search`.
-   Match the exact `<Account> deal` title. Also inventory all such deal threads to identify Accounts with no open in-scope Opportunity.
+4. For every Account with an open Opportunity in `policy.pipeline.stages`, use `deal_thread_match` with complete saved project pages.
+   Include an Account search for every Account per its interface and "Account session search".
+   Also inventory all project deal threads to identify Accounts with no open in-scope Opportunity. Ambiguous or incomplete matches hold affected thread proposals.
 5. Read Operator's explicit retained-thread exceptions from approved source-thread or configuration evidence.
    If that list cannot be read completely, do not propose any archive. Report the missing exception evidence.
 

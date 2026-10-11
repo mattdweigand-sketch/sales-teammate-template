@@ -14,12 +14,14 @@ One proven send becomes one open Salesforce Task (`policy.prospecting.followup.m
 
 | Source | File/Location | Section/Scope | Why |
 |---|---|---|---|
+| Core freshness | `_core/rules.md`, `_core/scripts/interfaces.md` | `rules#repo_currency`, `workflow_revision_check`, "Workflow revisions" | Scoped proposal and prewrite evidence |
 | Policy | `_core/policy.yaml` | prospecting.identity, prospecting.followup | Set due-date rules and exact Task fields for the proven send |
+| Policy | `_core/policy.yaml` | prospecting.approval.readback_required, prospecting.approval.unattended_writes | Authority mirrors for approved Tasks and native readback |
 | Tool | `workspaces/prospecting/workflows/signal-prospecting/03-followup/scripts/prospect_followup_gate.py` | Docstring and CLI | Validate the proven send identity and reject duplicate follow-up Tasks |
 | Tool | `workspaces/prospecting/scripts/prospect_readback_check.py` | Docstring and CLI | Compare approved fields with the complete native returned record or draft |
-| Working | Live Gmail sent-mail proof, Salesforce Account, Contact and Task reads, outreach verdict in this thread | Historical labels as approved at send time | Tie the Task to a native sent message and its historical approved signal |
+| Working | Live Gmail sent-mail proof, Salesforce Account, Contact and Task reads, outreach verdict or Operator-supplied historical labels in this thread | Historical labels as approved at send time | Tie the Task to a native sent message and its historical approved signal |
 | Reference | `workspaces/prospecting/workflows/signal-prospecting/03-followup/references/execution.md` | Full file | Link sent proof, existing Tasks and exact approval to one follow-up write |
-| Rules | `_core/rules.md` | rules#approval, rules#write_protocol, rules#note_prefix, rules#absence_conclusions, rules#not_checked_means | Require exact approval and native readback, and separate unread evidence from absence |
+| Rules | `_core/rules.md` | rules#approval, rules#write_protocol, rules#note_prefix, rules#absence_conclusions, rules#not_checked_means, rules#handoff_delivery | Require exact approval and native readback, and separate unread evidence from absence |
 | Policy | `_core/policy.yaml` | tooling | Registered helper paths |
 | Policy | `_core/policy.yaml` | prospecting.salesforce, salesforce.note_prefix | Fresh open Opportunity reads and canonical Description prefix |
 
@@ -28,7 +30,7 @@ One proven send becomes one open Salesforce Task (`policy.prospecting.followup.m
 1. Load the scoped Inputs.
 2. Establish a matching live Gmail send using Send proof. A draft or memory does not qualify. Any open Opportunity hands evidence to Pipeline and stops prospecting.
 3. Resolve the current Operator-owned named Account, Contact and existing Tasks using Salesforce reads. Query all open Opportunities on the Account. Any open deal routes to Pipeline.
-4. Build the same-thread signal packet and run the follow-up gate using Packet and gate. A block ends the run.
+4. Build the packet with historical labels established in this thread and run the follow-up gate using Packet and gate. A block ends the run.
 5. Run the Audit and present the exact Task using Proposal and Report. Stop for approval.
 6. After approval create the approved Task and compare all fields with native readback using Write and readback. Stop on mismatch. Recheck owner, open Opportunities and duplicates before writing
 per rules#write_protocol.

@@ -29,7 +29,7 @@ Brief Operator before one named external call or every external call in a window
 3. Read Salesforce per `references/collect.md` "Salesforce".
 4. Read Gmail per `references/collect.md` "Gmail".
 5. Search prior calls per `references/collect.md` "Prior calls".
-6. Check the Example Product footprint per `references/collect.md` "Example Product footprint".
+6. Check the Product footprint per `references/collect.md` "Product footprint".
 7. Research the company and attendees per `references/collect.md` "Public research".
 8. Set call type and discovery gaps per `rules#call_type`.
 9. Write the brief per `references/brief-formats.md`, single-call or multi-call. Return the brief itself, not a source list with commentary.

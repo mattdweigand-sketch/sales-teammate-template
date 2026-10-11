@@ -1,4 +1,4 @@
-"""Synthetic customer milestone, renewal, receipt and migration regressions."""
+"""Synthetic customer milestone, receipt and legacy-renewal removal regressions."""
 import copy
 import json
 import subprocess
@@ -21,6 +21,51 @@ WINDOW_START = "2026-09-07T07:30:00-07:00"
 
 
 class CustomerReviewTests(unittest.TestCase):
+    def test_subscription_dates_never_select_a_customer_without_a_due_milestone(self):
+        self.evidence["opportunities"][0]["CloseDate"] = "2024-01-01"
+        for end_date in ("2027-01-15", "2026-11-06", "2026-10-05", "2026-10-04", None, "bad"):
+            with self.subTest(end_date=end_date):
+                self.evidence["opportunities"][0]["Subscription_Cancel_Date__c"] = end_date
+                result = self.review()
+                self.assertEqual(result["accounts"], [])
+                self.assertEqual(result["not_due_count"], 1)
+                self.assertEqual(result["carry_forward_held"], [])
+
+    def test_legacy_renewal_receipts_are_ignored_before_validating_their_removed_schema(self):
+        for entry in ({"kind": "renewal"}, {"kind": "renewal", "account_id": "account",
+                       "notice_date": "bad", "receipt_date": "future", "milestone_months": 3},
+                      {"kind": "renewal", "account_id": "account", "opportunity_id": "won",
+                       "notice_date": "2026-10-17", "subscription_end_date": "2027-01-15",
+                       "resolution": "task_created_read_back", "record_id": "task",
+                       "evidence": "old-readback", "receipt_date": "2027-01-01T00:00:00-08:00"}):
+            with self.subTest(entry=entry):
+                result = self.review(carry_forward=[entry], reviewed=[entry])
+                self.assertEqual(result, self.review())
+
+    def test_mixed_legacy_renewals_preserve_milestone_holds_and_reviewed_suppression(self):
+        obsolete = {"kind": "renewal"}
+        held = self.receipt_entry()
+        reviewed = self.receipt_entry(reviewed=True)
+        self.assertEqual(self.row(carry_forward=[obsolete, held])["milestone"]["status"], "due")
+        self.assertEqual(self.row(reviewed=[obsolete, reviewed])["milestone"]["status"], "not_due")
+        self.assertEqual(self.row(account_id="account", reviewed=[obsolete, reviewed])["milestone"]["status"], "due")
+
+    def test_no_renewal_output_or_notice_policy_is_required_for_due_assessments(self):
+        self.policy["pipeline"]["customer_review"].pop("renewal_notice_days", None)
+        self.evidence["renewal_resolutions"] = [{"kind": "renewal"}]
+        result = self.review()
+        self.assertTrue(result["accounts"][0]["usage_ready"])
+        self.assertNotIn("renewals", result["accounts"][0])
+        self.assertNotIn("subscription_date_needs_input_count", result)
+        self.assertEqual(result["carry_forward_held"], [])
+
+    def test_on_demand_assessment_has_no_renewal_notices_or_holds(self):
+        self.evidence["opportunities"][0]["CloseDate"] = "2024-01-01"
+        result = self.review(account_id="account", carry_forward=[{"kind": "renewal"}])
+        self.assertEqual(len(result["accounts"]), 1)
+        self.assertNotIn("renewals", result["accounts"][0])
+        self.assertEqual(result["carry_forward_held"], [])
+
     def setUp(self):
         self.policy = yaml.safe_load((ROOT / "_core/policy.yaml").read_text())
         self.evidence = {
@@ -102,8 +147,7 @@ class CustomerReviewTests(unittest.TestCase):
         before = "2026-10-03T23:59:59-07:00"
         due = review_customers(self.evidence, boundary, self.policy, window_start=before)["accounts"][0]
         self.assertEqual(due["milestone"]["status"], "due")
-        excluded = self.row(window_start=boundary)
-        self.assertEqual(excluded["milestone"]["status"], "not_due")
+        self.assertEqual(self.review(window_start=boundary)["accounts"], [])
         with self.assertRaisesRegex(ValueError, "before"):
             self.review(window_start=AS_OF)
 
@@ -165,32 +209,12 @@ class CustomerReviewTests(unittest.TestCase):
         milestone = self.row(account_id="account")["milestone"]
         self.assertEqual((milestone["status"], milestone["months"], milestone["date"]), ("not_due", 3, "2026-12-01"))
 
-    def test_renewal_notice_with_no_milestone_and_future_next_window(self):
-        self.evidence["opportunities"][0]["CloseDate"] = "2024-01-01"
-        row = self.row()
-        self.assertEqual(row["milestone"]["status"], "not_due")
-        self.assertEqual(row["renewals"][0]["task_due_date"], "2026-10-17")
-        self.evidence["opportunities"][0]["Subscription_Cancel_Date__c"] = "2027-08-01"
-        self.assertEqual(self.review()["accounts"], [])
-        self.assertEqual(self.review()["not_due_count"], 1)
-
-    def test_past_notice_in_window_and_missing_end_have_no_task_date(self):
-        self.evidence["opportunities"][0]["Subscription_Cancel_Date__c"] = "2027-01-01"
-        renewal = self.row()["renewals"][0]
-        self.assertTrue(renewal["in_review_window"])
-        self.assertEqual(renewal["status"], "notice window passed")
-        self.assertIsNone(renewal["task_due_date"])
-        self.evidence["opportunities"][0]["Subscription_Cancel_Date__c"] = None
-        self.assertEqual(self.row()["renewals"], [])
-        self.assertTrue(any("Subscription End Date" in reason for reason in self.row()["needs_input"]))
-
-    def test_twelfth_month_never_sets_renewal_date(self):
+    def test_twelfth_month_assessment_does_not_depend_on_subscription_dates(self):
         self.evidence["opportunities"][0]["CloseDate"] = "2025-10-04"
-        row = self.row()
-        self.assertEqual(row["milestone"]["months"], 12)
-        self.assertEqual(row["renewals"][0]["subscription_end_date"], "2027-01-15")
-        self.evidence["opportunities"][0]["Subscription_Cancel_Date__c"] = None
-        self.assertEqual(self.row()["renewals"], [])
+        for end_date in ("2027-01-15", None):
+            self.evidence["opportunities"][0]["Subscription_Cancel_Date__c"] = end_date
+            self.assertEqual(self.row()["milestone"]["months"], 12)
+            self.assertTrue(self.row()["usage_ready"])
 
     def test_open_opportunity_preserves_assessment_and_routes_actions(self):
         self.evidence["opportunities"].append({"Id": "open", "AccountId": "account", "OwnerId": "another-owner",
@@ -200,13 +224,13 @@ class CustomerReviewTests(unittest.TestCase):
         self.assertEqual(row["action_route"], "pipeline_hygiene")
         self.assertEqual(row["open_opportunity_ids"], ["open"])
 
-    def test_missing_or_conflicting_org_keeps_independent_renewals_and_null_usage(self):
+    def test_missing_or_conflicting_org_holds_due_usage(self):
         for changed in ({"Admin_Organization_UUID__c": None, "Org_UUID__c": None}, {"Org_UUID__c": "wrong"}):
             evidence = copy.deepcopy(self.evidence)
             evidence["accounts"][0].update(changed)
             row = review_customers(evidence, AS_OF, self.policy)["accounts"][0]
             self.assertIsNone(row["usage"])
-            self.assertEqual(row["renewals"][0]["task_due_date"], "2026-10-17")
+            self.assertFalse(row["usage_ready"])
             self.assertTrue(row["needs_input"])
 
     def test_usage_counts_stay_distinct_and_incomplete_stale_unknown(self):
@@ -262,7 +286,8 @@ class CustomerReviewTests(unittest.TestCase):
         self.evidence["usage"]["account"].update(rows=[], weekly_trend=[], feature_mix=[])
         self.assertTrue(self.row()["usage_ready"])
         self.assertEqual(self.row()["usage"]["idle_seats"], 0)
-        row = self.row(window_start="2026-10-05T07:00:00-07:00")
+        self.evidence["opportunities"][0]["CloseDate"] = "2026-09-01"
+        row = self.row(account_id="account")
         self.assertFalse(row["usage_ready"])
 
     def test_owned_account_scope_and_complete_native_pages(self):
@@ -284,21 +309,21 @@ class CustomerReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "booleans"):
             self.review()
 
-    def test_policy_drives_milestones_type_stage_and_notice(self):
-        self.policy["pipeline"]["customer_review"].update(milestone_months=[2, 4], renewal_notice_days=30,
+    def test_policy_drives_milestones_type_and_stage(self):
+        self.policy["pipeline"]["customer_review"].update(milestone_months=[2, 4],
                                                          expansion_type="Reviewed type", expansion_stage="Reviewed stage")
         self.evidence["opportunities"][0]["CloseDate"] = "2026-08-04"
         result = self.review()
         self.assertEqual(result["accounts"][0]["milestone"]["months"], 2)
         self.assertEqual(result["expansion_type"], "Reviewed type")
         self.assertEqual(result["expansion_stage"], "Reviewed stage")
-        self.assertEqual(result["accounts"][0]["renewals"][0]["notice_date"], "2026-12-16")
         self.assertEqual(result["writes"], [])
 
     def test_carried_forward_held_milestone_is_due_again(self):
         row = self.row(window_start="2026-10-04T20:00:00-07:00", carry_forward=[self.receipt_entry()])
         self.assertEqual(row["milestone"]["status"], "due")
-        self.assertEqual(self.review(window_start="2026-10-04T20:00:00-07:00", carry_forward=[self.receipt_entry()])["carry_forward_held"], [])
+        held = self.review(window_start="2026-10-04T20:00:00-07:00", carry_forward=[self.receipt_entry()])["carry_forward_held"]
+        self.assertEqual(held, [])
 
     def test_unresolved_carry_forward_never_dropped_and_resolved_anchor_retries(self):
         held = {"account_id": "account", "milestone_months": None, "milestone_date": None}
@@ -341,6 +366,20 @@ class CustomerReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "future"):
             self.review(reviewed=[future])
 
+    def test_milestone_receipt_cannot_predate_the_assessment_milestone(self):
+        entry = self.receipt_entry(reviewed=True)
+        entry["receipt_date"] = "2026-10-03T23:59:59-07:00"
+        with self.assertRaisesRegex(ValueError, "before.*milestone"):
+            self.review(reviewed=[entry])
+
+    def test_receipt_chronology_uses_the_policy_timezone_not_the_written_offset(self):
+        entry = self.receipt_entry(reviewed=True)
+        entry["receipt_date"] = "2026-10-04T01:00:00+00:00"
+        with self.assertRaisesRegex(ValueError, "before.*milestone"):
+            self.review(reviewed=[entry])
+        entry["receipt_date"] = "2026-10-04T07:00:00+00:00"
+        self.assertEqual(self.row(reviewed=[entry])["milestone"]["status"], "not_due")
+
     def test_scheduled_partition_reports_only_actionable_rows_and_counts_unselected_gaps(self):
         self.evidence["accounts"].append({"Id": "old", "Name": "Old Synthetic", "OwnerId": "owner"})
         self.evidence["opportunities"].extend([
@@ -352,13 +391,13 @@ class CustomerReviewTests(unittest.TestCase):
         result = self.review()
         self.assertEqual([row["account_id"] for row in result["accounts"]], ["account"])
         self.assertEqual(result["not_due_count"], 1)
-        self.assertEqual(result["subscription_date_needs_input_count"], 1)
+        self.assertNotIn("subscription_date_needs_input_count", result)
         self.assertNotIn("Old Synthetic", json.dumps(result))
         named = self.review(account_id="old")
         self.assertEqual(named["accounts"][0]["account_id"], "old")
         self.assertEqual(named["not_due_count"], 0)
 
-    def test_suppression_and_unresolved_anchor_are_reported_without_renewal_candidates(self):
+    def test_suppression_and_unresolved_anchor_are_reported(self):
         self.evidence["opportunities"][0]["Subscription_Cancel_Date__c"] = "2027-08-01"
         suppressed = self.review(reviewed=[self.receipt_entry(reviewed=True)])
         self.assertEqual(len(suppressed["accounts"]), 1)
@@ -396,8 +435,8 @@ class CustomerReviewTests(unittest.TestCase):
             held = Path(directory) / "held.json"
             reviewed = Path(directory) / "reviewed.json"
             path.write_text(json.dumps(self.evidence))
-            held.write_text(json.dumps([self.receipt_entry()]))
-            reviewed.write_text("[]")
+            held.write_text(json.dumps([self.receipt_entry(), {"kind": "renewal"}]))
+            reviewed.write_text(json.dumps([{"kind": "renewal"}]))
             before = path.read_bytes()
             command = [sys.executable, str(WORKFLOW / "scripts/customer_review.py"), "--input", str(path), "--as-of", AS_OF,
                        "--window-start", "2026-10-04T20:00:00-07:00", "--carry-forward", str(held), "--reviewed", str(reviewed)]
@@ -405,22 +444,46 @@ class CustomerReviewTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads(result.stdout)["accounts"][0]["milestone"]["status"], "due")
             self.assertEqual(json.loads(result.stdout)["writes"], [])
+            self.assertNotIn("renewal", result.stdout)
             self.assertEqual(path.read_bytes(), before)
 
 
 class CustomerContractTests(unittest.TestCase):
+    def test_customer_use_cases_exclude_personal_and_unclear_samples_without_changing_totals(self):
+        reference = (WORKFLOW / "references/proposals.md").read_text()
+        for phrase in ("work-related use cases", "Exclude personal, sensitive and unclear samples",
+                       "No supported work-related use cases in the retrieved sample",
+                       "Never remove those queries from activity totals"):
+            self.assertIn(phrase, reference)
+
+    def test_usage_queries_preserve_unmapped_modes_without_guessing_their_product(self):
+        reference = (ROOT / "workspaces/pipeline/references/pilot-usage-queries.md").read_text()
+        self.assertIn("For unlisted modes such as `realtime`, report the raw value and count as unmapped", reference)
+        self.assertIn("Never guess a product mapping or drop its queries", reference)
+
+    def test_renewal_removal_preserves_check_in_exception_and_other_close_paths(self):
+        rules = (ROOT / "_core/rules.md").read_text()
+        self.assertIn("customer-review's check-in creates", rules)
+        self.assertNotIn("customer-review's renewal", rules)
+        reference = (WORKFLOW / "references/proposals.md").read_text()
+        self.assertIn("Follow-ups may become Salesforce Task proposals", reference)
+        self.assertIn("No expansion proposal for unknown enterprise status, mismatched org, incomplete usage, or any open Opportunity", reference)
+        self.assertIn("assessment remains read-only", reference)
+        self.assertNotIn("renewal_notice_days", reference)
+        paths = (ROOT / "workspaces/pipeline/workflows/close/references/paths.md").read_text()
+        self.assertIn("## Path 5. Renewal or expansion", paths)
+
     def test_exact_policy_block_and_registry_key(self):
         text = (ROOT / "_core/policy.yaml").read_text()
-        exact = '''  customer_review:                 # Closed Won customer milestone reviews and renewal notices. Not ARR growth
+        exact = '''  customer_review:                 # Closed Won customer milestone reviews. Not ARR growth
     schedule: {days: [MO], week_of_month: 1, time: "07:30", tz: America/Los_Angeles}
     milestone_months: [3, 6, 12]   # calendar months after the customer's first verified non-trial Closed Won
-    renewal_notice_days: 90        # renewal Task this many days before the subscription end date
     expansion_type: Existing Business
     expansion_stage: S1
 '''
         self.assertIn(exact, text)
         policy = yaml.safe_load(text)
-        self.assertEqual(set(policy["pipeline"]["customer_review"]), {"schedule", "milestone_months", "renewal_notice_days", "expansion_type", "expansion_stage"})
+        self.assertEqual(set(policy["pipeline"]["customer_review"]), {"schedule", "milestone_months", "expansion_type", "expansion_stage"})
         self.assertEqual(policy["tooling"]["scripts"]["customer_review"], "workspaces/pipeline/workflows/customer-review/scripts/customer_review.py")
         self.assertNotIn("expansion", policy["pipeline"])
         self.assertNotIn("expansion_review", policy["tooling"]["scripts"])
@@ -446,7 +509,8 @@ class CustomerContractTests(unittest.TestCase):
         contract = (WORKFLOW / "CONTEXT.md").read_text()
         for phrase in ("rules#approval", "rules#write_protocol", "rules#scheduled_runs", "numbered", "native readback",
                        "No reply writes nothing", "Account.OwnerId", "customer_review_receipt", "platform completed flag",
-                       "On-demand runs in Pipeline", "Held includes unreadable usage", "Anchor", "Window and milestone", "Renewal"):
+                       "On-demand runs in Pipeline", "Held includes unreadable usage", "Anchor", "Window and milestone",
+                       "No renewal notices", "Ignore legacy renewal receipt entries"):
             self.assertIn(phrase, contract)
         self.assertNotIn("workflows/pilot-usage/", contract)
         self.assertLessEqual(len(contract.splitlines()), 80)
@@ -458,8 +522,8 @@ class CustomerContractTests(unittest.TestCase):
             self.assertIn("workspaces/pipeline/references/pilot-usage-queries.md", (workflow / "CONTEXT.md").read_text())
         reference = (WORKFLOW / "references/proposals.md").read_text()
         for phrase in ("3 months, Adoption", "6 months, Value and growth", "12 months, Account health",
-                       "not demand inference", "native", "not ready proposals", "notice window passed", "fresh duplicate",
-                       "required fields", "No pre-approval", "current Pacific date after approval", "not helper selection",
+                       "not demand inference", "native", "not ready proposals", "fresh duplicate",
+                       "required fields", "No pre-approval", "not helper selection",
                        "No receipt block means not reviewed", "Only mark earlier catch-up milestones superseded"):
             self.assertIn(phrase, reference)
 
@@ -468,7 +532,7 @@ class CustomerContractTests(unittest.TestCase):
         collect = (WORKFLOW / "references/collect.md").read_text()
         self.assertNotIn("lists every qualifying Account", reference)
         self.assertIn("Every other owned customer is not_due_count only", reference)
-        self.assertIn("one subscription_date_needs_input_count", reference)
+        self.assertNotIn("subscription_date_needs_input_count", reference)
         self.assertIn("previous milestone date, or the anchor for the first milestone, through as_of in both modes", reference)
         self.assertIn("omits window_start, but includes as_of", reference)
         self.assertIn("receipt_date from that block's as_of", reference)
@@ -486,7 +550,9 @@ class CustomerContractTests(unittest.TestCase):
         self.assertIn("Reviewed requires usage_ready true and the assessment shown", proposals)
         self.assertIn("unknown billed seats never hold", proposals)
         self.assertIn("Buyer evidence is optional context and never holds", collect)
-        self.assertIn('"no recent buyer contact since <date>" with the dates searched', collect)
+        for reference in (collect, proposals):
+            self.assertIn('"no buyer contact retrieved, <dates searched>"', reference)
+            self.assertNotIn("no recent buyer contact since", reference)
         self.assertIn('"not checked"', proposals)
         self.assertIn("Expansion Opportunity proposals still require buyer evidence", proposals)
         self.assertIn("numbered follow-ups drawn from usage facts and cite the numbers", proposals)

@@ -1,0 +1,62 @@
+[
+  {
+    "context_uuid": "00000000-0000-4000-8000-000000000112",
+    "title": "Example Corp deal",
+    "type": "computer",
+    "url": "/computer/tasks/00000000-0000-4000-8000-000000000113",
+    "status": "pending",
+    "last_query_datetime": "2026-10-07T16:27:57.338120",
+    "project": {
+      "uuid": "00000000-0000-4000-8000-000000000101",
+      "title": "example-project",
+      "description": null,
+      "url": "https://www.seller.example/projects/example-project-AbCdEf"
+    },
+    "unread": true,
+    "slug": "00000000-0000-4000-8000-000000000113",
+    "query_str": "Synthetic first message.",
+    "answer_preview": "Synthetic answer preview.",
+    "query_count": 1,
+    "author_username": "example-user"
+  },
+  {
+    "context_uuid": "00000000-0000-4000-8000-000000000110",
+    "title": "Run Task Triage Speed Run",
+    "type": "computer",
+    "url": "/computer/tasks/00000000-0000-4000-8000-000000000106",
+    "status": "completed",
+    "last_query_datetime": "2026-10-07T16:22:35.985506",
+    "project": {
+      "uuid": "00000000-0000-4000-8000-000000000101",
+      "title": "example-project",
+      "description": null,
+      "url": "https://www.seller.example/projects/example-project-AbCdEf"
+    },
+    "unread": true,
+    "slug": "00000000-0000-4000-8000-000000000106",
+    "query_str": "Synthetic first message.",
+    "answer_preview": "Synthetic answer preview.",
+    "query_count": 1,
+    "author_username": "example-user"
+  },
+  {
+    "context_uuid": "00000000-0000-4000-8000-000000000116",
+    "title": "Sample Industries deal",
+    "type": "computer",
+    "url": "/computer/tasks/00000000-0000-4000-8000-000000000114",
+    "status": "completed",
+    "last_query_datetime": "2026-10-07T16:13:27.508689",
+    "project": {
+      "uuid": "00000000-0000-4000-8000-000000000101",
+      "title": "example-project",
+      "description": null,
+      "url": "https://www.seller.example/projects/example-project-AbCdEf"
+    },
+    "unread": false,
+    "slug": "00000000-0000-4000-8000-000000000114",
+    "query_str": "Synthetic first message.",
+    "answer_preview": "Synthetic answer preview.",
+    "query_count": 1,
+    "author_username": "example-user"
+  }
+]

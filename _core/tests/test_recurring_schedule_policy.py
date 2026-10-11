@@ -43,9 +43,7 @@ class RecurringSchedulePolicyTests(unittest.TestCase):
         self.assertEqual(POLICY["prospecting"]["outreach"]["max_drafts_per_run"], 1)
 
     def test_existing_schedules_are_preserved(self):
-        self.assertEqual(POLICY["pipeline"]["schedule"]["daily"], {
-            "days": ["MO", "TU", "WE", "TH"], "time": "07:00", "tz": "America/Los_Angeles",
-        })
+        self.assertNotIn("daily", POLICY["pipeline"]["schedule"])
         self.assertEqual(POLICY["pipeline"]["schedule"]["friday"]["time"], "09:00")
         self.assertEqual(POLICY["forecast"]["schedule"]["time"], "10:00")
         self.assertEqual(POLICY["pipeline"]["customer_review"]["schedule"], {
@@ -68,4 +66,5 @@ class RecurringSchedulePolicyTests(unittest.TestCase):
         self.assertIn("interaction-sync sweep branch may enumerate the previous business day's meetings", rules)
         self.assertIn("It must read every window, not stop at the first match", rules)
         self.assertIn("Always pass `salesforceAccountId=<18-char AccountId>`", rules)
-        self.assertIn("Stop at the first match", rules)
+        self.assertIn("For a target-call lookup, stop at the first match.", rules)
+        self.assertIn("Coach stakeholder coverage reads every Account-filtered window within `lookback_days`.", rules)

@@ -14,15 +14,18 @@ The scheduled sweep branch finds unlogged calls and routes evidence only. It nev
 
 | Source | File/Location | Section/Scope | Why |
 |---|---|---|---|
+| Core freshness | `_core/rules.md`, `_core/scripts/interfaces.md` | `rules#repo_currency`, `workflow_revision_check`, "Workflow revisions" | Scoped proposal and prewrite evidence |
 | Core policy | `_core/policy.yaml` | `salesforce`, `followup`, `email_voice`, `tooling`, `call_prep`, `momentum`, `interaction`, `pipeline` blocks | Markers, timing, voice, and field values |
-| Core rules | `_core/rules.md` | `rules#run_start`, `rules#approval`, `rules#write_protocol`, `rules#note_prefix` | Run start, approval, and writes |
-| Core rules | `_core/rules.md` | `rules#momentum`, `rules#calendar_search`, `rules#absence_conclusions`, `rules#call_type` | Finding the call and evidence limits |
+| Core rules | `_core/rules.md` | `rules#run_start`, `rules#approval`, `rules#write_protocol`, `rules#note_prefix`, `rules#task_date_coordination` | Run start, approval, writes and call-logging exception |
+| Core rules | `_core/rules.md` | `rules#momentum`, `rules#calendar_search`, `rules#absence_conclusions`, `rules#call_type`, `rules#handoff_delivery` | Finding the call and evidence limits |
 | Core rules | `_core/rules.md` | `rules#next_steps`, `rules#next_steps_format`, `rules#followup_task`, `rules#stage_move`, `rules#contact_status`, `rules#email_body` | What proposals B, C, and D may say |
 | Core rules | `_core/rules.md` | `rules#pilot_handoff`, only when a pilot finding tied to this call is supplied | Pilot finding acceptance |
+| Helper | `_core/scripts/interfaces.md` | `task_reschedule_check`, "Task reschedule input", for date moves only | Native reschedule proposal and prewrite gates |
 | Reference | `references/reconcile.md` | "Find the interaction" at step 2; "Extract" at step 3; "Reconcile" at step 4 | Source marker, quotes, queries, and dedupe |
 | Reference | `references/proposals.md` | Single call only, "Letters" at step 5, "Pilot finding" when supplied, "Apply" at step 7 | Proposal payloads A to F |
 | Reference | `references/sweep.md` | Full file, sweep branch only | Release gate, complete call enumeration, dedupe, and read-only handoff |
 | Per-run evidence | Current project deal threads and deployed Momentum rule | Sweep branch only | Routing and approved enumeration exception |
+| Helper | `_core/scripts/interfaces.md` | `deal_thread_match`, "Account session search", for sweep routing or after verified writes | Verified handoff or receipt destination |
 | Per-run evidence | Momentum transcript or Calendar event, and Salesforce and Gmail results saved in the sandbox | This call only | What happened and what the record holds |
 
 ## Process
@@ -36,6 +39,7 @@ The scheduled sweep branch finds unlogged calls and routes evidence only. It nev
 6. Wait. Writes happen only on `approved <letter>` in this thread per `rules#approval`.
 7. Apply per `references/proposals.md` "Apply" and `rules#write_protocol`.
 8. Close by naming each applied, skipped, rejected, or needs-input letter per `rules#approval`, in five lines or fewer.
+   Then send any required cross-thread receipt per `references/proposals.md` "Apply".
 
 ## Checkpoints
 
@@ -50,11 +54,11 @@ Sweep has no approval pause because it writes no customer records or drafts. Rec
 
 | Check | Pass Condition |
 |---|---|
-| Identity, before step 3 | Momentum start date and attendee emails match the Calendar event, with no contradictory transcript date cues. Otherwise the run is needs-input, states the reason, and proposes nothing derived from that transcript |
-| Source marker, before step 5 | Proposal A's Description line 1 is the exact Momentum or Calendar marker. Nothing is proposed with an invented or empty marker |
+| Identity, before step 3 | The identity check in `references/reconcile.md` "Find the interaction" passes with no contradictory transcript date cues. Otherwise the run is needs-input, states the reason, and proposes nothing derived from that transcript |
+| Source marker, before step 5 | Proposal A's Description line 1 is the exact Momentum, Calendar, or manual marker. Nothing is proposed with an invented or empty marker |
 | Duplicate, before step 5 | The "Reconcile" item 5 check ran. A hit skips A and limits B, C, and F to what the existing Task lacks |
 | Draft dedupe, before step 5 and again before creating D | The draft check in "Letters" D ran and found no same-purpose draft, or D shows `reuse existing` or needs-input |
-| Evidence, before step 5 | Amounts and seats come only from `policy.interaction.amount_source`. Each figure is marked `buyer_confirmed` or `operator_stated` |
+| Evidence, before step 5 | Amounts and seats come only from `policy.interaction.amount_source`. Each figure is marked `buyer_confirmed` or `user_supplied` with speaker attribution |
 | Dependencies, before step 7 | B includes its matching Task for any next-step change, writes next step then Task, and reads both back. A failed Task write is partial with one corrective proposal. F waits for the verified call Task. D reruns the draft check |
 | Scope, before step 5 | No Closed Won (route to `close`) or Closed Lost (route to `pipeline-review`) stage move, delete, merge, sent mail, or edit to a record not tied to this call |
 | Sweep scope | Approved enumeration exception is deployed, every call is identity-checked, and no Salesforce or Gmail write occurs |

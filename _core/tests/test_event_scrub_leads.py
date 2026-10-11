@@ -58,21 +58,21 @@ class ScrubberTests(unittest.TestCase):
         for role in role_locals[:60]:
             examples.extend(
                 [
-                    f"{role}@examplecorp.test",
-                    f"{role}-team@examplecorp.test",
-                    f"team-{role}@examplecorp.test",
-                    f"{role}.us@examplecorp.test",
+                    f"{role}@examplecorp.com",
+                    f"{role}-team@examplecorp.com",
+                    f"team-{role}@examplecorp.com",
+                    f"{role}.us@examplecorp.com",
                 ]
             )
         examples.extend(
             [
-                "privacy.officer@examplecorp.test",
-                "privacy_officer@examplecorp.test",
-                "security-alerts@examplecorp.test",
-                "sales.us@examplecorp.test",
-                "support-emea@examplecorp.test",
-                "info+web@examplecorp.test",
-                "no.reply@examplecorp.test",
+                "privacy.officer@examplecorp.com",
+                "privacy_officer@examplecorp.com",
+                "security-alerts@examplecorp.com",
+                "sales.us@examplecorp.com",
+                "support-emea@examplecorp.com",
+                "info+web@examplecorp.com",
+                "no.reply@examplecorp.com",
                 "not-an-email",
                 "missing-domain@",
                 "@missing-local.com",
@@ -135,27 +135,27 @@ class ScrubberTests(unittest.TestCase):
         self.assertEqual([], failures)
 
     def test_first_name_only_matching_row_is_clean(self):
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("sara@examplefish.test", first="Sara E.", last="Walker")["status"])
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("raj@examplemedia.test", first="Rajesh (Raj)", last="Kumar")["status"])
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("renee@examplelegal.test", first="Ren\u00e9e", last="Boucher")["status"])
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("meiling@examplesoft.test", first="Mei-Ling", last="Wong")["status"])
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("jiawei@examplecloud.test", first="Jia Wei", last="Tan")["status"])
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("ddemarco@examplenews.test", first="Daniel", last="de Marco")["status"])
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("jpmoreau@examplecad.test", first="Jean-Pierre", last="Moreau")["status"])
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("sabine.berg-hoffman@examplenergy.test", first="Sabine", last="Berg-Hoffman")["status"])
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("akowalski@examplewealth.test", first="Andrew Kowalski,", last="CPA")["status"])
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("sbrook@examplelearn.test", first="\u26a1\ufe0f", last="Steven Brook")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("sara@examplefish.com", first="Sara E.", last="Walker")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("raj@examplemedia.com", first="Rajesh (Raj)", last="Kumar")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("renee@examplelegal.com", first="Ren\u00e9e", last="Boucher")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("meiling@examplesoft.com", first="Mei-Ling", last="Wong")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("jiawei@examplecloud.io", first="Jia Wei", last="Tan")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("ddemarco@examplenews.com", first="Daniel", last="de Marco")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("jpmoreau@examplecad.com", first="Jean-Pierre", last="Moreau")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("sabine.berg-hoffman@examplenergy.com", first="Sabine", last="Berg-Hoffman")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("akowalski@examplewealth.com", first="Andrew Kowalski,", last="CPA")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("sbrook@examplelearn.io", first="\u26a1\ufe0f", last="Steven Brook")["status"])
 
     def test_first_name_prefix_plus_last_name_is_clean(self):
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("damurray@exampleplaid.test", first="Dan", last="Murray")["status"])
-        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("chrjohnson@examplecorp.test", first="Christopher", last="Johnson")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("damurray@exampleplaid.com", first="Dan", last="Murray")["status"])
+        self.assertEqual(scrub_leads.STATUS_CLEAN, classify("chrjohnson@examplecorp.com", first="Christopher", last="Johnson")["status"])
 
     def test_non_name_prefix_plus_last_name_is_not_clean(self):
-        self.assertNotEqual(scrub_leads.STATUS_CLEAN, classify("xymurray@examplecorp.test", first="Dan", last="Murray")["status"])
-        self.assertNotEqual(scrub_leads.STATUS_CLEAN, classify("damur@examplecorp.test", first="Dan", last="Murray")["status"])
+        self.assertNotEqual(scrub_leads.STATUS_CLEAN, classify("xymurray@examplecorp.com", first="Dan", last="Murray")["status"])
+        self.assertNotEqual(scrub_leads.STATUS_CLEAN, classify("damur@examplecorp.com", first="Dan", last="Murray")["status"])
 
     def test_ambiguous_initial_role_is_quarantined_not_removed_when_it_matches_person(self):
-        decision = classify("ar@examplegrowth.test", first="Aaron", last="Reyes")
+        decision = classify("ar@examplegrowth.com", first="Aaron", last="Reyes")
         self.assertEqual(scrub_leads.STATUS_QUARANTINE, decision["status"])
         self.assertIn("AMBIGUOUS_ROLE_INITIALS", decision["reason_codes"])
 
@@ -169,7 +169,7 @@ class ScrubberTests(unittest.TestCase):
                         "First Name": "Privacy",
                         "Last Name": "Team",
                         "Full Name": "Privacy Team",
-                        "Email Business": "privacy@examplecorp.test",
+                        "Email Business": "privacy@examplecorp.com",
                         "Company Name": "Example Corp",
                     }
                 ],
@@ -194,7 +194,7 @@ class ScrubberTests(unittest.TestCase):
                 "First Name": "Alex",
                 "Last Name": "Morgan",
                 "Full Name": "Alex Morgan",
-                "Email Business": "alex.morgan@examplecorp.test",
+                "Email Business": "alex.morgan@examplecorp.com",
                 "Company Name": "Example Corp",
             }
             write_csv(chunk_dir / "clean_part_001.csv", [row])
@@ -222,7 +222,7 @@ class ScrubberTests(unittest.TestCase):
                         "First Name": "Arjun",
                         "Last Name": "MS",
                         "Company Name": "ExampleSys",
-                        "Email": "arjunms@examplesys.test",
+                        "Email": "arjunms@examplesys.com",
                     }
                 )
 
@@ -331,21 +331,21 @@ class ScrubberTests(unittest.TestCase):
                     "First Name": "Alex",
                     "Last Name": "Morgan",
                     "Full Name": "Alex Morgan",
-                    "Email Business": "alex.morgan@examplecorp.test",
+                    "Email Business": "alex.morgan@examplecorp.com",
                     "Company Name": "Example Corp",
                 },
                 {
                     "First Name": "Privacy",
                     "Last Name": "Team",
                     "Full Name": "Privacy Team",
-                    "Email Business": "privacy@examplecorp.test",
+                    "Email Business": "privacy@examplecorp.com",
                     "Company Name": "Example Corp",
                 },
                 {
                     "First Name": "Tamsin",
                     "Last Name": "B.",
                     "Full Name": "Tamsin B.",
-                    "Email Business": "tam@examplecorp.test",
+                    "Email Business": "tam@examplecorp.com",
                     "Company Name": "Example Corp",
                 },
             ]
@@ -425,7 +425,7 @@ class ScrubberTests(unittest.TestCase):
                         "First Name": "Tamsin",
                         "Last Name": "B.",
                         "Full Name": "Tamsin B.",
-                        "Email Business": "tam@examplecorp.test",
+                        "Email Business": "tam@examplecorp.com",
                         "Company Name": "Example Corp",
                     }
                 ],
@@ -473,9 +473,9 @@ class ScrubberTests(unittest.TestCase):
                         "First Name": "Jane",
                         "Last Name": "Person",
                         "Full Name": "Jane Person",
-                        "Email Finder 1": "info@examplecorp.test",
-                        "Company Website": "http://info@examplecorp.test",
-                        "Email Finder 2": "jane.person@examplecorp.test",
+                        "Email Finder 1": "info@examplecorp.com",
+                        "Company Website": "http://info@examplecorp.com",
+                        "Email Finder 2": "jane.person@examplecorp.com",
                         "Company Name": "Example Corp",
                     }
                 )
@@ -484,8 +484,8 @@ class ScrubberTests(unittest.TestCase):
                         "First Name": "Alex",
                         "Last Name": "Morgan",
                         "Full Name": "Alex Morgan",
-                        "Email Finder 1": "alex.morgan@examplecorp.test",
-                        "Company Website": "alex@examplecorp.test",
+                        "Email Finder 1": "alex.morgan@examplecorp.com",
+                        "Company Website": "alex@examplecorp.com",
                         "Email Finder 2": "",
                         "Company Name": "Example Corp",
                     }
@@ -511,8 +511,8 @@ class ScrubberTests(unittest.TestCase):
             with open(output_dir / "clean_chunks" / "clean_part_001.csv", newline="", encoding="utf-8-sig") as f:
                 rows = list(csv.DictReader(f))
             self.assertEqual(2, len(rows))
-            self.assertEqual("jane.person@examplecorp.test", rows[0]["Email"])
-            self.assertEqual("alex.morgan@examplecorp.test", rows[1]["Email"])
+            self.assertEqual("jane.person@examplecorp.com", rows[0]["Email"])
+            self.assertEqual("alex.morgan@examplecorp.com", rows[1]["Email"])
 
 
 if __name__ == "__main__":

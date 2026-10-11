@@ -17,7 +17,7 @@ import onboard
 ROOT=Path(__file__).resolve().parents[2]
 EVENT_STAGE_BRANCHES={None:'01-list-prep','list-prep':'01-list-prep','early-close':None,
                       'sequence-plan':'02-sequence-plan','launch':'03-launch','zero-recipients':'03-launch',
-                      'house-and-missing-scope':'01-list-prep','scope-loss':'03-launch','interval-readback':'03-launch'}
+                      'house-and-missing-scope':'01-list-prep','scope-loss':'03-launch','interval-readback':'03-launch','launch-compare':'03-launch'}
 
 
 class LocalConnector:
@@ -44,21 +44,16 @@ class LocalConnector:
         return deepcopy(actual)
 
 
-    def deliver(self, primary, fallback=None, *, discovered=True, reconciled=None):
-        """Contract-guided transport double. No real sends or provider verification."""
-        attempts = []
+    def deliver(self, result, *, discovered=True):
+        """One native mail attempt. Submission is distinct from completed work."""
         if not discovered:
-            return {'status': 'needs-input', 'attempts': attempts, 'transport': None, 'receipt': None}
-        attempts.append('session')
-        result, transport = primary, 'session'
-        if primary.get('status') == 'confirmed_no_delivery':
-            attempts.append('mail')
-            result, transport = fallback or {}, 'mail'
-        if result.get('status') == 'ambiguous':
-            result = reconciled or {}
-        receipt = result.get('receipt') if result.get('status') == 'delivered' else None
-        return {'status': 'delivered' if receipt else 'needs-input', 'attempts': attempts,
-                'transport': transport if receipt else None, 'receipt': receipt}
+            return {'status': 'needs-input', 'attempts': [], 'receipt': None, 'pending_text': True}
+        status = result.get('status')
+        receipt = result.get('receipt')
+        if status in ('delivered', 'queued') and receipt:
+            return {'status': 'delivered' if status == 'delivered' else 'submitted',
+                    'attempts': ['mail'], 'receipt': receipt, 'pending_text': False}
+        return {'status': 'needs-input', 'attempts': ['mail'], 'receipt': None, 'pending_text': True}
 
 
 def snapshot(root):
@@ -84,8 +79,10 @@ def contract_trace(name,contract,root,branch=None):
         scope=cells[2].lower()
         if coordinator:
             stage=EVENT_STAGE_BRANCHES[branch]
-            if cells[0]=='Stage' and cells[1]!=f'`{stage}/CONTEXT.md`':continue
-            if cells[0]=='Reference' and branch!='early-close':continue
+            if cells[0]=='Stage':
+                if stage is None: continue
+                cells[1]=f'`{stage}/CONTEXT.md`'
+            if cells[0]=='Close reference' and branch!='early-close':continue
         if name=='signal-scan' and cells[0].startswith('Adoption'):continue
         if name=='signal-user-scan' and cells[0].startswith('Buying signals'):continue
         if name=='sales-call-prep' and 'scheduled daily run only' in scope and branch!='daily':continue
@@ -95,19 +92,35 @@ def contract_trace(name,contract,root,branch=None):
             if mentioned and branch not in mentioned:continue
             if 'only when targeted for an edit' in scope:continue
         if name=='forecast-weekly':
-            tracking=branch=='pace-and-forward'
-            if ('forecast only' in scope and tracking) or ('tracking only' in scope and not tracking):continue
-            if 'tracking at quarter end only' in scope and branch!='incomplete-and-learning':continue
+            manager=branch=='manager-update'
+            tracking=branch in ('pace-and-forward','incomplete-and-learning')
+            if manager:
+                if 'manager update only' in scope:
+                    cells[2]=re.split('manager update only',cells[2],flags=re.I)[-1].strip(' ,.')
+                elif cells[0]!='Thread lookup':continue
+            else:
+                if scope.startswith('manager update only'):continue
+                if 'manager update only' in scope and cells[0]=='Core rules':
+                    cells[2]=cells[2].split(';',1)[0]
+                if cells[0]=='Core policy':
+                    cells[2]='`salesforce`, `forecast`, `tooling`' + ('' if tracking else ', `pipeline`')
+                if tracking and scope.startswith('forecast only'):continue
+                if not tracking and scope.startswith('tracking only'):continue
+                if 'tracking when review is due or requested' in scope and tracking and branch=='pace-and-forward':continue
+                if 'tracking rollover checks' in scope and branch!='incomplete-and-learning':continue
+                if cells[0]=='Helper' and tracking:
+                    cells[2]='"Interfaces", `forecast_math`, `forecast_notify`'
         scopes.append({'source':cells[0],'location':cells[1],'scope':cells[2]})
+        local_inputs=[]
         for reference in re.findall(r'`([^`]+)`',cells[1]):
             file=root/reference if reference.startswith(('_core/','workspaces/')) else path.parent/reference
             if file.is_file():
-                content=file.read_text()
-                headings=re.findall(r'"([^"]+)"',cells[2])
-                if headings:
-                    for heading in headings:
-                        assert re.search(r'^#+ '+re.escape(heading)+r'\s*$',content,re.M),f'{reference}: missing {heading}'
+                local_inputs.append((file,file.read_text()))
                 read.append(str(file.relative_to(root)))
+        for heading in re.findall(r'"([^"]+)"',cells[2]):
+            if local_inputs:
+                assert any(re.search(r'^#+ '+re.escape(heading)+r'\s*$',content,re.M)
+                           for _,content in local_inputs), f'{cells[1]}: missing {heading}'
     return {'workflow':name,'contract':contract,'actual_local_reads':read,'input_scopes':scopes,
             'output_contract':text.split('## Outputs\n',1)[1],
             'review_contract':text.split('## Checkpoints\n',1)[1].split('## Audit\n',1)[0],
@@ -133,7 +146,8 @@ def worker(artifacts,renderer='auto'):
     bus=LocalConnector();cases=[];traces={name:path for name,path,_ in onboard.routes(ROOT)}
     def record(name,branch,output):
         assert name in traces
-        item={**contract_trace(name,traces[name],ROOT,branch),'branch':branch,'passed':True,'output':output}
+        item={**contract_trace(name,traces[name],ROOT,branch),'branch':branch,'passed':True,'output':output,
+              'validation_kind':'real-helper-execution' if 'executed' in output else 'contract-trace-and-local-fixture'}
         if name=='event-sequence' and EVENT_STAGE_BRANCHES[branch]:
             contract=str(Path(traces[name]).parent/EVENT_STAGE_BRANCHES[branch]/'CONTEXT.md')
             item['stage_trace']=contract_trace(name,contract,ROOT,branch)
@@ -254,25 +268,22 @@ def worker(artifacts,renderer='auto'):
     timing=PipelineTimingTests();timing.setUp()
     result=hygiene_check.check(timing.opp,timing.policy,hygiene_check.index_activity([],[],timing.as_of.tzinfo),timing.as_of)
     assert 'task_gap' in result['triggers']
-    for branch in ('weekday','friday'):
+    for branch in ('weekly','requested'):
         record('pipeline-review',branch,{'hygiene':result,'approval_state':'proposal','next':'corrected Salesforce state is eligible for Forecasting'})
-    # Delivery choices are simulated. Receipts and ambiguity never grant record-write ownership.
-    delivered = {'status': 'delivered', 'receipt': {'session_id': 'fictional-deal', 'message_id': 'fixture-1'}}
-    failed, ambiguous = {'status': 'confirmed_no_delivery'}, {'status': 'ambiguous'}
-    delivery_cases = [(delivered, delivered, True, None, ['session'], 'delivered'),
-                      (failed, delivered, True, None, ['session', 'mail'], 'delivered'),
-                      (failed, failed, True, None, ['session', 'mail'], 'needs-input'),
-                      (ambiguous, delivered, True, None, ['session'], 'needs-input'),
-                      (ambiguous, delivered, True, delivered, ['session'], 'delivered'),
-                      (delivered, delivered, False, None, [], 'needs-input')]
-    for primary, fallback, found, reconciled, attempts, status in delivery_cases:
+    # A native result is kept after exactly one mail attempt, without retry or polling.
+    delivery_cases = [({'status': 'delivered', 'receipt': {'message_id': 'fixture-1'}}, True, 'delivered', ['mail']),
+                      ({'status': 'queued', 'receipt': {'message_id': 'fixture-2'}}, True, 'submitted', ['mail']),
+                      ({'status': 'failed', 'error': 'fixture denial'}, True, 'needs-input', ['mail']),
+                      ({'status': 'unavailable'}, True, 'needs-input', ['mail']),
+                      ({'status': 'delivered'}, False, 'needs-input', [])]
+    for native, found, status, attempts in delivery_cases:
         before = len(bus.writes)
-        output = bus.deliver(primary, fallback, discovered=found, reconciled=reconciled)
+        output = bus.deliver(native, discovered=found)
         assert output['attempts'] == attempts and output['status'] == status
         assert len(bus.writes) == before
-        if status != 'delivered': assert output['receipt'] is None and output['transport'] is None
+        if status == 'needs-input': assert output['pending_text'] and output['receipt'] is None
     record('interaction-sync', 'delivery-success-and-denial', {'cases': len(delivery_cases),
-           'fallback': 'only confirmed no delivery', 'ambiguous': 'reconciled or needs-input', 'customer_writes': 0})
+           'queued': 'submitted only', 'failed': 'full pending destination and text in the same turn', 'attempts_per_handoff': 1})
     # Real renderer includes routed records without local labels on weekday and Friday.
     from test_pipeline_render import Render, base, friday, BIO
     render = Render(); render.setUp()
@@ -280,8 +291,8 @@ def worker(artifacts,renderer='auto'):
         routed = base()
         routed['deals'] = [row for row in routed['deals'] if row['id'] != BIO]
         routed['blocks'] = [row for row in routed['blocks'] if row['deal'] != BIO]
-        routed['routed'] = [{'deal': BIO, 'name': 'Fictional Account', 'thread_url': 'https://example.test/deal',
-                             'reason': 'Verified deal thread owns this Opportunity and its Tasks'}]
+        routed['routed'] = [{'kind': 'deal_context', 'deal': BIO, 'name': 'Fictional Account', 'thread_url': 'https://example.test/deal',
+                             'reason': 'Verified deal thread receives reviewed context', 'delivery': {'command': 'mail_send', 'status': 'delivered'}}]
         assert '## Routed to deal threads' in render.ok('report', routed)
         routed_friday = friday(deepcopy(routed))
         routed_friday['friday']['letters'] = []
@@ -292,19 +303,19 @@ def worker(artifacts,renderer='auto'):
         record('pipeline-review', 'routed-ownership-render', {'weekday_and_friday': 'actual renderer passed',
                'competing_letter': 'actual renderer rejected', 'handoff_success': 'not inferred from routed list'})
     finally: render.tearDown()
-    # Ownership order drives fixture decisions for typed and scheduled triage. Prose-agent execution is unverified.
-    ownership_rows = [('active', True, False, 'deal-thread'), ('current', False, True, 'pipeline-review'),
-                      ('distinct', False, False, 'triage'), ('ambiguous', None, True, 'held')]
-    for branch in ('typed-ownership', 'scheduled-ownership'):
-        before = len(bus.writes)
-        for key, active, current_action, owner in ownership_rows:
-            actual = 'held' if active is None else 'deal-thread' if active else 'pipeline-review' if current_action else 'triage'
-            assert actual == owner
-            if actual != 'triage':
-                rejects(lambda: bus.write('owned-'+key, {'Status': 'Completed'}, approved={'Status': 'Completed'}, guard=False))
-        assert len(bus.writes) == before
-        record('task-triage-speed-run', branch, {'owners': ownership_rows, 'owned_task_writes': 0,
-               'closeout': 'routed Tasks remain open and pending delivery is not completion'})
+    # Actual native snapshot helper proves date proposals and stale ownership holds.
+    from test_task_reschedule_check import reschedule_request_fixture, run_task_reschedule_cli, sync_related_task_fixture
+    request = reschedule_request_fixture()
+    proposed = run_task_reschedule_cli(request, 'proposal')
+    assert proposed['status'] == 'ready'
+    request.update(baseline=proposed['baseline'], baseline_links=proposed['baseline_links'], displayed_payload=proposed['payload'])
+    assert run_task_reschedule_cli(request, 'prewrite')['status'] == 'ready'
+    stale = deepcopy(request)
+    stale['task']['OwnerId'] = '005000000000002'
+    sync_related_task_fixture(stale)
+    held = run_task_reschedule_cli(stale, 'prewrite')
+    assert held['status'] == 'stale' and 'payload' not in held
+    record('task-triage-speed-run', 'native-prewrite-ownership', {'proposal': proposed, 'owner_drift': held, 'customer_writes': 0})
     # Exact approval cannot cover changed native fields, failed guards or repeating a coupled success.
     bus.records['stale-task'] = {'ActivityDate': '2026-10-05'}
     original = deepcopy(bus.records['stale-task']); proposal = {'ActivityDate': '2026-10-08'}
@@ -320,7 +331,7 @@ def worker(artifacts,renderer='auto'):
     record('pipeline-review', 'stale-and-partial-writes', {'stale_or_guard_failed': 'zero affected writes',
            'partial_coupled_update': 'successful side retained without repeat', 'revised_current_proposal': 'verified locally'})
     triage={'ActivityDate':'2026-10-05'}
-    assert not policy['template']['auto_date_move']
+    assert 'auto_date_move' not in policy['template']
     rejects(lambda:bus.write('triage',triage))
     bus.write('triage',triage,approved=triage)
     record('task-triage-speed-run','daily-and-closeout',{'auto_move_enabled':False,'approved_task':triage,'closeout':'real helper covered in regression suite'})
@@ -374,7 +385,7 @@ def worker(artifacts,renderer='auto'):
     for branch in ('call-review','deal-review','pre-meeting','criteria-refresh'):
         record('deal-coach',branch,{'source':'fictional call and deal evidence','score':'missing facts remain unknown','external_writes':0,
                                   'handoff':'exact criteria diff to Systems after approval' if branch=='criteria-refresh' else 'operator report'})
-    data={'quarter':'2026-Q4','booked':[{'Id':'won','ARR__c':1000}],'deals':[{'Id':'commit','ARR__c':2000,'bucket':'commit'}],'pull_ins':[]}
+    data={'as_of':'2026-10-04','quarter':'2026-Q4','booked':[{'Id':'won','ARR__c':1000}],'deals':[{'Id':'commit','ARR__c':2000,'bucket':'commit','StageName':'S4','CloseDate':'2026-10-15','last_activity_date':'2026-10-04','buyer_delay_date':None,'buyer_delay_evidence':None,'blockers':[]}],'pull_ins':[]}
     forecast=forecast_math.calculate(data,policy);assert forecast['call']=='3000'
     record('forecast-weekly','weekly',forecast)
     tracking=forecast_math.calculate_tracking({'as_of':'2026-10-04','records':[],'reads_complete':True},policy)
@@ -383,6 +394,8 @@ def worker(artifacts,renderer='auto'):
     payload=forecast_notify.build_payload(1,'{"ready":false,"lines":["missing calendar"]}','demo','https://demo.test/thread',None)
     assert payload['title']=='Weekly forecast incomplete'
     record('forecast-weekly','incomplete-and-learning',{'notification':payload,'learning':'proposal only'})
+
+    record('forecast-weekly','manager-update',{'unsent_draft':'contract checks only','native_slack':'not checked'})
 
     # Technical changes and setting readback are isolated to mock state, with no inherited merge authority.
     proposal={'revision':'demo-reviewed-revision','tests':'passed'}
@@ -424,6 +437,38 @@ def worker(artifacts,renderer='auto'):
     record('system-review', 'correction-evidence', {'new_question': new, 'existing_question': 'not repeated',
            'unreadable_history': 'not checked', 'comment': bus.records['correction-comment'],
            'declined_task': 'unchanged', 'quiet_with_new_question': False, 'repair_writes': 0})
+    from test_deal_thread_match import DealThreadMatchTests
+    from test_top_actions import TopActions
+    from test_event_launch_check import EventLaunchCheck
+    from test_forecast_deck import ForecastDeckTests
+    from test_workflow_revision_check import WorkflowRevisionEndToEndTests
+    def execute_case(cls, method):
+        case = cls(method)
+        try:
+            case.setUp()
+            getattr(case, method)()
+        finally:
+            case.tearDown()
+            case.doCleanups()
+        return {'case': cls.__name__ + '.' + method, 'actual_helper_execution': True, 'passed': True}
+    for name, branch, cls, methods in (
+        ('pipeline-review', 'thread-identity-helper', DealThreadMatchTests,
+         ('test_sanitized_cli_page_is_complete_with_absolute_links_and_unchanged_input',
+          'test_missing_failed_malformed_search_holds_only_affected_account')),
+        ('task-triage-speed-run', 'top-actions-helper', TopActions,
+         ('test_top_three_ranks_deduplicates_and_keeps_approval_labels_separate',
+          'test_coverage_not_ready_with_empty_affected_withholds_ranking_as_unknown')),
+        ('event-sequence', 'launch-compare', EventLaunchCheck,
+         ('test_confirmed_saved_wrapper_passes_without_reshaping', 'test_failure_envelopes_stop_on_wrapper_and_inner_response')),
+        ('forecast-weekly', 'deck-helper', ForecastDeckTests,
+         ('test_cli_plan_verify_and_no_silent_truncation', 'test_approved_preview_stops_on_slide_or_value_drift')),
+        ('task-triage-speed-run', 'configured-revision-helper', WorkflowRevisionEndToEndTests,
+         ('test_unchanged_snapshot_fetch_prewrite_native_write_and_readback',
+          'test_each_relevant_intervening_commit_causes_zero_native_writes'))):
+        record(name, branch, {'executed': [execute_case(cls, method) for method in methods], 'live_runtime': 'not checked'})
+    record('process-capture', 'second-case-review', {'example_scope': 'fictional local cases',
+           'observed_and_stated_reasons': 'kept distinct by contract assertions', 'second_case': 'requires actual operator review',
+           'wording_approval': False, 'repo_writes': 0, 'prose_execution': 'not checked'})
     assert set(x['workflow'] for x in cases)==set(traces)
     return {'passed':True,'named_workflows':len(traces),'scenarios':len(cases),'cases':cases,'mock_writes':bus.writes,
             'limit':'Contract-guided local connector doubles and real helper executions. Prose-only agent judgment and live integration behavior remain unverified.'}
@@ -460,7 +505,7 @@ def main(argv=None):
     tests=re.search(r'Ran (\d+) tests',(scratch/'regression.log').read_text())
     report.update(regression_tests=int(tests[1]),scratch=str(scratch),source_unchanged=True)
     (scratch/'report.json').write_text(json.dumps(report,indent=2,default=str)+'\n')
-    (scratch/'report.md').write_text(f"# Scratch rehearsal\n\nPassed {report['regression_tests']} regression tests, {report['named_workflows']} named workflows and {report['scenarios']} branch scenarios.\n\nOnboarding instantiated a separate demo workspace and generated 18 exact skill pointers. Source bytes remained unchanged.\nThe two-page pilot PDF was built and structurally verified. Inspect both rasterized pages before claiming visual acceptance.\n\n{report['limit']}\n")
+    (scratch/'report.md').write_text(f"# Scratch rehearsal\n\nPassed {report['regression_tests']} regression tests, {report['named_workflows']} named workflows and {report['scenarios']} branch scenarios.\n\nOnboarding instantiated a separate demo workspace and generated 19 exact skill pointers. Source bytes remained unchanged.\nThe two-page pilot PDF was built and structurally verified. Inspect both rasterized pages before claiming visual acceptance.\n\n{report['limit']}\n")
     print(json.dumps({k:report[k] for k in ('passed','regression_tests','named_workflows','scenarios','source_unchanged','scratch')}));return 0
 
 

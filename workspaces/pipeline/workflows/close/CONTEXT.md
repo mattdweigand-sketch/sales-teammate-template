@@ -8,21 +8,24 @@ next: none, downstream status is verified in step 9
 # Close
 
 One signed Opportunity in, Closed Won verified, downstream done or handed off with a named owner. Salesforce is the record; the signed agreement is the authority for terms.
+Receive deal-thread Closed Won downstream Task evidence in a standalone Pipeline run with `/close <OpportunityId>` for downstream verification and initial proposal E.
+The handoff is evidence only. Recheck downstream status and duplicates before proposing E under the existing approval gates.
 
 ## Inputs
 
 | Source | File/Location | Section/Scope | Why |
 |---|---|---|---|
+| Core freshness | `_core/rules.md`, `_core/scripts/interfaces.md` | `rules#repo_currency`, `workflow_revision_check`, "Workflow revisions" | Scoped proposal and prewrite evidence |
 | Core policy | `_core/policy.yaml` | `salesforce`, `tooling`, `pipeline`, `close` blocks | Evidence types, terms, paths, setup trial, and ops channel |
-| Core rules | `_core/rules.md` | `rules#run_start`, `rules#approval`, `rules#write_protocol`, `rules#note_prefix`, `rules#next_steps`, `rules#next_steps_format` | Run start, approval, and writes |
-| Core rules | `_core/rules.md` | `rules#org_lookup`, `rules#stage_move` | Org status and stage ownership |
+| Core rules | `_core/rules.md` | `rules#run_start`, `rules#approval`, `rules#write_protocol`, `rules#note_prefix`, `rules#next_steps`, `rules#next_steps_format`, `rules#task_date_coordination` | Run start, approval, due Task ownership and writes |
+| Core rules | `_core/rules.md` | `rules#org_lookup`, `rules#stage_move`, `rules#handoff_delivery` | Org status and stage ownership |
 | Reference | `references/fields.md` | Full file at step 2 | Fields read, expected, and verified throughout the run |
 | Reference | `references/evidence.md` | "Signature evidence" at step 3; "Admin email and org status" at step 4 | What proves signature and org ownership |
 | Reference | `references/paths.md` | Opening and the selected path at step 4; "Handoff template (proposal D)" when D applies | Path selection and the ops post |
 | Reference | `references/proposals.md` | "Labels" at step 6; "Apply" at step 8 | Proposal payloads A0, R, and A to E |
 | Reference | `references/setup-trial.md` | Full file, only when A0 applies or after any A0 attempt | Provisioning and restoration R |
 | Org skill | `configured-crm-guide` | Only when a Salesforce validation message needs interpreting | Validation rule meaning |
-| Per-run evidence | The signed agreement, Salesforce reads, org lookup results, and ops channel search saved in the sandbox | This Opportunity and Account | Terms, status, and prior handoffs |
+| Per-run evidence | The signed agreement, deal-thread downstream evidence, Salesforce reads, org lookup and ops channel results saved in the sandbox | This Opportunity and Account | Terms, status, and prior handoffs |
 
 ## Process
 

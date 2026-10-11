@@ -113,8 +113,14 @@
     "collateral": {
       "choice": "defer",
       "reason": "Fictional local rehearsal only. No live connection."
+    },
+    "google_slides": {
+      "choice": "defer",
+      "reason": "No shared presentation in local fixture"
     }
   },
   "event_house_owner_ids": [],
-  "event_include_missing_account": false
+  "event_include_missing_account": false,
+  "operating_policy_review": "fixture: external sample policy review only",
+  "lost_path_min_employees": null
 }

@@ -6,13 +6,20 @@ policy.prospecting.identity.sfdc_user_id, and policy.tooling.generic_email_domai
 Existing Operator-owned Accounts and approved outreach-owner rows on house-owned or missing Accounts are in scope.
 Outreach-owner column and Operator's value are per-run inputs; house owners and missing-Account inclusion come from policy.
 Named-account scope is required even if an older exclusion config omits it, and cannot be overridden.
+A recent_reply exclusion cannot be overridden either. Launch keeps its own reply stop.
+The active_sequence exclusion also covers prior enrollment in the same event's sequences in any status.
+Event sequence IDs and complete reviewed enrollment history are per-run evidence, never stored defaults.
 Labels are proposals, not approval.
 Input is CSV or a reviewed JSON list. Outputs and per-list overrides stay outside Git.
+Exit 0 with the JSON result. Exit 2 with the shared {"verdict": "error", "reason": "..."} envelope for a known input
+error, meaning an unreadable file, invalid JSON or YAML, a missing policy key, or a rejected row, override or timestamp.
+Other exceptions stay visible as tracebacks.
 """
 import argparse
 import csv
 import json
 import re
+import sys
 import unicodedata
 from collections import Counter
 from datetime import datetime, timedelta
@@ -20,6 +27,11 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+import prospect_common  # noqa: E402
+
+INPUT_ERRORS = (OSError, ValueError, KeyError, yaml.YAMLError)
 
 
 EMAIL = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$")
@@ -37,6 +49,7 @@ EVIDENCE_FIELDS = ("account_checked", "account_id", "account_owner_id", "opportu
                    "apollo_match_email", "apollo_match_catchall_domain", "apollo_match_run_start",
                    "apollo_contacts_checked", "apollo_contact_id", "apollo_contact_email",
                    "apollo_crm_linked", "apollo_crm_owner_id", "active_sequence",
+                   "event_sequence_ids", "apollo_sequence_enrollments",
                    "event_app_invite_export_supplied", "event_app_invite_checked", "event_app_invite")
 
 
@@ -93,6 +106,12 @@ def normalize(row):
     result["email_operation"] = result["email_operation"].lower()
     result["apollo_match_email"] = result["apollo_match_email"].lower()
     result["apollo_contact_email"] = result["apollo_contact_email"].lower()
+    for field in ("event_sequence_ids", "apollo_sequence_enrollments"):
+        if isinstance(result[field], str):
+            try:
+                result[field] = json.loads(result[field])
+            except ValueError:
+                result[field] = None
     result["website_host"] = website_host(result["website"])
     result["reply_timestamp_present"] = "last_reply_at" in row
     return result
@@ -180,6 +199,30 @@ def exclusions(contact, prospecting, tooling, as_of):
         gaps.append("Existing Apollo contact evidence has no Contact ID")
     if contact["active_sequence"] is True:
         reasons["active_sequence"] = "Apollo contact data shows an active sequence"
+    event_ids = contact["event_sequence_ids"]
+    enrollments = contact["apollo_sequence_enrollments"]
+    event_targets_valid = isinstance(event_ids, list) and all(isinstance(value, str) and value.strip() for value in event_ids)
+    if isinstance(enrollments, list):
+        # Positive exclusions survive partial history, including when address checks are deferred.
+        prior_event = event_targets_valid and any(
+            isinstance(enrollment, dict) and isinstance(enrollment.get("sequence_id"), str)
+            and enrollment["sequence_id"].strip() in {value.strip() for value in event_ids}
+            for enrollment in enrollments
+        )
+        if prior_event:
+            reasons["active_sequence"] = "Prior enrollment in this event's Apollo sequence, regardless of status"
+        elif any(isinstance(enrollment, dict) and isinstance(enrollment.get("status"), str)
+                 and enrollment["status"].strip().lower() == "active" for enrollment in enrollments):
+            reasons["active_sequence"] = "Apollo contact data shows an active sequence"
+    sequence_history_valid = (
+        event_targets_valid and isinstance(enrollments, list)
+        and all(isinstance(enrollment, dict)
+                and isinstance(enrollment.get("sequence_id"), str) and enrollment["sequence_id"].strip()
+                and isinstance(enrollment.get("status"), str) and enrollment["status"].strip()
+                for enrollment in enrollments)
+    )
+    if not sequence_history_valid:
+        add_email_gap("Apollo enrollment history or same-event sequence targets not completely checked")
     if contact["event_app_invite_export_supplied"] is None:
         gaps.append("Event invite export availability not stated")
     elif contact["event_app_invite_export_supplied"] is True:
@@ -223,11 +266,6 @@ def prepare(rows, policy, as_of, overrides=None, *, outreach_owner_column=None, 
     if bool(clean(outreach_owner_column)) != bool(clean(outreach_owner_value)):
         raise ValueError("Outreach-owner column and Operator's value must be supplied together")
     prospecting = policy["prospecting"]
-    scope = prospecting["event"].get("outreach_owner_scope", {})
-    if (not isinstance(scope, dict) or not isinstance(scope.get("house_owner_ids", []), list)
-            or any(not isinstance(item, str) or not item.strip() for item in scope.get("house_owner_ids", []))
-            or type(scope.get("include_missing_account", False)) is not bool):
-        raise ValueError("Invalid outreach-owner scope policy types")
     configured = prospecting["event"]["exclude"]
     overrides = overrides if overrides is not None else {}
     if not isinstance(overrides, dict):
@@ -284,6 +322,8 @@ def prepare(rows, policy, as_of, overrides=None, *, outreach_owner_column=None, 
             raise ValueError("Override must name configured exclusions for this contact only")
         if "outside_named_accounts" in requested:
             raise ValueError("Named-account scope cannot be overridden")
+        if "recent_reply" in requested:
+            raise ValueError("Recent-reply exclusion cannot be overridden")
         resolve_catchall(contact, as_of)
         reasons, gaps, verified, email_gaps = exclusions(contact, prospecting, policy["tooling"], as_of)
         if contact["duplicate_conflict"]:
@@ -324,6 +364,21 @@ def prepare(rows, policy, as_of, overrides=None, *, outreach_owner_column=None, 
             "authorization": "Proposal labels only, never approval to enrich or enroll"}
 
 
+def run(args):
+    ambiguous_column = False
+    if args.input.suffix.lower() == ".csv":
+        with args.input.open(newline="", encoding="utf-8-sig") as handle:
+            reader = csv.DictReader(handle)
+            ambiguous_column = bool(args.outreach_owner_column and (reader.fieldnames or []).count(args.outreach_owner_column) > 1)
+            rows = list(reader)
+    else:
+        rows = json.loads(args.input.read_text())
+    return prepare(rows, yaml.safe_load(args.policy.read_text()), timestamp(args.as_of),
+                   json.loads(args.overrides.read_text()) if args.overrides else None,
+                   outreach_owner_column=args.outreach_owner_column, outreach_owner_value=args.outreach_owner_value,
+                   outreach_owner_column_ambiguous=ambiguous_column)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Intake CSV or reviewed JSON contact list")
@@ -334,18 +389,11 @@ def main(argv=None):
     parser.add_argument("--outreach-owner-value", help="Exact value marking Operator in that column")
     parser.add_argument("--output", type=Path, help="Sandbox JSON output, otherwise stdout")
     args = parser.parse_args(argv)
-    ambiguous_column = False
-    if args.input.suffix.lower() == ".csv":
-        with args.input.open(newline="", encoding="utf-8-sig") as handle:
-            reader = csv.DictReader(handle)
-            ambiguous_column = bool(args.outreach_owner_column and (reader.fieldnames or []).count(args.outreach_owner_column) > 1)
-            rows = list(reader)
-    else:
-        rows = json.loads(args.input.read_text())
-    result = prepare(rows, yaml.safe_load(args.policy.read_text()), timestamp(args.as_of),
-                     json.loads(args.overrides.read_text()) if args.overrides else None,
-                     outreach_owner_column=args.outreach_owner_column, outreach_owner_value=args.outreach_owner_value,
-                     outreach_owner_column_ambiguous=ambiguous_column)
+    try:
+        result = run(args)
+    except INPUT_ERRORS as error:
+        print(prospect_common.error_json(error))
+        return 2
     rendered = json.dumps(result, indent=2)
     if args.output:
         args.output.write_text(rendered + "\n")

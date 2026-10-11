@@ -1,62 +1,64 @@
 ---
 cadence: one-off
-reads: _core/policy.yaml (prospecting, salesforce, tooling), _core/rules.md, references/, event list, Salesforce, Gmail, Apollo
-writes: approved Apollo enrichment with CRM sync disclosed, no direct Salesforce writes
-next: Sequence Plan with viable prepared evidence, otherwise coordinator for early close
+reads: _core/policy.yaml (prospecting, salesforce, tooling), _core/rules.md, scoped prep and scrubber sections, helper interfaces, event list, Salesforce, Gmail, Apollo
+writes: approved Apollo enrichment with possible CRM sync disclosed, no direct Salesforce writes
+next: Sequence Plan with a viable prepared list, otherwise no-enrollment evidence to the coordinator
 ---
 
 # List Prep
 
-Prepare one event list under Operator's named-account scope. Helpers do not authorize enrichment or enrollment.
-Keep this run's immutable run_start. Enrichment spend never grants enrollment approval.
+Prepare Operator's named-account event list without authorizing enrollment. Missing evidence stays needs-input. Helpers supply proposals, never approval.
 
 ## Inputs
 
 | Source | File/Location | Section/Scope | Why |
 |---|---|---|---|
-| Core policy | `_core/policy.yaml` | `prospecting.event`, `prospecting.identity`, `prospecting.salesforce`, `prospecting.approval`, `salesforce`, `tooling` | Scope, exclusions and helpers |
-| Core rules | `_core/rules.md` | `rules#run_start`, `rules#event_sequence`, `rules#approval`, `rules#write_protocol`, `rules#absence_conclusions`, `rules#not_checked_means` | Existing permission and evidence limits |
-| Helper | `_core/scripts/interfaces.md` | "Interfaces", event_list_prep, event_scrub_leads, event_make_batches rows | Reviewed preparation and deterministic hygiene |
-| Reference | `../references/prep.md` | "Intake", "Salesforce and reply checks" | Complete current guard reads |
-| Reference | `../references/prep.md` | "Enrichment", "No enrollment", "Helper evidence" | Separately approved credits and reconciled results |
-| Reference | `references/scrubber.md` | "Run", "Output Contract", "Operator Checklist", "Fail-Closed Model" | Full-column scrub and independent audit |
-| Per-run evidence | Prospecting thread and sandbox | Original rows, event details, per-list overrides, complete native reads, C approvals and current receipts | Evidence for this list, never Git |
+| Core freshness | `_core/rules.md`, `_core/scripts/interfaces.md` | `rules#repo_currency`, `workflow_revision_check`, "Workflow revisions" | Enrichment proposal and prewrite evidence |
+| Core policy | `_core/policy.yaml` | `prospecting.event`, `prospecting.identity`, `prospecting.salesforce`, `prospecting.approval`, `salesforce`, `tooling` | Event exclusions, identity, complete reads and helpers |
+| Core rules | `_core/rules.md` | `rules#run_start`, `rules#event_sequence`, `rules#approval`, `rules#write_protocol`, `rules#absence_conclusions`, `rules#not_checked_means` | Original run, separate spend approval and bounded evidence |
+| Shared prep | `workspaces/prospecting/workflows/event-sequence/references/prep.md` | "Intake", "Salesforce and reply checks", "Enrichment", "No enrollment", "Helper evidence" | Canonical guards, enrichment and early-close result |
+| Scrubber | `references/scrubber.md` | "Run", "Output Contract", "Operator Checklist", "Fail-Closed Model" | Full-column hygiene and standalone audit |
+| Helper | `_core/scripts/interfaces.md` | "Interfaces", event_list_prep, event_scrub_leads, event_make_batches rows | Shared list helper and private scrub/batch tools |
+| Per-run evidence | Event list and complete saved native results in sandbox and current run thread | Original rows, event details, run_start, overrides, exact C approvals and guard receipts | This list only, no sibling contract as evidence |
 
 ## Process
 
-1. Intake per `../references/prep.md` "Intake", including the list, event, attendance dates, location and ask.
-2. Prep read-only per `../references/prep.md` "Salesforce and reply checks". Complete exact Account matching, Apollo identity, active-sequence, invite-export and reply checks.
+1. Retain the immutable original run_start per `rules#run_start`. Intake and normalize per shared prep "Intake", preserving every original row and duplicate reason.
+2. Prep read-only per shared prep "Salesforce and reply checks". Complete exact Account matching, Apollo identity and active-sequence checks, invite-export matching and bounded reply reads.
    With no usable email, defer only exact-email checks until enrichment returns an address. Complete them and rerun the helper before E1. Unchecked rows stay needs_input.
-   Exclude every Account outside Operator's named accounts except approved outreach-owner rows per shared prep. Missing evidence stays needs-input.
-3. Enrich only helper enrichment_candidates whose sole exclusion is unverified_email per `../references/prep.md` "Enrichment".
-   Each C proposal discloses Apollo CRM sync and requires separate exact count and estimated-credit approval. Waterfall has its own approval.
-4. Run `policy.tooling.scripts.event_list_prep` on reviewed evidence per `../references/prep.md` "Helper evidence".
-   Check after prep and each helper. If no recipients and no enrichment remain, follow `../references/prep.md` "No enrollment" and return the result to the coordinator.
-5. For a nonempty candidate list, run `policy.tooling.scripts.event_scrub_leads` scrub and audit-clean-output per `references/scrubber.md` "Run".
-   Both reports must say PASS. Then run `policy.tooling.scripts.event_make_batches`, retain Website, reconcile counts and hold domain mismatches.
-6. Return the viable prepared list and complete receipts to Sequence Plan, or return no-enrollment evidence and the Pipeline list to the coordinator. Do not load either receiving contract here.
+   Exclude every Account outside Operator's named accounts except approved outreach-owner rows per shared prep. Review exact domain aliases explicitly.
+   Retain open-Opportunity contacts for Pipeline even when an event override permits enrollment.
+3. Enrich only helper enrichment_candidates whose sole exclusion is unverified_email per shared prep "Enrichment", with separate approval and CRM-sync disclosure for every C proposal.
+   Each spend, including waterfall, needs its own exact approval. Never enrich by the needs_input label. Finish deferred address checks on returned emails and rerun event_list_prep.
+4. For a nonempty candidate list, require event_scrub_leads scrub and standalone audit-clean-output PASS, then event_make_batches checks, with domain mismatches held.
+   Invoke `policy.tooling.scripts.event_scrub_leads` and `policy.tooling.scripts.event_make_batches` per their interfaces, the scrubber and shared prep "Enrichment".
+   Keep Website, all source rows and every exclusion, quarantine, hold and batch count reconciled. Invoke `policy.tooling.scripts.event_list_prep` on reviewed evidence.
+5. Check shared prep "No enrollment" after prep, declined enrichment and each helper. With no recipients and no enrichment remaining to propose or perform, return evidence to the coordinator.
+   Skip audits of nonexistent clean files and remaining batching. Otherwise pass the viable list and actual receipts to Sequence Plan, without loading its contract as evidence.
 
 ## Checkpoints
 
 | After Step | Agent Presents | Human Decides |
 |---|---|---|
-| 2 | Candidates needing enrichment, operation, count and estimated credits | Approve the first exact C spend or skip |
-| 3 | Each remaining C operation and credit estimate, including CRM-sync disclosure | Approve that spend or skip, never inherited from another operation |
+| 2 | Candidates needing enrichment, exact operation, count, estimated credits and possible Apollo CRM sync | Approve the first C spend or skip |
+| 3 | Each remaining C operation and estimated credits, waterfall separately, with CRM sync disclosed | Approve that spend or skip, never inherited from another operation |
+
+Use the displayed C label grammar in shared prep "Enrichment". No enrichment approval authorizes enrollment.
 
 ## Audit
 
 | Check | Pass Condition |
 |---|---|
-| Prep, before output | Every source row reconciles to one normalized contact or reported duplicate. Guard reads complete, Accounts belong to Operator, exclusions have reasons and overrides cannot expand scope |
-| Credits, before each spend | Operator approved that exact count and estimated credit spend. Waterfall search has its own approval |
-| Hygiene, before output | For a nonempty candidate list, scrub and independent audit both PASS. Batch counts reconcile, missing fields and domain mismatches remain held unless explicitly resolved |
-| No enrollment | No recipients and no remaining enrichment return to the coordinator without an audit of nonexistent files or Apollo enrollment writes |
-| Scope, throughout | No direct Salesforce writes or enrollment. Separate exact C approvals with Apollo CRM-sync disclosure. Helper labels never grant permission |
+| Prep | Every source row reconciles to a normalized contact or reported duplicate. All guard reads complete, named-account scope fixed, exclusions have reasons |
+| Credits | Sole-exclusion enrichment_candidates only. Exact spend approved, waterfall separately. Catch-all provenance is explicit, unknown remains held |
+| Hygiene | For a nonempty candidate list, scrub and standalone audit both PASS. Batch counts reconcile, Website retained, missing fields and domain mismatches held unless explicitly resolved |
+| No enrollment | No recipients and no remaining enrichment returns to coordinator without empty-file audits, E approval or Apollo enrollment writes |
+| Handoff | Viable list includes full receipts, exact contacts and account linkage, scrub/audit reports, batches and retained Pipeline list |
 
 ## Outputs
 
 | Artifact | Location | Format |
 |---|---|---|
-| Enrichment results | Apollo and sandbox, after approval only | Each exact C operation, native status, credit use and disclosed CRM-sync outcome |
-| Prepared list | Prospecting thread and sandbox | Reviewed rows, exclusions, holds, guard and C receipts, scrub audits and reconciled batches for Sequence Plan |
-| No-recipient result | Prospecting thread and sandbox | Every row reconciled, remaining enrichment status and Pipeline list for coordinator close |
+| Prepared list | Current Prospecting run thread and sandbox, enrichment only after approval | Original and reviewed rows, guards, C approvals, enrichment/helper receipts, chunks, batches, exclusions and holds |
+| Viable handoff | Current run thread and sandbox | Actual scoped evidence for `workspaces/prospecting/workflows/event-sequence/02-sequence-plan/CONTEXT.md` |
+| No-enrollment result | Coordinator in this run | Row reconciliation, evidence gaps, known enrichment CRM sync and retained Pipeline evidence, never an empty verified sequence |

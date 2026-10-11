@@ -14,12 +14,14 @@
 - the active/cold definition and the pilot handoff each have one anchor in _core/rules.md, cited by the workflows that depend on them
 """
 import re
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import yaml
-from test_skill_contracts import SKILLS, CONTRACT_PATHS, skill_dirs, ROUTING_OVERVIEWS, reference_consumers, input_reference_rows
+from test_skill_contracts import SKILLS, CONTRACT_PATHS, OVERVIEW_PATHS, SIGNAL_WORKFLOW, EVENT_WORKFLOW, EVENT_STAGE_ORDER, COORDINATOR_PATHS, skill_dirs, owning_workflow, reference_is_loaded
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "_core"
@@ -39,7 +41,7 @@ TABLE_HEADERS = {
     "Outputs": "| Artifact | Location | Format |",
 }
 # `path` "Heading" or `path` "Heading one", "Heading two"
-SCOPED_REF = re.compile(r"`((?:workspaces/[^`]+/|\.\./|[0-9]{2}-[a-z-]+/)?references/[a-z0-9-]+\.md|_core/scripts/interfaces\.md|_core/slack-evidence\.md|_core/CONVENTIONS\.md)`((?:[^`\n|]*?\"[^\"]+\")*)")
+SCOPED_REF = re.compile(r"`((?:workspaces/[^`]+/)?references/[a-z0-9-]+\.md|_core/scripts/interfaces\.md|_core/slack-evidence\.md|_core/CONVENTIONS\.md)`((?:[^`\n|]*?\"[^\"]+\")*)")
 QUOTED = re.compile(r"\"([^\"]+)\"")
 
 
@@ -53,7 +55,7 @@ def workflow_path(name):
 
 def context_files():
     files = [ROOT / "CONTEXT.md", CORE / "CONTEXT.md", CORE / "scripts" / "CONTEXT.md"]
-    return files + sorted(WORKSPACES.glob("*/CONTEXT.md")) + [d / "CONTEXT.md" for d in workflow_dirs()] + sorted(ROUTING_OVERVIEWS)
+    return files + sorted(WORKSPACES.glob("*/CONTEXT.md")) + sorted(OVERVIEW_PATHS) + [d / "CONTEXT.md" for d in workflow_dirs()]
 
 
 def reference_files():
@@ -117,8 +119,10 @@ class ContractShape(unittest.TestCase):
     def check_sections(self, path):
         secs = sections(path.read_text())
         names = list(secs)
-        expected = (['Pipeline'] if path == CONTRACT_PATHS['event-sequence'] else []) + SECTION_ORDER
-        self.assertEqual(names, [s for s in expected if s in secs], f"{path.relative_to(ROOT)}: {names}")
+        order = ["Pipeline", *SECTION_ORDER] if path in COORDINATOR_PATHS else SECTION_ORDER
+        self.assertEqual(names, [s for s in order if s in secs], f"{path.relative_to(ROOT)}: {names}")
+        if path in COORDINATOR_PATHS:
+            self.assertEqual(table_rows(secs["Pipeline"])[0], "| Stage | Trigger | Output | Human check | Contract route |")
         self.assertTrue(REQUIRED_SECTIONS <= set(names), f"{path.relative_to(ROOT)}: {names}")
         for name, header in TABLE_HEADERS.items():
             if name in secs:
@@ -234,16 +238,19 @@ class ScopedReferences(unittest.TestCase):
         missing = []
         for d in workflow_dirs():
             text = (d / "CONTEXT.md").read_text()
-            for ref, _ in SCOPED_REF.findall(text):
-                if not resolve_ref(d, ref).is_file():
+            for ref in set(re.findall(r"`(references/[^`]+)`", text)):
+                if not (d / ref).is_file():
                     missing.append(f"{d.name}: {ref}")
-            for target, scope in input_reference_rows(d / 'CONTEXT.md'):
-                if not target.is_file():
-                    missing.append(f"{d.name}: {target}")
-                    continue
-                for q in QUOTED.findall(scope):
-                    if q not in headings(target):
-                        missing.append(f'{d.name}: {target} "{q}"')
+            _, inputs = table_rows(sections(text)["Inputs"])
+            for r in inputs:
+                refs = re.findall(r"`(references/[^`]+\.md)`", r[1])
+                for ref in refs:
+                    target = d / ref
+                    if not target.is_file():
+                        continue
+                    for q in QUOTED.findall(r[2]):
+                        if q not in headings(target):
+                            missing.append(f"{d.name}: {ref} \"{q}\"")
         self.assertEqual(missing, [])
 
     def test_scoped_citations_name_real_headings(self):
@@ -263,9 +270,16 @@ class ScopedReferences(unittest.TestCase):
         self.assertEqual(missing, [])
 
     def test_every_reference_is_routed_by_its_contract(self):
-        references = sorted(WORKSPACES.glob('*/workflows/**/references/*.md'))
-        orphans = [str(ref.relative_to(ROOT)) for ref in references if not reference_consumers(ref)]
+        orphans = []
+        for ref in sorted(WORKSPACES.glob("*/workflows/**/references/*.md")):
+            owner = owning_workflow(ref.parent)
+            consumers = [directory / "CONTEXT.md" for directory in workflow_dirs() if owning_workflow(directory) == owner]
+            if ref.parent.parent != owner:
+                consumers = [ref.parent.parent / "CONTEXT.md"]
+            if not any(reference_is_loaded(contract, ref) for contract in consumers):
+                orphans.append(str(ref.relative_to(ROOT)))
         self.assertEqual(orphans, [])
+
 
 class WorkspaceNavigation(unittest.TestCase):
     def test_call_prep_is_owned_by_pipeline_without_stale_paths(self):
@@ -298,25 +312,25 @@ class WorkspaceNavigation(unittest.TestCase):
         self.assertTrue(all(len(row) == 3 and all(row) for row in rows))
         routes = [row[1].strip("`") for row in rows]
         self.assertEqual(sorted(routes), [str(p.relative_to(ROOT)) for p in sorted(WORKSPACES.glob("*/CONTEXT.md"))])
-        contracts = set()
+        contracts = []
         for route in routes:
             workspace = (ROOT / route).parent
             header, rows = table_rows(sections((ROOT / route).read_text())["Task routing"])
             self.assertEqual(header, "| Task or event | Contract | Output and handoff | Human check |")
             self.assertTrue(all(len(row) == 4 and all(row) for row in rows))
-            owned = {(workspace / row[1].strip("`")).resolve() for row in rows}
-            self.assertEqual(owned, set(workspace.glob('workflows/*/CONTEXT.md')))
-            contracts.update(owned)
-            for parent in owned:
-                if 'Pipeline' not in sections(parent.read_text()):
-                    continue
-                header, stages = table_rows(sections(parent.read_text())['Pipeline'])
-                self.assertEqual(header, '| Stage | Trigger | Output | Human check | Contract route |')
-                self.assertTrue(all(len(row) == 5 and all(row) for row in stages))
-                selected = {(parent.parent / row[4].strip('`')).resolve() for row in stages}
-                self.assertEqual(selected, set(parent.parent.glob('*/CONTEXT.md')))
-                contracts.update(selected)
-        self.assertEqual(contracts, {d / 'CONTEXT.md' for d in workflow_dirs()} | ROUTING_OVERVIEWS)
+            owned = [workspace / row[1].strip("`") for row in rows]
+            self.assertEqual(sorted(set(owned)), sorted(workspace.glob("workflows/*/CONTEXT.md")))
+            if workspace.name == "prospecting":
+                _, pipeline = table_rows(sections((SIGNAL_WORKFLOW / "CONTEXT.md").read_text())["Pipeline"])
+                stages = [SIGNAL_WORKFLOW / row[4].strip("`") for row in pipeline]
+                self.assertEqual(sorted(stages), sorted(SIGNAL_WORKFLOW.glob("*/CONTEXT.md")))
+                owned = [contract for contract in owned if contract not in OVERVIEW_PATHS] + stages
+                _, event_pipeline = table_rows(sections((EVENT_WORKFLOW / "CONTEXT.md").read_text())["Pipeline"])
+                event_stages = [EVENT_WORKFLOW / row[4].strip("`") for row in event_pipeline]
+                self.assertEqual(sorted(event_stages), sorted(EVENT_WORKFLOW.glob("*/CONTEXT.md")))
+                owned.extend(event_stages)
+            contracts.extend(owned)
+        self.assertEqual(sorted(set(contracts)), sorted(d / "CONTEXT.md" for d in workflow_dirs()))
 
     def test_workspace_instructions_are_explicitly_reachable(self):
         agents = (ROOT / "AGENTS.md").read_text()
@@ -348,14 +362,13 @@ class WorkspaceNavigation(unittest.TestCase):
                 self.assertIn("Improvement task recording needs no approval pause", checkpoints)
                 self.assertIn("Repairs and policy decisions follow their owning workflow's approval rules", checkpoints)
                 continue
-            if d.name == '03-launch':
-                checkpoints = '\n'.join(sections(text)['Checkpoints'])
-                self.assertTrue(checkpoints.startswith('\nNone. Sequence Plan owns the exact E approval.'))
-                self.assertIn('same-thread native approval', checkpoints)
-                self.assertIn('stops for revised approval on material changes', checkpoints)
-                continue
-            needs_checkpoint = not fm["writes"].startswith("nothing") or d.name in {"pilot-usage", "deal-coach", "02-sequence-plan"}
+            needs_checkpoint = not fm["writes"].startswith("nothing") or d.name in {"pilot-usage", "deal-coach"}
             if needs_checkpoint:
+                if d == EVENT_WORKFLOW / "03-launch":
+                    self.assertIn("None. Launch consumes Sequence Plan's exact existing E approval in this same run thread", text)
+                    self.assertIn("Operator's matching native approval in this same Prospecting run thread", text)
+                    self.assertIn("Missing, cross-thread or invalid approval stops without writes", text)
+                    continue
                 _, rows = table_rows(sections(text).get("Checkpoints", []))
                 self.assertTrue(rows, f"{d.name} must expose its existing human review boundary")
 
@@ -406,7 +419,7 @@ class WorkspaceNavigation(unittest.TestCase):
             self.assertIn("workspaces/systems/workflows/repo-maintenance/CONTEXT.md", learning)
             self.assertIn("approval link", learning)
         conventions = (CORE / "CONVENTIONS.md").read_text()
-        self.assertIn("Explicit task-specific holds override any approval", conventions)
+        self.assertIn("Explicit task-specific holds override that standing rule", conventions)
         self.assertIn("wording changes in `_core/rules.md` and `_core/policy.yaml` first", conventions)
 
     def test_system_review_distinguishes_delivered_runs_from_failures(self):
@@ -418,9 +431,11 @@ class WorkspaceNavigation(unittest.TestCase):
                          "For a new thread, check that session", "When matching output exists",
                          "classify the run as `delivered, receipt open`",
                          "Count these separately as a platform receipt issue, not a failure",
-                         "When no output exists, classify the run as a failed run",
-                         "Unreadable output is not checked"):
+                         "When no output exists, classify the run as a failed run only when a native failure status or retrieved stopped-progress evidence establishes it",
+                         "Otherwise it stays pending or unknown.", "Crossing midnight alone is not failure.",
+                         "Unreadable output is not checked, and `delivered, receipt open` stays its own count."):
             self.assertIn(expected, drift)
+        self.assertNotIn("classify the run as a failed run. Unreadable", drift)
         contract = sections((workflow / "CONTEXT.md").read_text())
         self.assertIn('"Drift and failures"', "\n".join(contract["Inputs"]))
         self.assertIn('"Drift and failures"', "\n".join(contract["Process"]))
@@ -438,6 +453,48 @@ class WorkspaceNavigation(unittest.TestCase):
             self.assertIn(expected, drift)
         self.assertIn("Post a scorecard of seven lines or fewer", "\n".join(reference["Report and routing"]))
 
+    def test_system_review_census_runs_only_on_typed_eval(self):
+        workflow = workflow_path("system-review")
+        review = sections((workflow / "references" / "review.md").read_text())
+        outcomes = "\n".join(review["Proposal outcomes"])
+        self.assertIn("The census and kind table below run only on a typed `eval` request.", outcomes)
+        self.assertIn("Friday Review keeps failures, drift, repeated corrections, capture and backlog, and collects no census.", outcomes)
+        self.assertIn("over the typed `eval` run's own complete four-week window ending at its run start", outcomes)
+        self.assertIn("Prior Friday reviews are history links for dedupe, not the source of counts.", outcomes)
+        self.assertIn("If verified coverage does not reach four weeks back, or proposal or reply reads are incomplete, label the observed window and counts partial.", outcomes)
+        drift = "\n".join(review["Drift and failures"])
+        self.assertIn("Propose it only from linked complete eligible evidence in a typed `eval` census. Otherwise label preapproval not checked.", drift)
+        report = "\n".join(review["Report and routing"])
+        self.assertIn("Use the five teammate lines and the health line above.", report)
+        self.assertIn("The approvals line is optional and appears only when a typed `eval` census covers the window.", report)
+        self.assertNotIn("Use exactly the seven", report)
+        evaluation = sections((workflow / "references" / "eval.md").read_text())
+        invocation = "\n".join(evaluation["Invocation"])
+        self.assertIn("A typed `eval` request also collects the proposal census and four-week kind table", invocation)
+        self.assertIn("That census uses its own complete four-week window ending at the run start and labels partial coverage. Friday Review collects no census.", invocation)
+        self.assertIn("Friday Review keeps failures, drift, repeated corrections, capture and backlog.", invocation)
+        evidence = "\n".join(evaluation["Window and evidence"])
+        self.assertIn("A typed `eval` additionally reads proposal-bearing run outputs", evidence)
+        self.assertNotIn("Friday Review additionally reads proposal-bearing run outputs", evidence)
+        contract = sections((workflow / "CONTEXT.md").read_text())
+        self.assertIn("A typed `eval` adds its own four-week census window.", "\n".join(contract["Process"]))
+        inputs = "\n".join(contract["Inputs"])
+        self.assertIn("On a typed `eval` only, numbered proposals, kinds, outcomes and replies over its own four-week window", inputs)
+        self.assertIn("from linked complete typed `eval` evidence, otherwise not checked", inputs)
+        self.assertNotIn("prior three Friday reviews", inputs)
+        audit = next(line for line in contract["Audit"] if line.startswith("| Measurement, before output |"))
+        self.assertIn("The approvals line and kind rates come only from a typed `eval` census over its own four-week window, or are not checked", audit)
+        output = next(line for line in contract["Outputs"] if line.startswith("| Health report |"))
+        self.assertIn("adds the census and kind table", output)
+
+    def test_system_review_inventory_covers_owned_sales_duties_without_personal_reads(self):
+        evidence = "\n".join(sections((workflow_path("system-review") / "references" / "eval.md").read_text())["Window and evidence"])
+        for expected in ("List every automation for a relevant Sales duty Operator owns with `pplx automation list`, following its pages, whether its collection is project-bound or null.",
+                         "Record each one's owner, source, approval or exception, and actual expiry evidence.",
+                         "Unrelated personal automations are not read.",
+                         "Listing an exception transfers no ownership and changes no settings."):
+            self.assertIn(expected, evidence)
+
 
 class FridayMeasurementContracts(unittest.TestCase):
     @classmethod
@@ -447,13 +504,15 @@ class FridayMeasurementContracts(unittest.TestCase):
         cls.contract = sections((cls.workflow / "CONTEXT.md").read_text())
         cls.coach = sections((workflow_path("deal-coach") / "references/report-format.md").read_text())
 
-    def test_platform_limits_name_all_eight_observed_constraints(self):
+    def test_platform_limits_name_all_nine_observed_constraints(self):
         conventions = (CORE / "CONVENTIONS.md").read_text()
         limits = sections(conventions)["Platform limits"]
         names = ("Automation edit scope", "Automation delivery", "Dedicated threads", "Worker messaging",
-                 "Teammate instructions", "Credential injection", "Slack watch coverage", "Session send")
+                 "Teammate instructions", "Credential injection", "Slack watch coverage", "Session tools",
+                 "Retire a replaced Teammate by rewriting its Description to read-only before archiving")
         numbered = [line for line in limits if re.match(r"^\d+\. ", line)]
-        self.assertEqual(len(numbered), 8)
+        self.assertEqual(len(numbered), 9)
+        self.assertIn("supported included adapter uses native session tools for reads", "\n".join(limits))
         for number, name in enumerate(names, 1):
             self.assertTrue(numbered[number - 1].startswith(f"{number}. {name}."))
         text = "\n".join(limits)
@@ -473,23 +532,23 @@ class FridayMeasurementContracts(unittest.TestCase):
                          "proposal number", "exact proposed change", "Operator's outcome evidence",
                          "approved unchanged", "approved with edits", "rejected", "no reply",
                          "Do not pool unlike kinds or workflows", "Later replies update that proposal's outcome",
-                         "never add another proposal", "numbered Systems improvement proposals published in this review",
+                         "never add another proposal", "numbered Systems improvement proposals published in the window",
                          "No reply requires a complete read", "Unread replies are not checked",
                          "stay in the Systems thread, never in Git", "Measurement grants no pre-approval"):
             self.assertIn(expected, outcomes)
         self.assertIn('"Proposal outcomes"', "\n".join(self.contract["Inputs"]))
         evaluation = (self.workflow / "references/eval.md").read_text()
-        self.assertIn("Friday Review additionally reads proposal-bearing run outputs", evaluation)
+        self.assertIn("A typed `eval` additionally reads proposal-bearing run outputs", evaluation)
         self.assertIn("not permission to open every normal run thread", evaluation)
 
     def test_four_week_rates_use_current_and_prior_three_reviews_without_a_threshold(self):
         outcomes = "\n".join(self.review["Proposal outcomes"])
-        for expected in ("current review and the prior three Friday reviews", "covering four weeks",
+        for expected in ("typed `eval` run's own complete four-week window", "covering four weeks",
                          "original proposal in its originating review window", "without counting a proposal twice",
                          "total proposals, each outcome count", "count divided by the total proposals for that kind",
                          "includes edited approvals, rejections, and no replies in its denominator",
                          "zero denominator has no rate", "never a zero-percent claim",
-                         "fewer than three prior reviews or incomplete proposal or reply reads",
+                         "does not reach four weeks back, or proposal or reply reads are incomplete",
                          "label the observed window and counts partial", "four-week rate is not checked",
                          "introduces no threshold or target"):
             self.assertIn(expected, outcomes)
@@ -504,7 +563,8 @@ class FridayMeasurementContracts(unittest.TestCase):
         for expected in ("accounts researched", "drafts approved", "proven sends", "event contacts enrolled", "replies",
                          "meetings", "Pipeline handoffs"):
             self.assertIn(expected.lower(), rows[0].lower())
-        for expected in ("ARR created in 7 days", "`ARR__c`", "Opportunities created in that window", "field history"):
+        for expected in ("ARR created since the previous review", "`policy.forecast.amount_field`",
+                         "Opportunities created in that interval", "field history"):
             self.assertIn(expected, rows[1])
         self.assertIn("last week's reported call", rows[2])
         self.assertIn("quarter-end accuracy from Forecasting's existing check", rows[2])
@@ -513,7 +573,8 @@ class FridayMeasurementContracts(unittest.TestCase):
         self.assertIn("receipt-open counts separate from failures", rows[5])
         self.assertIn("four-week approved-unchanged rate", rows[6])
         report = "\n".join(self.review["Report and routing"])
-        self.assertIn("Use exactly the seven", report)
+        self.assertIn("Use the five teammate lines and the health line above", report)
+        self.assertIn("Approvals. Optional.", rows[6])
         self.assertIn("proposal-kind tables and per-thread delay or stall evidence outside the scorecard and after the backlog", report)
 
     def test_scorecard_preserves_source_windows_unknowns_and_domain_ownership(self):
@@ -523,6 +584,20 @@ class FridayMeasurementContracts(unittest.TestCase):
                          "dated old and new values from field history", "Missing ARR amounts remain unknown",
                          "without recomputing forecasts or setting targets", "daily totals"):
             self.assertIn(expected, evidence)
+
+    def test_coach_view_assesses_ten_questions_internally_and_displays_the_short_view(self):
+        approved = ("Assess all ten questions internally. Mark unsupported answers unknown. "
+                    "Display material supported facts, major gaps, supported risk patterns, and one next move per deal with the person to involve.\n"
+                    "Show all answers on request. Score table, scoring, stakeholder coverage and count evidence unchanged.")
+        strategy = (workflow_path("deal-coach") / "references/strategy.md").read_text()
+        questions = sections(strategy)["Strategy questions"]
+        self.assertEqual("\n".join(questions).count(approved), 1)
+        self.assertEqual(len([line for line in questions if re.match(r"^\d+\. ", line)]), 10)
+        self.assertNotIn("Answer each question in one or two sentences", strategy)
+        review = "\n".join(self.coach["Deal review"])
+        self.assertEqual(review.count(approved), 1)
+        self.assertNotIn("Answer every strategy question briefly", review)
+        self.assertIn("Present the score table first, strategy answers second, and one next best move last.", review)
 
     def test_coach_gap_count_uses_prior_gaps_and_all_current_quarter_deals(self):
         report = "\n".join(self.coach["Deal review"])
@@ -555,7 +630,7 @@ class FridayMeasurementContracts(unittest.TestCase):
                          "Do not count a delivered receipt-open issue as a stall"):
             self.assertIn(expected, drift)
 
-    def test_thread_moves_need_two_consecutive_reviews_and_operator_approval(self):
+    def test_thread_moves_need_two_consecutive_reviews_and_matt_approval(self):
         drift = "\n".join(self.review["Drift and failures"])
         for expected in ("only when the same thread shows a delay in two consecutive Friday reviews",
                          "links to both reviews and their run evidence", "recreate that thread's runs in their own threads",
@@ -566,6 +641,12 @@ class FridayMeasurementContracts(unittest.TestCase):
 
 
 class AuditFindingContracts(unittest.TestCase):
+    def test_close_verification_keeps_prior_pending_downstream_items_in_scope(self):
+        reference = (workflow_path("close") / "references/paths.md").read_text()
+        self.assertIn("Keep unresolved downstream items from the prior handoff in scope", reference)
+        self.assertIn("even when current org status selects a different path", reference)
+        self.assertIn("Never repeat a verified conversion or completed handoff", reference)
+
     def test_close_loads_all_fields_before_reading_every_field(self):
         contract = sections((workflow_path("close") / "CONTEXT.md").read_text())
         _, inputs = table_rows(contract["Inputs"])
@@ -574,20 +655,13 @@ class AuditFindingContracts(unittest.TestCase):
         self.assertEqual(fields[0][2], "Full file at step 2")
         self.assertIn("Read every field in `references/fields.md`", "\n".join(contract["Process"]))
 
-    def test_triage_next_and_output_match_owned_row_close_handoff(self):
-        directory = workflow_path("task-triage-speed-run")
-        text = (directory / "CONTEXT.md").read_text()
-        frontmatter = yaml.safe_load(text.split("---\n", 2)[1])
-        self.assertEqual(frontmatter["next"], "verified deal threads for routed Tasks, pipeline-review for remaining pipeline-owned Tasks")
-        _, outputs = table_rows(sections(text)["Outputs"])
-        handoffs = [row for row in outputs if row[0] == "Owned Task handoff"]
-        self.assertEqual(len(handoffs), 1)
-        self.assertEqual(handoffs[0][1], "Run thread and verified deal thread")
-        for expected in ("Remaining owned rows", "ambiguous candidates with reasons", "pipeline-review",
-                         '`references/writes.md` "Close"'):
-            self.assertIn(expected, handoffs[0][2])
-        close = "\n".join(sections((directory / "references" / "writes.md").read_text())["Close"])
-        self.assertIn("verified deal-thread or pipeline-review destination", close)
+    def test_triage_next_and_output_match_deal_receipts_and_field_ownership(self):
+        text=(workflow_path('task-triage-speed-run')/'CONTEXT.md').read_text()
+        frontmatter=yaml.safe_load(text.split('---\n',2)[1])
+        self.assertIn('deal-thread receipts',frontmatter['next'])
+        self.assertIn('Next_Steps__c',frontmatter['writes'])
+        self.assertIn('verified written next step',text)
+        self.assertNotIn('for its field owner',text)
 
     def test_root_systems_summary_includes_improvement_tasks(self):
         _, routes = table_rows(sections((ROOT / "CONTEXT.md").read_text())["Task routing"])
@@ -611,6 +685,16 @@ class AuditFindingContracts(unittest.TestCase):
 
 
 class CoachCoverageAndPatterns(unittest.TestCase):
+    def test_meddicc_zero_cells_require_absence_not_unknown_sources(self):
+        text = (workflow_path("deal-coach") / "references/meddicc.md").read_text()
+        for element in ("Economic Buyer", "Decision Criteria", "Decision Process", "Paper Process", "Competition"):
+            with self.subTest(element=element):
+                self.assertIn(f"| {element} | Absent in reviewed evidence |", text)
+        self.assertNotIn("Unknown in reviewed evidence", text)
+        self.assertIn("Unread or missing sources leave the element unknown rather than proving a zero.", text)
+        self.assertIn("Use zero when the reviewed evidence establishes that the element is absent.", text)
+        self.assertIn("Unknown elements make the gate unverified, never passed.", text)
+
     def setUp(self):
         self.directory = workflow_path("deal-coach")
         self.text = (self.directory / "CONTEXT.md").read_text()
@@ -666,7 +750,7 @@ class CoachCoverageAndPatterns(unittest.TestCase):
         self.assertTrue(any(row[1] == "`_core/policy.yaml`" and
                             row[2] == "All branches load `momentum`, `tooling`" for row in inputs))
         self.assertTrue(any(row[1] == "`_core/rules.md`" and
-                            row[2] == "All branches load `rules#momentum`" for row in inputs))
+                            row[2] == "All branches load `rules#momentum`, `rules#handoff_delivery`" for row in inputs))
         month = [row for row in inputs if row[1] ==
                  "Owned Opportunity call Tasks and Next_Steps__c, Momentum transcripts, and linked deal evidence"]
         self.assertEqual(len(month), 1)
@@ -700,6 +784,26 @@ class CoachCoverageAndPatterns(unittest.TestCase):
         self.assertEqual(len(patterns), 1)
         self.assertEqual(patterns[0][1], "Coach thread")
         self.assertIn("even without supported criteria edits", patterns[0][2])
+
+    def test_capped_momentum_windows_mark_the_account_not_checked_and_split_on_refresh(self):
+        review = "\n".join(self.report["Deal review"])
+        self.assertIn("An Account-filtered window that returns `policy.momentum.sweep.page_size` meetings is capped.", review)
+        self.assertIn("mark that Account not checked for coverage, never fully covered", review)
+        monthly = "\n".join(self.learning["Monthly refresh"])
+        anchor = "Respect supported retrieval windows and limits. "
+        approved = ("A Momentum window that returns `policy.momentum.sweep.page_size` meetings is incomplete. "
+                    "Split it in half and rerun until every window returns fewer.")
+        self.assertEqual(monthly.count(anchor + approved), 1)
+        policy = yaml.safe_load((CORE / "policy.yaml").read_text())
+        self.assertIsInstance(policy["momentum"]["sweep"]["page_size"], int)
+
+    def test_agent_configuration_recovers_from_connector_and_platform_failures(self):
+        process = "\n".join(sections((workflow_path("agent-configuration") / "CONTEXT.md").read_text())["Process"])
+        for expected in ("Recovery from a connector or platform failure.", "quote the exact error with the command or tool that raised it",
+                         "Nothing after that step is assumed applied.", "Verify which tools, permissions and settings are still readable",
+                         "read back actual settings", "Retry only under the original authorization",
+                         "proposed `_core/CONVENTIONS.md` \"Platform limits\" line through repo-maintenance, never a workaround"):
+            self.assertIn(expected, process)
 
     def test_pattern_evidence_limits_privacy_and_existing_criteria_delivery_gates_remain_explicit(self):
         monthly = "\n".join(self.learning["Monthly refresh"])
@@ -741,21 +845,22 @@ class SystemReviewEvaluation(unittest.TestCase):
         evidence = "\n".join(self.evaluation["Window and evidence"])
         for expected in ("time since the previous review in the Systems thread, or 24 hours on the first run",
                          "An unread baseline is not checked, not proof of a first run",
-                         "List every Sales automation with `pplx automation list`, following its pages",
+                         "with `pplx automation list`, following its pages",
                          "Read every automation run in the window with `pplx automation runs <id>`",
                          "Follow returned cursors until the window is covered", "Do not use `--responses`",
                          "Open a run thread only for failures, stuck receipts, or Operator's edits, rejections, or silence",
                          "Unread or incomplete threads are not checked, not evidence of silence",
-                         "Read Pipeline, Forecasting, and Coach thread entries after their turn baselines",
-                         "deal threads with later turns", "Read PRs merged in the window",
+                         "Read Pipeline, Forecasting, Coach and deal thread entries within their verified timestamp windows",
+                         "Read PRs merged in the window",
                          "open improvement tasks", "keeping delivered receipts separate from failures"):
             self.assertIn(expected, evidence)
 
-    def test_friday_thread_windows_use_reported_turn_baselines_not_missing_timestamps(self):
+    def test_friday_thread_windows_require_verified_boundaries_not_export_positions(self):
         evidence = "\n".join(self.evaluation["Window and evidence"])
-        for expected in ("`pplx session get --download-content`", "`conversation.jsonl`",
-                         "`turn`, `query`, and `answer` but no timestamps", "Never infer thread-entry dates",
-                         "read only turns later than its last-read turn number", "previous Friday review's Systems output",
+        for expected in ("Call `load_sessions` in Code Mode with the verified session context UUID", "`conversation.jsonl`",
+                         "mark that thread context not checked", "Never infer its contents",
+                         "Window thread entries by their timestamps, never by turn numbers", "Never infer thread-entry dates",
+                         "timestamped window boundary", "previous Friday review's Systems output",
                          "first Friday review sets each thread's baseline", "without claiming historical turns",
                          "newly encountered thread also gets a baseline", "not permission to reset or advance",
                          "On-demand Eval uses those baselines without advancing them",
@@ -764,9 +869,9 @@ class SystemReviewEvaluation(unittest.TestCase):
             self.assertIn(expected, evidence)
         review = sections((workflow_path("system-review") / "references/review.md").read_text())
         scorecard = "\n".join(review["Evidence and scorecard"])
-        for expected in ("posts the last turn number it read per teammate and deal thread",
+        for expected in ("links its retained source snapshots, context UUIDs and coverage timestamps",
                          "in its Systems thread output", "The first review sets the baseline",
-                         "The next review reads only later turns", "never in Git",
+                         "The next review needs complete timestamp coverage after that boundary", "never in Git",
                          "An unread thread is not checked and its baseline does not advance"):
             self.assertIn(expected, scorecard)
 
@@ -776,33 +881,33 @@ class SystemReviewEvaluation(unittest.TestCase):
         for expected in ("A recurring failure or stuck run", "The same edit or rejection twice",
                          "Manual work Operator repeats that a workflow could prepare", "A no-op or duplicate run",
                          "A missed handoff", "Drift from the profile, pointer, or schedule checks",
-                         "A system gap against Operator's configured revenue objective, framed as a system change"):
+                         "A system gap against the reviewed targets in `policy.forecast.targets` or `policy.forecast.target_default`, framed as a system change"):
             self.assertIn(expected, signals)
 
     def test_repeated_corrections_ask_once_with_links_and_record_answer_evidence(self):
         signals = "\n".join(self.evaluation["Signals"])
         approved = (
             "For each same-edit or same-rejection pattern, ask Operator one question, with both links, asking what was wrong. Ask once per pattern, never per proposal.\n"
-            "Skip a pattern whose reason Operator already gave. Without the answer the cause stays a labeled hypothesis. Never infer the reason from the edit.\n"
-            "Record the answer as an evidence comment on the matching improvement task, with the reply link. It replaces the hypothesis as the cause evidence for that fix."
+            "Skip a pattern whose reason Operator already gave. Without his answer the cause stays a labeled hypothesis. Never infer his reason from the edit.\n"
+            "Record his answer as an evidence comment on the matching improvement task, with the reply link. It replaces the hypothesis as the cause evidence for that fix."
         )
         self.assertEqual(signals.count(approved), 1)
-        for guard in ("linked task comments and Systems review history", "no repeat question",
-                      "Unreadable dedupe is not checked", "Read back a later reply's native evidence comment",
-                      "declined match grants no reopening or repair authority", "Never create a task solely to store an answer"):
-            self.assertIn(guard, signals)
+        self.assertGreater(signals.index(approved), signals.rindex("- "))
 
-    def test_correction_questions_do_not_pause_review_or_disappear_without_proposals(self):
+    def test_repeated_correction_questions_follow_proposals_without_pausing_review(self):
         routing = "\n".join(self.review["Report and routing"])
-        self.assertLess(routing.index("Follow with at most 3"), routing.index("Then list each repeated-correction question"))
-        for guard in ("one line with both links", "wait for no reply", "do not count toward the three-proposal cap",
-                      "new question visible even with no new proposals", "Previously asked patterns do not notify again"):
-            self.assertIn(guard, routing)
-        proposals = "\n".join(self.evaluation["Proposals and task recording"])
-        self.assertIn("only with no new proposals and no new questions", proposals)
-        self.assertIn("only when no new proposals or questions require attention", proposals)
+        approved = 'Then list each repeated-correction question per `references/eval.md` "Signals", one line with both links. Questions are not proposals and wait for no reply.'
+        preceding = 'Follow with at most 3 new ranked proposals per `references/eval.md` "Proposals and task recording". Use compact lines and evidence links rather than copying run output.'
+        self.assertIn(preceding + "\n" + approved, routing)
+        self.assertEqual(routing.count(approved), 1)
         self.assertIn("None.", "\n".join(self.contract["Checkpoints"]))
         self.assertEqual(self.frontmatter["writes"], "Teammate improvement tasks and evidence comments only")
+
+    def test_repeated_correction_questions_are_audited_and_reported_separately(self):
+        audit = next(line for line in self.contract["Audit"] if line.startswith("| Report, before output |"))
+        self.assertTrue(audit.endswith("Repeated-correction questions follow the proposals, one per pattern. |"))
+        output = next(line for line in self.contract["Outputs"] if line.startswith("| Health report |"))
+        self.assertIn("Friday scorecard, Improvement backlog, at most 3 new ranked proposals, and repeated-correction questions. On-demand Eval uses the same evaluation", output)
 
     def test_proposals_are_capped_ranked_and_do_not_set_forecasts_or_policy(self):
         proposals = "\n".join(self.evaluation["Proposals and task recording"])
@@ -837,12 +942,20 @@ class SystemReviewEvaluation(unittest.TestCase):
         proposals = "\n".join(self.evaluation["Proposals and task recording"])
         for expected in ("If nothing is new after complete evidence reads and dedupe, post one line",
                          "Comment-only additions do not need a new proposal notification",
-                         "Friday still keeps its scorecard and backlog", "A no-new typed Eval posts only the one line",
+                         "Friday still keeps its scorecard and backlog", "Friday collects no census.",
+                         "A no-new typed Eval posts the one line plus the requested census and four-week kind table, or their partial and not-checked limits",
+                         "Zero new improvements never drops the census",
                          "For a scheduled run, call `pplx automation suppress-run-notification` for that run only",
                          "A typed Eval has no automation notification to suppress",
                          "Do not hide missing evidence or recording failures as a no-new result"):
             self.assertIn(expected, proposals)
         self.assertIn("Friday keeps its scorecard and backlog", "\n".join(self.contract["Outputs"]))
+        outputs = "\n".join(self.contract["Outputs"])
+        self.assertIn("| Quiet receipt | Systems thread | One Eval line when nothing is new. A typed `eval` adds its census and kind table or their limits.", outputs)
+        process = "\n".join(self.contract["Process"])
+        self.assertIn("A no-new typed `eval` still returns its census and kind table, or their partial and not-checked limits, with the one line.", process)
+        audit = next(line for line in self.contract["Audit"] if line.startswith("| Report, before output |"))
+        self.assertIn("No-new Eval is one line, typed adds census and kind table.", audit)
 
     def test_friday_backlog_has_age_top_five_and_proposed_not_applied_closures(self):
         backlog = "\n".join(self.evaluation["Friday backlog"])
@@ -886,14 +999,16 @@ class CanonicalHomes(unittest.TestCase):
         proposals = (workflow / "references" / "proposals.md").read_text()
         letters = "\n".join(sections(proposals)["Letters"])
         proposal_b = letters.split("- **B. Opportunity update.**", 1)[1].split("- **C.", 1)[0]
-        for expected in ("When B changes `Next_Steps__c`, include its matching follow-up Task change in B",
-                         "full Task payload and current-to-new values", "One `approved B` covers both sides",
-                         "Never propose or apply a B change to `Next_Steps__c` without its matching Task payload",
+        for expected in ("include its matching follow-up Task change in B", "full Task payload and current-to-new values",
+                         "One `approved B` covers both sides", "Never propose or apply a B change",
+                         "Reuse one, or propose its reschedule by exact ID",
                          "A new action completes the old Task and creates one", "reviewed later milestone stays open",
                          "The Task's ActivityDate is the action's due date, not the date the next-step entry is written"):
             self.assertIn(expected, proposal_b)
         self.assertIn("matching Task changes, which stay together under B", proposals)
         proposal_c = letters.split("- **C.", 1)[1].split("- **D.", 1)[0]
+        self.assertIn("reuse or reschedule by exact ID before creating another", proposal_c)
+        self.assertIn("When none fits, propose a Not Started Task", proposal_c)
         self.assertIn("Use C only for Task changes not tied to a next-step change", proposal_c)
         self.assertIn("Never split B's matching Task into C", proposal_c)
         self.assertNotIn("Required with B", proposal_c)
@@ -920,8 +1035,11 @@ class CanonicalHomes(unittest.TestCase):
         workflow = workflow_path("interaction-sync")
         reference = (workflow / "references" / "reconcile.md").read_text()
         find = " ".join(sections(reference)["Find the interaction"])
-        for expected in ("For a Momentum transcript, before Extract", "start date and attendee emails",
-                         "Calendar event for this call. They must match", "date cues that contradict that date",
+        for expected in ("For a Momentum transcript, before Extract", "Compare the meeting start instant",
+                         "every external Calendar attendee email", "read source verifies that it belongs to the same person",
+                         "do not infer a Contact identity from a name",
+                         "conflicting start time or unexplained missing Calendar attendee makes the run needs-input",
+                         "date cues that contradict that date",
                          "scheduling that same date as a future meeting", "first meeting when an earlier one is logged",
                          "identity check that cannot be completed makes the run needs-input",
                          "State the reason and propose nothing derived from that transcript"):
@@ -932,7 +1050,7 @@ class CanonicalHomes(unittest.TestCase):
         extract_step = next(line for line in contract["Process"] if line.startswith("3. "))
         self.assertIn('"Extract"', extract_step)
         audit = "\n".join(contract["Audit"])
-        for expected in ("Identity, before step 3", "Momentum start date and attendee emails match the Calendar event",
+        for expected in ("Identity, before step 3", '`references/reconcile.md` "Find the interaction"',
                          "no contradictory transcript date cues", "needs-input", "states the reason",
                          "proposes nothing derived from that transcript"):
             self.assertIn(expected, audit)
@@ -965,105 +1083,49 @@ class CanonicalHomes(unittest.TestCase):
             self.assertTrue(self.cites(name, "pilot_handoff"), name)
         self.assertFalse(self.cites("forecast-weekly", "pilot_handoff"))
 
-    def test_triage_current_action_ownership_precedes_proposals(self):
+    def test_triage_current_action_ownership_and_unthreaded_opportunities_are_separate(self):
+        workflow=workflow_path('task-triage-speed-run')
+        group=(workflow/'references/grouping.md').read_text()
+        self.assertIn('rules#task_date_coordination',group)
+        self.assertIn('rules#followup_task',group)
+        self.assertIn('references/next-steps.md',group)
+        self.assertNotIn('Triage never writes',group)
+        self.assertIn('Deal Task follow-up drafts follow these same recipient',group)
+
+    def test_triage_owned_tasks_share_the_message_but_never_get_date_moves(self):
         workflow = workflow_path("task-triage-speed-run")
-        contract = (workflow / "CONTEXT.md").read_text()
-        grouping = (workflow / "references" / "grouping.md").read_text()
-        collect = (workflow / "references" / "collect.md").read_text()
-        for text, policy_reference in ((contract, "`pipeline.stages`"),
-                                       (grouping, "policy.pipeline.stages")):
-            self.assertIn("rules#followup_task", text)
-            self.assertIn(policy_reference, text)
-        self.assertIn('`references/grouping.md` "Pipeline ownership"', collect)
-        self.assertIn("rules#followup_task", collect)
-        self.assertLess(grouping.index("## Pipeline ownership"), grouping.index("## Other Tasks"))
-        for expected in ("open Opportunity", "`StageName`", "Opportunity or its Account", "Subject",
-                         "ActivityDate", "Next_Steps__c", "ambiguous candidates", "Pipeline review owns",
-                         "Do not propose a date move, completion, Push, or Recycle"):
-            self.assertIn(expected, grouping)
-        self.assertIn("including future Tasks", collect)
-        self.assertIn("Existing reply, recycle, and hold checks still govern", grouping)
+        walk = (workflow / "references/walk.md").read_text()
+        drafts = (workflow / "references/drafts.md").read_text()
+        self.assertIn("including deal Tasks and the unthreaded Opportunity branch", walk)
+        self.assertIn("Deal Tasks and unthreaded Opportunity Tasks stay in this same message", walk)
+        self.assertIn("Deal Task follow-up drafts follow these same recipient, prior-email, hold, approval and readback gates", (workflow / "references/grouping.md").read_text())
+        self.assertIn("Deal Task follow-up drafts use this same path", drafts)
 
-    def test_triage_owned_tasks_have_unnumbered_readout_and_draft_only_rows(self):
-        references = workflow_path("task-triage-speed-run") / "references"
-        walk = (references / "walk.md").read_text()
-        drafts = (references / "drafts.md").read_text()
-        for expected in ("`Routed to deal threads` first", "Then show `Pipeline review owns`", "one unnumbered line per Task",
-                         "linking the Task and its Opportunity", "unnumbered draft-only rows",
-                         "no Task approval stage", "Exclude pipeline-owned Tasks from every date move or completion map"):
-            self.assertIn(expected, walk)
-        self.assertIn("Pipeline-owned Tasks are draft-only and never enter the date map", drafts)
-        self.assertIn("`all` excludes their drafts", walk)
-        self.assertIn("Approve an owned draft by its Task link", walk)
-
-    def test_triage_rechecks_ownership_before_writes_and_accounts_for_handoffs(self):
-        writes = (workflow_path("task-triage-speed-run") / "references" / "writes.md").read_text()
-        for expected in ("get no Task write in triage", "Recheck ownership immediately before a Task write",
-                         "does not authorize a date move, completion, or Task note", "Report the helper's actual result",
-                         "fresh Opportunity and Task records", "verified pipeline ownership or an explicit user deferral",
-                         "not as completed or user-deferred", "Any other remaining row without an explicit deferral"):
+    def test_triage_rechecks_state_before_pairs_and_reports_partial_results(self):
+        writes = (workflow_path("task-triage-speed-run") / "references/writes.md").read_text()
+        for expected in ("Recheck action evidence and ownership", "all related open Tasks", "changed Status, ActivityDate, LastModifiedDate, Subject or Description",
+                         "create or readback leaves the old Task open and due", "completion failure after a verified create is partial", "receipt of at most 3 lines", "does not undo verified writes"):
             self.assertIn(expected, writes)
 
-    def test_auto_date_move_rule_uses_approved_wording_and_scheduled_exception(self):
+    def test_triage_no_reply_has_no_write_exception(self):
         rules = (CORE / "rules.md").read_text()
-        anchor = '<a id="auto_date_move"></a>**auto_date_move**'
-        self.assertEqual(rules.count(anchor), 1)
-        self.assertLess(rules.index('<a id="approval">'), rules.index(anchor))
-        self.assertLess(rules.index(anchor), rules.index('<a id="scheduled_runs">'))
-        approved = [
-            "- Disabled when `policy.template.auto_date_move` is false. Propose the date move and wait for exact approval.",
-            "- In `task-triage-speed-run` only, a Task date move to the next business day is pre-approved when Operator emailed the Task's Contact after the Task's newest note, "
-            "that email asked or offered something, and no substantive reply has arrived.",
-            "- Apply it without a question, read it back per `rules#write_protocol`, and list it in the stage receipt as `Auto-moved` with its link.",
-            "- It never covers completions, other dates, drafts, recycles, CRM corrections, Opportunity fields, or a Task `pipeline-review` owns.",
-        ]
-        block = rules.split(anchor, 1)[1].split('<a id="scheduled_runs">', 1)[0]
-        bullets = re.split(r"\n(?=- )", block.strip())
-        self.assertEqual([" ".join(bullet.split()) for bullet in bullets], approved)
         scheduled = rules.split('<a id="scheduled_runs">', 1)[1].split("## Evidence and tooling", 1)[0]
-        self.assertIn("- `rules#auto_date_move` is disabled in the template. Enabling it requires a separate exact rule review and approval.", scheduled)
+        self.assertIn("No reply writes nothing", scheduled)
+        self.assertNotIn("Except", scheduled)
         contract = (workflow_path("task-triage-speed-run") / "CONTEXT.md").read_text()
-        self.assertIn("rules#auto_date_move", "\n".join(sections(contract)["Inputs"]))
-        self.assertTrue(self.cites("task-triage-speed-run", "auto_date_move"))
+        self.assertEqual(yaml.safe_load(contract.split("---\n", 2)[1])["writes"],
+                         "Salesforce Next_Steps__c, Task and Contact fields, Contact creates, unsent Gmail drafts, after approval only")
 
-    def test_triage_auto_move_qualification_and_business_day_are_explicit(self):
-        references = workflow_path("task-triage-speed-run") / "references"
-        grouping = (references / "grouping.md").read_text()
-        self.assertLess(grouping.index("## Pipeline ownership"), grouping.index("## Auto date moves"))
-        self.assertLess(grouping.index("## Auto date moves"), grouping.index("## Other Tasks"))
-        for expected in ("`Pipeline review owns` never qualifies", "`last_sent`", "strictly later than the note date",
-                         "same-day comparison does not qualify", "`unanswered_since_last_substantive`", "`last_substantive`",
-                         "full body", "ask or offer something", "Both bounded reply checks",
-                         "This two-check result is the only absence conclusion",
-                         "first Monday through Friday after the run-start local date", "Friday, Saturday, or Sunday moves to Monday"):
-            self.assertIn(expected, grouping)
-        collect = (references / "collect.md").read_text()
-        self.assertIn("Operator's actual last sent message", collect)
-        self.assertIn("`newest_message_id` may be inbound", collect)
-        for expected in ("Read the full Gmail thread", "sent message or a later message from Operator must be newest",
-                         "bounces, out-of-office, and calendar notices", "follow every pagination cursor",
-                         "from:<Contact address> after:<sent date>", "The search must return no substantive message",
-                         "Any tool error, timeout, unread thread, incomplete pagination, or substantive inbound",
-                         "only absence conclusion used by `rules#auto_date_move`"):
+    def test_triage_positive_action_evidence_replaces_absence_based_moves(self):
+        collect = (workflow_path("task-triage-speed-run") / "references/collect.md").read_text()
+        for expected in ("exact sent email, held-call source or reply", "Quote and link it", "not proof Operator completed an action", "scheduled meetings do not prove attendance", "flag `Draft not sent`", "no helper flag authorizes a write"):
             self.assertIn(expected, collect)
 
-    def test_triage_auto_move_write_and_receipt_are_narrowly_gated(self):
-        workflow = workflow_path("task-triage-speed-run")
-        writes = (workflow / "references" / "writes.md").read_text()
-        for expected in ("before the section walk without a question", "Fresh-read the Task and recheck ownership",
-                         "Change only Task `ActivityDate`", "read both ActivityDate and Description back",
-                         "stage receipt as `Auto-moved` with each Task link", "Never label an unverified write `Auto-moved`",
-                         "the same sent email cannot qualify again"):
+    def test_triage_write_order_preserves_due_task_when_action_or_create_fails(self):
+        writes = (workflow_path("task-triage-speed-run") / "references/writes.md").read_text()
+        self.assertLess(writes.index("Write and read the approved next step first"), writes.index("complete the old Task"))
+        for expected in ("No write is automatic", "failed or unverified draft gets no next-step, completion or next-Task write", "with its quoted source per `rules#task_date_coordination`"):
             self.assertIn(expected, writes)
-        contract = sections((workflow / "CONTEXT.md").read_text())
-        dates = next(line for line in contract["Audit"] if line.startswith("| Dates,"))
-        self.assertIn("except qualifying next-business-day moves under `rules#auto_date_move`", dates)
-        self.assertIn("Pipeline-owned Tasks never qualify", dates)
-        walk = (workflow / "references" / "walk.md").read_text()
-        self.assertIn("Never claim nothing changed after an automatic write", walk)
-        self.assertIn("Skip verified `Auto-moved` rows in every approval map", walk)
-        self.assertIn("Rerun both bounded reply checks before the write", writes)
-        self.assertIn("`full thread read passed` and `targeted inbound search passed`", writes)
 
 
 class TriageSinglePassApproval(unittest.TestCase):
@@ -1078,79 +1140,60 @@ class TriageSinglePassApproval(unittest.TestCase):
         readout = self.walk.split("## Readout\n", 1)[1].split("## Section walk\n", 1)[0]
         self.assertEqual(readout.count("?"), 1)
         self.assertEqual(self.walk.count("?"), 1)
-        self.assertIn("End with exactly one approval question for the main pass", readout)
-        self.assertIn("Approve all eligible numbered rows, select numbers, give exceptions or date or wording changes", readout)
-        self.assertIn("add approved with a Recycle number, approve owned drafts by Task link, or skip?", readout)
-        for retired in ("Walk the sections?", "Create all unsent drafts, give exceptions",
-                        "Interpret `all` within the displayed group or map only", "Two batch stages",
-                        "Then show one date-and-note map for its verified drafts"):
-            self.assertNotIn(retired, self.walk)
-        self.assertIn("There is no separate permission to walk the sections", self.walk)
+        self.assertIn("End with exactly one main-pass question", readout)
+        self.assertIn("Approve all eligible numbered rows, select numbers", readout)
+        self.assertIn("add approved with a Recycle number, or skip?", readout)
+        self.assertNotIn("Walk the sections?", self.walk)
 
     def test_full_proposal_covers_every_group_row_and_exact_change(self):
-        readout = self.walk.split("## Readout\n", 1)[1].split("## Section walk\n", 1)[0]
-        for expected in ("One message, all groups", "full proposal, not a preview", "including blocked rows and their reasons",
-                         "original Task numbers and group order", "Complete and date-map rows with exact note lines",
-                         "Hold date moves, Push or Recycle choices", "exact To, any CC, Subject, and full body",
-                         "Task and Contact IDs, completion note, and exact cooldown marker changes",
-                         "current-to-new Task date and exact note lines outside the email body",
-                         "Do not create a second numbered row", "Number only the other Tasks continuously"):
-            self.assertIn(expected, readout)
-        contract_sections = sections(self.contract)
-        process = "\n".join(contract_sections["Process"])
-        self.assertIn("one full proposal with every group and row", process)
-        self.assertIn("Wait for the main-pass reply", process)
-        self.assertIn("Create and verify each approved draft before its Task date and note", process)
-        self.assertIn("Accept follow-up approval without re-walking", process)
-        _, checkpoints = table_rows(contract_sections["Checkpoints"])
+        for expected in ("exactly once, numbered as proposed or blocked", "action evidence", "new Task's Subject, date, OwnerId, WhatId, WhoId and Description", "complete draft", "unchanged current date", "quote its permitted source per `rules#task_date_coordination`"):
+            self.assertIn(expected, self.walk)
+        _, checkpoints = table_rows(sections(self.contract)["Checkpoints"])
         self.assertEqual([row[0] for row in checkpoints], ["5", "8"])
-        self.assertIn("Full proposal with every group", checkpoints[0][1])
+        self.assertIn("One full proposal", checkpoints[0][1])
         self.assertIn("One CRM correction after the main pass", checkpoints[1][1])
-        coverage = next(line for line in contract_sections["Audit"] if line.startswith("| Group coverage,"))
-        self.assertIn("across all groups appears exactly once as proposed or blocked", coverage)
-        self.assertIn("one main-pass approval question", coverage)
-        self.assertIn("Run thread, one full proposal for the main pass", "\n".join(contract_sections["Outputs"]))
-        self.assertNotIn("one group stage at a time", self.contract)
 
     def test_all_scope_recycle_and_crm_approvals_stay_narrow(self):
-        for expected in ("`all` covers every numbered proposed row in the displayed pass except Recycle and CRM corrections",
-                         "Blocked rows stay needs-input and are never approved by `all`",
-                         "do not infer a choice from `all` or a bare number", "Accept `Push` with its number",
-                         "Recycle needs the word `approved` with its Task number", "same reply as other approvals",
-                         "A bare number never approves Recycle", "exceptions override `all`",
-                         "`all` excludes their drafts", "Approve an owned draft by its Task link",
-                         "never authorizes its Task date, completion, or note",
-                         "After the main pass, ask CRM corrections one record per approval",
-                         "Neither `all` nor numbered main-pass selections approve a CRM correction"):
+        for expected in ("`all` covers every numbered proposed row in the displayed pass except Recycle and CRM corrections", "Blockers and ambiguous ownership never gain authority", "Recycle needs `approved` with its number", "no Push option", "Neither `all` nor numbered main-pass selections approve a CRM correction"):
             self.assertIn(expected, self.walk)
-        self.assertIn("Recycle requires `approved` with its Task number", self.writes)
-        self.assertIn("an unresolved Push or Recycle choice authorizes no write", self.writes)
-        self.assertIn("An approved Gmail draft for such a Task does not authorize a date move, completion, or Task note", self.writes)
+        self.assertIn("No email is sent", self.writes)
 
-    def test_approved_draft_rows_include_date_but_require_verified_creation_first(self):
-        self.assertIn("An approved numbered draft row also approves its displayed Task date and note", self.drafts)
-        self.assertIn("Create and verify the draft before writing that date and note, with no second approval question", self.drafts)
+    def test_approved_draft_rows_cover_pair_but_require_verified_creation_first(self):
+        self.assertIn("contingent completion and next Task", self.drafts)
+        self.assertIn("Create and verify the draft, then read back any displayed next step, then verify or create/read back the matching Task before completing the old one", self.drafts)
         self.assertIn("Do not create it until its displayed row is approved", self.drafts)
         self.assertIn("confirm To, CC, Subject, and full body match the approved row", self.drafts)
-        self.assertIn("Only verified drafts qualify for their approved Task date and note writes", self.drafts)
-        for text in (self.walk, self.drafts, self.writes):
-            self.assertIn("failed or unverified draft gets no Task date or note write", text)
-        self.assertIn("Their unnumbered drafts require explicit approval by Task link because `all` excludes them", self.drafts)
-        self.assertIn("A verified owned draft never authorizes a Task write. Never send", self.drafts)
+        self.assertIn("failed or unverified draft gets no next-step, completion or next-Task write", self.drafts)
+        self.assertIn("flag `Draft not sent`, never a new follow-up", self.drafts)
 
     def test_receipts_and_remaining_batch_do_not_rewalk_or_repeat_verified_writes(self):
-        for expected in ("Post one combined receipt for the approved pass", "one remaining batch with their original numbers",
-                         "Accept a follow-up approval on that batch without re-walking the groups",
-                         "Do not reopen verified rows or repeat successful writes",
-                         "Reread any failed or unverified write before proposing a retry, never retry it automatically",
-                         "`skip` declines the displayed batch", "do not ask for the same approval again"):
+        for expected in ("Post one combined receipt for the approved pass", "one remaining batch with their original numbers", "Accept a follow-up approval on that batch without re-walking the groups", "Do not reopen verified rows or repeat successful writes", "never retry it automatically", "`skip` declines the displayed batch", "Do not ask for the same approval again"):
             self.assertIn(expected, self.walk)
         self.assertIn("Never repeat verified draft creation or a verified record write", self.writes)
         self.assertIn("Read every changed record back, including `Description`", self.writes)
-        self.assertIn("the Task is not a deal's last open Task per `rules#followup_task`", self.walk)
 
 
 class EventSequenceContract(unittest.TestCase):
+    def test_default_mailbox_selection_filters_to_runtime_apollo_user_first(self):
+        intake = "\n".join(sections(self.prep)["Intake"])
+        self.assertLess(intake.index("resolve Operator's Apollo user"), intake.index("Filter the complete mailbox list"))
+        for requirement in ("before counting `default: true`", "exactly one default for that user",
+                            "multiple owned defaults is needs-input", "never hardcoded in Git",
+                            "Other users' defaults do not block Operator's selection"):
+            self.assertIn(requirement, intake)
+        timing = "\n".join(sections(self.sequence)["Copy and timing"])
+        self.assertIn("filtering to Operator's resolved Apollo user", timing)
+        self.assertIn("Keep user and mailbox IDs in run-time evidence, not Git", timing)
+
+    def test_event_sequence_history_checks_all_statuses_before_enrichment(self):
+        checks = "\n".join(sections(self.prep)["Salesforce and reply checks"])
+        for requirement in ("event_sequence_ids", "apollo_sequence_enrollments",
+                            "including finished, paused and removed, not only active",
+                            "any prior enrollment in this event's sequences, regardless of status",
+                            "another active sequence", "Missing target or history evidence stays needs-input"):
+            self.assertIn(requirement, checks)
+        self.assertIn("prior same-event enrollment in every status", self.sequence)
+
     def test_copy_timing_uses_approved_interval_mode_and_expected_local_windows(self):
         timing = "\n".join(sections(self.sequence)["Copy and timing"])
         approved = (
@@ -1165,21 +1208,69 @@ class EventSequenceContract(unittest.TestCase):
     def setUp(self):
         self.workflow = workflow_path("event-sequence")
         self.contract = (self.workflow / "CONTEXT.md").read_text()
+        self.list_prep = (self.workflow / "01-list-prep/CONTEXT.md").read_text()
+        self.plan = (self.workflow / "02-sequence-plan/CONTEXT.md").read_text()
+        self.launch = (self.workflow / "03-launch/CONTEXT.md").read_text()
         self.prep = (self.workflow / "references" / "prep.md").read_text()
         self.sequence = (self.workflow / "references" / "sequence.md").read_text()
         self.readback = (self.workflow / "references" / "readback.md").read_text()
-        self.list_prep = (self.workflow / '01-list-prep/CONTEXT.md').read_text()
-        self.plan = (self.workflow / '02-sequence-plan/CONTEXT.md').read_text()
-        self.launch = (self.workflow / '03-launch/CONTEXT.md').read_text()
 
-    def test_eighteen_routes_and_direct_prospecting_workflows(self):
-        self.assertEqual(len(SKILLS), 18)
+    def test_live_sequence_mutation_needs_a_new_exact_approval(self):
+        process = "\n".join(sections(self.contract)["Process"])
+        for expected in ("A change to a live sequence after Launch is a mutation.",
+                         "adding or removing contacts, editing copy, schedule or mailbox, and pausing or resuming",
+                         "A mutation needs a new exact proposal in this Prospecting run thread and Operator's native approval of that proposal",
+                         "`rules#approval` and `rules#write_protocol`", "The original E approval never covers a mutation.",
+                         "Read the native sequence back after the approved change.", "An unavailable readback is not checked, never assumed applied."):
+            self.assertIn(expected, process)
+
+    def test_pipeline_receives_the_open_opportunity_contact_handoff_as_evidence_only(self):
+        handoffs = sections((WORKSPACES / "pipeline" / "CONTEXT.md").read_text())["Handoffs"]
+        header, rows = table_rows(handoffs)
+        self.assertEqual(header, "| Inbound source | Receiving contract | Existing approval scope |")
+        matches = [r for r in rows if "open-Opportunity contacts" in r[0] or "open-Opportunity contact handoff" in r[0]]
+        self.assertEqual(len(matches), 1, "exactly one receiving row for the Prospecting open-Opportunity contact handoff")
+        row = matches[0]
+        self.assertIn("deal thread", row[1])
+        self.assertTrue(row[2].startswith("Evidence only."))
+        self.assertIn("No prospecting write", row[2])
+        close = (self.workflow / "references/readback.md").read_text()
+        self.assertIn("without implying that enrollment authorizes Pipeline writes", close)
+
+    def test_catalog_rows_name_all_pipeline_helpers_both_owner_flags_and_skill_branches(self):
+        shared = "\n".join(sections((WORKSPACES / "pipeline" / "CONTEXT.md").read_text())["Shared resources"])
+        for helper in sorted(path.stem for path in (WORKSPACES / "pipeline" / "scripts").glob("*.py")):
+            self.assertIn(helper, shared)
+        row = next(line for line in (CORE / "scripts/interfaces.md").read_text().splitlines() if line.startswith("| `event_list_prep` |"))
+        self.assertIn("--outreach-owner-column <col> --outreach-owner-value <v>", row)
+        self.assertIn("Owner flags together or neither", row)
+        agents = (ROOT / "AGENTS.md").read_text()
+        self.assertIn("| `deal-coach` | `workspaces/deal-coaching/workflows/deal-coach/CONTEXT.md` | Call review, pre-meeting, deal review or criteria refresh |", agents)
+        self.assertIn("| `forecast-weekly` | `workspaces/forecasting/workflows/forecast-weekly/CONTEXT.md` | Forecast, tracking or manager update |", agents)
+
+    def test_nineteen_routes_and_two_prospecting_workflows(self):
+        self.assertEqual(len(SKILLS), 19)
         self.assertIn("| `event-sequence` | `workspaces/prospecting/workflows/event-sequence/CONTEXT.md` | None |",
                       (ROOT / "AGENTS.md").read_text())
         routes = (WORKSPACES / "prospecting" / "CONTEXT.md").read_text()
         self.assertIn("| Named-account event contacts or `event-sequence` | `workflows/event-sequence/CONTEXT.md`", routes)
-        self.assertEqual(self.workflow.parent, workflow_path("signal-scan").parent.parent)
-        self.assertIn("Signal Prospecting and Event Sequence as direct workflow folders", (CORE / "CONVENTIONS.md").read_text())
+        self.assertEqual(self.workflow.parent, SIGNAL_WORKFLOW.parent)
+        self.assertEqual(workflow_path("signal-scan").parent, SIGNAL_WORKFLOW)
+        self.assertEqual(self.workflow_folders(self.workflow.parent), {"signal-prospecting", "event-sequence"})
+        self.assertIn("coordinated Event Sequence", (CORE / "CONVENTIONS.md").read_text())
+
+    @staticmethod
+    def workflow_folders(directory):
+        return {path.name for path in directory.iterdir() if path.is_dir() and not path.name.startswith(".")}
+
+    def test_prospecting_folder_set_ignores_dotfiles_and_nondirectories(self):
+        with tempfile.TemporaryDirectory() as folder:
+            copied = Path(folder) / "workflows"
+            shutil.copytree(self.workflow.parent, copied)
+            (copied / ".DS_Store").touch()
+            (copied / "extra.txt").touch()
+            (copied / ".metadata").mkdir()
+            self.assertEqual(self.workflow_folders(copied), {"signal-prospecting", "event-sequence"})
 
     def test_exact_rule_words_and_proposed_policy_values(self):
         rule = (CORE / "rules.md").read_text().split('<a id="event_sequence"></a>**event_sequence**\n', 1)[1].split('\n\n', 1)[0]
@@ -1198,13 +1289,15 @@ class EventSequenceContract(unittest.TestCase):
             "recent_reply_days": 14, "enrich": "missing_or_unverified",
             "enrich_order": ["apollo_match", "apollo_waterfall"], "stop_on_reply": True,
             "steps": ["email", "email", "linkedin_task"], "step_gap_days": 3, "last_touch_before_event_days": 2,
-            "outreach_owner_scope": {"house_owner_ids": [], "include_missing_account": False}})
+            "outreach_owner_scope": {"house_owner_ids": [],
+                                     "include_missing_account": False}})
         self.assertEqual(policy["prospecting"]["approval"]["never"],
                          ["send email outside rules#event_sequence", "create Opportunity", "change deal stage or amount"])
         for key, filename in (("event_list_prep", "event_list_prep.py"), ("event_scrub_leads", "scrub_leads.py"),
                               ("event_make_batches", "make_batches.py")):
+            directory = self.workflow if key == "event_list_prep" else self.workflow / "01-list-prep"
             self.assertEqual(policy["tooling"]["scripts"][key],
-                             f"workspaces/prospecting/workflows/event-sequence/{'scripts' if key == 'event_list_prep' else '01-list-prep/scripts'}/{filename}")
+                             (directory / "scripts" / filename).relative_to(ROOT).as_posix())
 
     def test_credit_spends_and_waterfall_are_separate_from_enrollment(self):
         for name in ("apollo_people_bulk_match", "run_waterfall_email=true"):
@@ -1220,11 +1313,9 @@ class EventSequenceContract(unittest.TestCase):
 
     def test_outreach_owner_policy_insert_and_scope_rule_are_exact(self):
         policy_text = (CORE / "policy.yaml").read_text()
-        insertion = ('    outreach_owner_scope:\n'
-                     '      house_owner_ids: []\n'
-                     '      include_missing_account: false\n')
-        self.assertEqual(policy_text.count(insertion), 1)
-        self.assertIn("    last_touch_before_event_days: 2\n" + insertion + "\n  outreach:", policy_text)
+        policy = yaml.safe_load(policy_text)
+        self.assertEqual(policy['prospecting']['event']['outreach_owner_scope'],
+                         {'house_owner_ids': [], 'include_missing_account': False})
         agents = (WORKSPACES / "prospecting/AGENTS.md").read_text()
         rule = "For an event list Operator names, rows marked with Operator as outreach owner are in scope when the Salesforce Account is unassigned or missing. Other sellers' Accounts stay out."
         self.assertEqual(agents.count(rule), 1)
@@ -1251,8 +1342,8 @@ class EventSequenceContract(unittest.TestCase):
 
     def test_event_enrichment_is_apollo_only_and_waterfall_requires_no_verified_email_after_match(self):
         policy_text = (CORE / "policy.yaml").read_text()
-        self.assertIn("    enrich_order: [apollo_match, apollo_waterfall]   # each credit spend approved before it runs. "
-                      "Waterfall only for contacts with no verified email after apollo_match\n", policy_text)
+        self.assertEqual(yaml.safe_load(policy_text)['prospecting']['event']['enrich_order'],
+                         ['apollo_match', 'apollo_waterfall'])
         enrichment = "\n".join(sections(self.prep)["Enrichment"])
         operations = [line for line in enrichment.splitlines() if re.match(r"^\d+\. ", line)]
         self.assertEqual(len(operations), 2)
@@ -1291,7 +1382,8 @@ class EventSequenceContract(unittest.TestCase):
 
     def test_exact_domain_matching_and_apollo_invite_checks_precede_e1(self):
         checks = "\n".join(sections(self.prep)["Salesforce and reply checks"])
-        for requirement in ("never LIKE wildcards", "removing scheme, www, and path", "then compare exact hosts",
+        for requirement in ("as supersets only", "A wildcard hit never counts as a match",
+                            "removing scheme, www, and path", "then compare exact hosts",
                             "Do not collapse subdomains", "Review any subdomain alias explicitly",
                             "Before E1 run `apollo_contacts_search` by each exact email", "following all cursors",
                             "different or personal email", "CRM link owned by another seller", "Show each hold reason in E1",
@@ -1370,7 +1462,7 @@ class EventSequenceContract(unittest.TestCase):
             self.assertLess(check, send)
         self.assertLess(send, activate)
         for requirement in ('using `references/readback.md` "Readback" copy rules',
-                            "Compare steps, touches, subject and body templates, merge variables, interval settings, named schedule, timezone and stop on reply",
+                            "Compare steps, touches, subject and body templates, merge variables, schedule and stop on reply",
                             "Normalize only the HTML Apollo sanitizes and require exact merge variables",
                             "Never enroll copy that has not been compared", "Never call add_contact_ids or approve on unmatched copy"):
             self.assertIn(requirement, enrollment)
@@ -1379,7 +1471,7 @@ class EventSequenceContract(unittest.TestCase):
         self.assertIn("Copy, before enrollment call", "\n".join(sections(self.launch)["Audit"]))
 
     def test_blocked_campaign_readback_names_schedule_and_mailbox_sources(self):
-        for requirement in ("When campaigns_show is blocked, take steps, native interval settings, named schedule and timezone from the stored create or update response",
+        for requirement in ("When campaigns_show is blocked on this run, take steps and exact send times from the stored create or update response",
                             "saved `apollo_emailer_campaigns_add_contact_ids` response",
                             "each contact's sending account", "After the first send, also check the sender on get_content results",
                             "If neither shows the mailbox", "accepted enrollment request's `send_email_from_email_account_id`",
@@ -1399,7 +1491,7 @@ class EventSequenceContract(unittest.TestCase):
         rules = (CORE / "rules.md").read_text()
         absence = rules.split('<a id="absence_conclusions"></a>', 1)[1].split('<a id=', 1)[0]
         self.assertIn("for the E1 enrollment proposal and its pre-enrollment recheck only", " ".join(absence.split()))
-        self.assertIn("  It does not establish complete history or authorize enrichment or enrollment. Its stated retrieval limit must appear in the enrollment proposal.", absence)
+        self.assertIn("It does not establish complete history or authorize enrichment or enrollment. Its stated retrieval limit must appear in the enrollment proposal.", absence)
         self.assertIn("does not establish complete history or authorize enrichment or enrollment", absence)
         approval = self.sequence.split("## Approval\n", 1)[1].split("\n## Enrollment", 1)[0]
         self.assertIn("bounded reply-check summary", approval)
@@ -1419,11 +1511,11 @@ class EventSequenceContract(unittest.TestCase):
         run_start = rules.split('<a id="run_start"></a>**run_start**\n', 1)[1].split('\n\n', 1)[0]
         self.assertEqual(run_start,
                          '- Read the `_core/policy.yaml` blocks and `_core/rules.md` anchors the contract cites.\n'
-                         "- Record one run-start ISO datetime with the user's local offset.\n"
-                         "  Every helper's `--since` or `--as-of` takes it, except three checks that record and take a fresh local-offset time.\n"
+                         "- Record one run-start ISO datetime with the user's local offset. "
+                         "Every helper's `--since` or `--as-of` takes it, except three checks that record and take a fresh local-offset time.\n"
                          "  The event_list_prep pre-enrollment reply recheck and the triage pre-write reply recheck also end their reply search at that time.\n"
-                         "  The pipeline-review post-write `hygiene_check` uses it on re-queried records.\n"
-                         "  A fresh time never changes scope, lookback, pagination, approvals or readback, and never authorizes a write.\n"
+                         "  The pipeline-review post-write `hygiene_check` uses it on re-queried records. "
+                         "A fresh time never changes scope, lookback, pagination, approvals or readback, and never authorizes a write.\n"
                          '- Take userId and owner email from `salesforce_rest_api-get-current-user`.')
         enrollment = self.sequence.split("## Enrollment\n", 1)[1]
         self.assertIn("`--as-of` set to that recheck time, never the old run start", enrollment)
@@ -1464,10 +1556,10 @@ class EventSequenceContract(unittest.TestCase):
 
     def test_early_no_enrollment_close_does_not_require_or_run_a_reply_recheck(self):
         process = "\n".join(sections(self.contract)["Process"])
-        self.assertIn('close through `references/readback.md` "Handoff and close"', process)
+        self.assertIn('close directly through shared "Handoff and close"', process)
         audit = "\n".join(sections(self.contract)["Audit"])
         self.assertIn("With no recipients and no remaining enrichment", audit)
-        self.assertIn("Never load Plan or Launch, audit nonexistent files or run a reply recheck", audit)
+        self.assertIn("without nonexistent-file audits, E approval, Launch entry or an unneeded recheck", audit)
         close = "\n".join(sections(self.readback)["Handoff and close"])
         for requirement in ("If a reply recheck ran", "Attach its saved receipt file to the thread message",
                             "Otherwise close with the original exclusions, holds, and handoff evidence",
@@ -1478,48 +1570,9 @@ class EventSequenceContract(unittest.TestCase):
         reply_row = next(row for row in receipt_rows if row[0] == "Reply recheck")
         self.assertTrue(reply_row[1].startswith("When run,"))
 
-    def test_launch_inherits_only_exact_same_thread_native_e_approval(self):
-        process = "\n".join(sections(self.launch)["Process"])
-        first = next(line for line in sections(self.launch)['Process'] if line.startswith('1. '))
-        self.assertIn('native approval in this same run thread matching the saved exact E proposal', first)
-        self.assertIn('Missing, mismatched or other-thread approval stops before any writes', first)
-        self.assertLess(process.index('Require native approval'), process.index('Fresh-read ownership'))
-        checkpoints = "\n".join(sections(self.launch)['Checkpoints'])
-        self.assertTrue(checkpoints.strip().startswith('None.'))
-        self.assertIn("Sequence Plan owns the exact E approval", checkpoints)
-        self.assertIn('without a repeat pause', checkpoints)
-        self.assertIn('revised approval on material changes', checkpoints)
-        self.assertEqual(yaml.safe_load(self.plan.split('---\n', 2)[1])['writes'], 'nothing')
-        self.assertIn('Wait for approval of that exact E proposal', self.plan)
-
-    def test_zero_recipient_launch_stops_before_every_apollo_operation(self):
-        process = "\n".join(sections(self.launch)['Process'])
-        zero = next(line for line in sections(self.launch)['Process'] if line.startswith('3. '))
-        self.assertIn('If no recipients remain, skip every Apollo call', zero)
-        self.assertIn('actual recheck receipt, drops and holds', zero)
-        for operation in ('contact creation', 'sequence create/update', 'add_contact_ids', 'campaign approval'):
-            self.assertIn(operation, process.split('4. Otherwise enroll', 1)[0])
-        self.assertLess(process.index('fresh `--as-of`'), process.index('If no recipients remain'))
-        self.assertLess(process.index('If no recipients remain'), process.index('Otherwise enroll'))
-        self.assertIn('No remaining approved recipients stops before every Apollo call', self.launch)
-
-    def test_shared_event_inputs_are_scoped_to_the_stage_responsibility(self):
-        expected = ((self.list_prep, {'prep.md', 'scrubber.md'}),
-                    (self.plan, {'sequence.md'}),
-                    (self.launch, {'prep.md', 'sequence.md', 'readback.md'}),
-                    (self.contract, {'readback.md'}))
-        for contract, names in expected:
-            inputs = "\n".join(sections(contract)['Inputs'])
-            rows = [line for line in inputs.splitlines() if line.startswith('| Reference |')]
-            self.assertEqual({Path(ref).name for row in rows for ref in re.findall(r'`([^`]+\.md)`', row)}, names)
-            self.assertTrue(all('"' in row.split('|')[3] for row in rows))
-        self.assertIn('"Handoff and close" only for early no-recipient close', self.contract)
-
     def test_approval_and_fresh_guards_precede_real_send_boundary(self):
-        process = "\n".join(sections(self.launch)["Process"])
-        self.assertIn("Present one exact enrollment proposal", self.plan)
-        self.assertIn("native approval in this same run thread", self.launch)
-        self.assertLess(process.index("Require native approval"), process.index("Fresh-read ownership"))
+        process = "\n".join(sections(self.contract)["Process"])
+        self.assertLess(process.index("enter Sequence Plan with a viable prepared list"), process.index("Enter Launch only with Operator's exact native E approval"))
         for name in ("apollo_contacts_bulk_create", "apollo_sequences_create", "apollo_sequences_update",
                      "apollo_emailer_campaigns_add_contact_ids", "apollo_emailer_campaigns_approve"):
             self.assertIn(name, self.sequence)
@@ -1538,15 +1591,15 @@ class EventSequenceContract(unittest.TestCase):
             self.assertIn(name, self.readback)
         self.assertIn("no direct Salesforce writes", self.contract)
         self.assertIn("Event-sequence writes no Salesforce records", (WORKSPACES / "prospecting" / "AGENTS.md").read_text())
-        self.assertIn("No direct Salesforce writes", "\n".join(sections(self.launch)["Audit"]))
+        self.assertIn("No direct Salesforce writes", "\n".join(sections(self.contract)["Audit"]))
         self.assertIn("Workers do not directly message other sessions", self.readback)
         self.assertIn("The workflow ends here", self.readback)
         self.assertIn("never Git", self.readback)
 
     def test_no_enrollment_routes_to_handoff_without_an_empty_file_audit(self):
-        self.assertIn('"No enrollment"', self.list_prep)
-        self.assertIn('close through `references/readback.md` "Handoff and close"', self.contract)
-        self.assertIn("For a nonempty candidate list, scrub and independent audit both PASS", self.list_prep)
+        self.assertIn('shared prep "No enrollment"', self.list_prep)
+        self.assertIn('close directly through shared "Handoff and close"', self.contract)
+        self.assertIn("For a nonempty candidate list, scrub and standalone audit both PASS", self.list_prep)
         no_enrollment = self.prep.split("## No enrollment\n", 1)[1].split("\n## Helper evidence", 1)[0]
         self.assertIn("no enrichment remains to propose or perform", no_enrollment)
         self.assertIn("audit of nonexistent clean files", no_enrollment)
@@ -1561,7 +1614,7 @@ class EventSequenceContract(unittest.TestCase):
         self.assertIn("next unused E label", self.sequence)
 
     def test_root_event_route_and_migrated_scrubber_authoring_paths(self):
-        self.assertIn("prepare configured event lists", (ROOT / "CONTEXT.md").read_text())
+        self.assertIn("prepare named-account event lists", (ROOT / "CONTEXT.md").read_text())
         scrubber = (self.workflow / "01-list-prep/references/scrubber.md").read_text()
         self.assertIn("adjacent `scripts/email_rules.json`", scrubber)
         self.assertIn("-m unittest _core.tests.test_event_scrub_leads", scrubber)
@@ -1576,7 +1629,7 @@ class EventSequenceContract(unittest.TestCase):
                             "default `--clean-column-profile upload`", "reduced clean-column profile",
                             "Removed rows retain source and diagnostic columns",
                             "Keep removed and quarantined rows out of enrollment",
-                            "independently audit", "output_manifest.json"):
+                            "separately audit", "output_manifest.json"):
             self.assertIn(requirement, scrubber)
         for obsolete in ("email validator", "email verifier", "external email validation", "Python 3.9+"):
             self.assertNotIn(obsolete, scrubber)
@@ -1586,8 +1639,7 @@ class ICMRefactorContracts(unittest.TestCase):
     def test_runtime_setup_and_registry_notation_have_one_existing_home(self):
         interfaces = (CORE / "scripts" / "interfaces.md").read_text()
         running = "\n".join(sections(interfaces)["Running"])
-        for requirement in ("Python 3.12 or later", "CI tests Python 3.12", "PyYAML and pypdf",
-                            ".github/workflows/tests.yml", "outside the repository", "python3.12 -m venv /tmp/",
+        for requirement in ("Python 3.12 or later", "PyYAML and pypdf", "outside the repository", "python3.12 -m venv /tmp/",
                             "--version", "import yaml, pypdf", "packages it actually imports",
                             "policy.tooling.scripts.<key> <args>", "resolved in the checkout",
                             "working directory this section names for that helper",
@@ -1606,7 +1658,7 @@ class ICMRefactorContracts(unittest.TestCase):
         running = "\n".join(sections((CORE / "scripts" / "interfaces.md").read_text())["Running"])
         self.assertIn("Coverage and forecast notification run from the sandbox root. Pilot commands run from the checkout with explicit sandbox input/output paths, as the pilot-usage contract shows.", running)
         self.assertIn("Pipeline rendering with its default `--sources` also runs from the sandbox root.", running)
-        research = (WORKSPACES / "prospecting" / "workflows" / "signal-prospecting" / "01-research" / "CONTEXT.md").read_text()
+        research = (workflow_path("signal-scan") / "CONTEXT.md").read_text()
         for requirement in ("Keep nonqualifying evidence and fit objections in the report.",
                             "Batch mode never pools evidence across accounts.",
                             "Adoption resolves ambiguous identity before lookup"):
@@ -1624,10 +1676,11 @@ class ICMRefactorContracts(unittest.TestCase):
         self.assertIn('`references/pdf-format.md` | Full file, PDF mode at steps 3 to 7', (workflow / "CONTEXT.md").read_text())
 
     def test_operational_prospecting_invocations_resolve_registered_keys(self):
-        paths = ("signal-prospecting/01-research/CONTEXT.md", "signal-prospecting/01-research/references/buying-signals.md", "signal-prospecting/01-research/references/adoption.md",
-                 "signal-prospecting/02-outreach/CONTEXT.md", "signal-prospecting/02-outreach/references/execution.md", "signal-prospecting/03-followup/references/execution.md",
-                 "event-sequence/01-list-prep/CONTEXT.md", "event-sequence/03-launch/CONTEXT.md",
-                 "event-sequence/01-list-prep/references/scrubber.md")
+        paths = ("signal-prospecting/01-research/CONTEXT.md", "signal-prospecting/01-research/references/buying-signals.md",
+                 "signal-prospecting/01-research/references/adoption.md", "signal-prospecting/02-outreach/CONTEXT.md",
+                 "signal-prospecting/02-outreach/references/execution.md", "signal-prospecting/03-followup/references/execution.md",
+                 "event-sequence/01-list-prep/references/scrubber.md", "event-sequence/01-list-prep/CONTEXT.md",
+                 "event-sequence/03-launch/CONTEXT.md")
         registry = yaml.safe_load((CORE / "policy.yaml").read_text())["tooling"]["scripts"]
         for path in paths:
             text = (WORKSPACES / "prospecting" / "workflows" / path).read_text()
@@ -1639,15 +1692,15 @@ class ICMRefactorContracts(unittest.TestCase):
                 self.assertIn(key, registry)
                 self.assertTrue((ROOT / registry[key]).is_file())
 
-    def test_post_write_hygiene_clock_and_independent_renewal_gates_remain_explicit(self):
+    def test_post_write_hygiene_clock_and_customer_review_scope_remain_explicit(self):
         proposals = WORKSPACES / "pipeline" / "workflows" / "pipeline-review" / "references" / "proposals.md"
         text = proposals.read_text()
         self.assertIn("Per `rules#run_start`, record a fresh local-offset time", text)
         self.assertIn("pipeline-review post-write `hygiene_check`", text)
         self.assertIn("`--as-of` on those re-queried records", text)
         collect = WORKSPACES / "pipeline" / "workflows" / "customer-review" / "references" / "collect.md"
-        self.assertIn("blocks expansion proposals, not the independent renewal review", collect.read_text())
-        self.assertIn("Renewal Task proposals retain their existing Salesforce identity, date, duplicate, required-field, approval and readback gates.", collect.read_text())
+        self.assertIn("blocks expansion proposals", collect.read_text())
+        self.assertIn("It never produces renewal notices or renewal holds", collect.read_text())
 
 
 class PipelineSlackEvidence(unittest.TestCase):
@@ -1675,28 +1728,38 @@ class PipelineSlackEvidence(unittest.TestCase):
         self.assertIn("Salesforce, Gmail, Calendar, or Slack evidence", evidence_audit)
 
     def test_proposal_clauses_include_slack_and_keep_friday_pilot_exception(self):
-        proposals = (self.workflow / 'references' / 'proposals.md').read_text()
-        self.assertIn(
-            'Every clause traces to Salesforce, Gmail, Calendar, or Slack evidence, or, on Friday only, '
-            'to an accepted pilot report under "Pilot report input". No inferred buyer intent.', proposals)
+        drafting=(workflow_path('task-triage-speed-run')/'references/next-steps.md').read_text()
+        self.assertIn('Every clause traces to Salesforce, Gmail, Calendar, or Slack evidence',drafting)
+        proposals=(self.workflow/'references/proposals.md').read_text()
+        self.assertIn('rules#pilot_handoff',proposals)
+        self.assertNotIn('Build each next-step proposal',proposals)
 
     def test_slack_collection_uses_named_buyers_and_bounded_read_only_searches(self):
-        self.assertIn("FROM OpportunityContactRole", self.collect)
+        self.assertIn("FROM OpportunityContactRole", (ROOT / "workspaces/pipeline/references/deal-activity-reads.md").read_text())
         self.assertIn("even for deals not flagged by Gmail or Salesforce", self.collect)
         slack = self.collect.split("## Slack\n", 1)[1] + (CORE / "slack-evidence.md").read_text()
         for expected in ("Contact Roles and `Customer_Point_of_Contact__c`", "verified Contact and email",
-                         "slack_direct", "slack_search_users", "Contact's email as `query`", "exact email match",
+                         "slack_direct", "slack_search_users", "Contact's last name as a `keywords` array",
+                         "full name as `natural_language_query`", "multi-word last-name keyword in double quotes",
+                         'response_format="detailed"', 'limit=20', "paging through all returned cursors",
+                         "returned `Email:` value", "verified Salesforce Contact email, case-insensitive",
+                         "The name is only the search key, never identity proof", "exact Contact email match",
                          "policy.tooling.slack_lookback_days", "run timezone", "Unix epoch seconds",
                          "slack_search_public_and_private", "string `after` and `before` parameters",
                          'content_types="messages"', 'include_bots=false', 'include_context=true',
-                         'query="with:<@SlackUserId>"', 'channel_types="im,mpim"',
-                         'query="from:<@SlackUserId>"', 'channel_types="public_channel,private_channel"',
-                         "verified Slack Connect channels", "Keep date words and date filters out of `query`",
+                         'filters="with:<@SlackUserId>"', 'channel_types="im,mpim"',
+                         'filters="from:<@SlackUserId>"', 'channel_types="public_channel,private_channel"',
+                         'keywords=[]', 'natural_language_query=""', "verified Slack Connect channels",
+                         "Keep date words and date filters out of `keywords`, `filters` and `natural_language_query`",
                          "returned message `ts` values", "only its own returned cursor", "until none remains",
                          "Save all search inputs, pages, and identity results in the sandbox",
                          "scheduled runs with no per-run consent pause", "read-only. Never post or react",
                          "Exclude bot messages from evidence and context", "returned permalink and date"):
             self.assertIn(expected, slack)
+
+    def test_slack_search_never_uses_obsolete_query_parameter(self):
+        search = "\n".join(sections((CORE / "slack-evidence.md").read_text())["Search"])
+        self.assertNotRegex(search, r"\bquery\b")
 
     def test_slack_gaps_and_freshness_remain_explicit(self):
         slack = self.collect.split("## Slack\n", 1)[1] + (CORE / "slack-evidence.md").read_text()
@@ -1713,7 +1776,7 @@ class PipelineSlackEvidence(unittest.TestCase):
                          "checker does not verify Slack coverage", "Missing Slack users or evidence are Slack not checked",
                          "These notes do not affect status, counts, withholding, or notification",
                          "Its existing affected-deal withholding and incomplete-run behavior stay unchanged",
-                         "Slack does not turn a message into a Gmail `buyer_reply` candidate"):
+):
             self.assertIn(expected, self.report)
 
     def test_slack_limits_gate_only_verified_user_status_changes(self):

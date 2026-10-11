@@ -4,8 +4,10 @@
 
 Accept a file, sheet, or paste of any size. Save the original and a working CSV or JSON list in the sandbox, never Git.
 Confirm the event name, the dates Operator attends, location, and exact ask. Missing details are needs-input, not guessed.
-Optional sending mailbox and schedule come from Operator. Otherwise read `apollo_email_accounts_index` and select its `default: true` account.
-No default or multiple defaults is needs-input. Selecting a mailbox is not approval to use it.
+Optional sending mailbox and schedule come from Operator. Otherwise resolve Operator's Apollo user from his verified run email, then read `apollo_email_accounts_index`.
+Filter the complete mailbox list to that Apollo user before counting `default: true` accounts. Require exactly one default for that user, never exactly one across the team.
+Missing or ambiguous user ownership, no owned default or multiple owned defaults is needs-input. Selecting a mailbox is not approval to use it.
+Keep the resolved Apollo user ID, mailbox ID and ownership/default receipts in run-time evidence, never hardcoded in Git. Other users' defaults do not block Operator's selection.
 Run `policy.tooling.scripts.event_list_prep <input.csv|input.json> --as-of <local-offset timestamp> --output <reviewed.json>`.
 It normalizes names, email, company, and website, deduplicates, and labels missing guard evidence as needs-input. It performs no network calls or writes to customer systems.
 Preserve source row IDs and duplicate reasons. A row with no usable email is still retained for possible enrichment. No list-size cap applies.
@@ -15,9 +17,14 @@ Preserve source row IDs and duplicate reasons. A row with no usable email is sti
 Read Salesforce for every contact and Account, with all pages retained. Resolve Contacts by exact email or a verified supplied ID, never name-only guessing.
 Missing email may use verified contact or Account IDs and reviewed account-domain evidence. Unclear identity stays needs-input until resolved.
 Read Account `Id, OwnerId, Website` and associated Contact `Id, Email, AccountId`. Record a completed no-match search explicitly, not as a tool gap.
-Fetch complete candidate Accounts under exact OwnerId or verified AccountId filters, never LIKE wildcards.
+Fetch cross-owner Account candidates with `Website LIKE '%<host>%'` and Contact candidates with `Email LIKE '%@<domain>'` as supersets only.
+Follow all pages of both reads and retain their native results. A wildcard hit never counts as a match.
 Normalize Website and input hosts by removing scheme, www, and path, then compare exact hosts.
-Match the normalized Website host or exact Contact email domain. Do not collapse subdomains to a root domain. Review any subdomain alias explicitly, with its evidence, before matching.
+Keep only exact normalized Website host or exact Contact email-domain matches. Resolve matched Contacts to their AccountId and read those Accounts before ownership decisions.
+Use domain hits only to find candidate Accounts, never to identify the recipient Contact.
+A missing-Account conclusion needs both completed cross-owner superset fetches with zero exact matches. A Operator-only owner filter or finite Website variant list is insufficient.
+If either fetch fails or is incomplete, keep the row needs-input.
+Do not collapse subdomains to a root domain. Review any subdomain alias explicitly, with its evidence, before matching.
 Read Opportunities for each resolved Account using `policy.prospecting.salesforce.open_opportunity`, regardless of Opportunity owner.
 An existing Account owned by `policy.prospecting.identity.sfdc_user_id` is eligible.
 Event lists Operator names also admit rows marked with Operator as outreach owner when the Account is unassigned or missing.
@@ -27,11 +34,16 @@ Other sellers' Accounts, including inactive other owners, and unflagged house-ow
 Ambiguous identity or an incomplete lookup stays needs-input. No other list override can expand it.
 The run names the outreach-owner column and Operator's value from the list Operator named. A missing or ambiguous column is needs-input, never an inferred outreach owner.
 Retain that column in saved reviewed rows. Pass `--outreach-owner-column <column>` and `--outreach-owner-value <Operator's value>` on every helper run, including launch rechecks.
-An existing CRM link to a configured house owner is allowed only for a row qualified as outreach_owner. Named-account rows retain the existing hold.
 Before E1 run `apollo_contacts_search` by each exact email, following all cursors and reading contact data.
 Record a complete no-match explicitly and resolve duplicate Apollo matches before proceeding.
 Hold an existing Apollo contact with a different or personal email, or a CRM link owned by another seller. Personal domains use `policy.tooling.generic_email_domains`. Show each hold reason in E1.
 Set apollo_contacts_checked only after email, CRM linkage and owner, and active-sequence data are complete per contact. Unknown active_sequence stays needs-input, never assume false.
+An Apollo crm_owner_id alone does not prove a CRM link or its absence. Read the native linked CRM record identity and owner, or keep apollo_crm_linked unknown and hold the row.
+Never map an absent crm_id to false while owner evidence is present.
+Resolve all prior sequence IDs for this same event from native event-sequence evidence. Save them as event_sequence_ids, including an explicit empty list after a complete no-match.
+Read each contact's complete Apollo enrollment history into apollo_sequence_enrollments with sequence_id and status. Check every status, including finished, paused and removed, not only active.
+The active_sequence exclusion covers any prior enrollment in this event's sequences, regardless of status, plus enrollment in another active sequence.
+The helper reports the reason as prior same-event enrollment or an active sequence. Missing target or history evidence stays needs-input, never a checked empty list.
 Match Operator's event invite export, such as Grip, by exact contact email. If supplied, require a complete match check per contact. If no export is supplied, E1 says none was checked.
 active_sequence and event_app_invite are named, overridable per-list exclusions. An override never completes their missing evidence or expands outside_named_accounts.
 Use the bounded reply check allowed by `rules#absence_conclusions`, with the verified Contact address and Operator's mailbox from `rules#run_start`.
@@ -52,12 +64,13 @@ Read-only Salesforce queries may use `policy.salesforce` values. The workflow ma
 Run the list helper again with reviewed guard evidence. Assign enroll or one exclusion from `policy.prospecting.event.exclude`, with its reason.
 Incomplete identity, ownership, Opportunity, Apollo, invite, or reply evidence stays needs-input, never enroll. The helper checks mechanics, not the truth of connector evidence.
 Keep every open-Opportunity contact in the Pipeline handoff list, even when Operator explicitly overrides that exclusion for this list.
-Show outside_named_accounts and recent replies as exclusions. Account scope cannot be overridden. Operator may explicitly override other named exclusions for a named contact in this list only.
+Show outside_named_accounts and recent_reply as exclusions. Neither can be overridden, and the helper rejects that override.
+Operator may explicitly override other named exclusions for a named contact in this list only.
 An override never completes missing evidence, creates a reusable approval, or overrides a missing or malformed recipient address.
 
 ## Enrichment
 
-Only helper enrichment_candidates on resolved Operator-owned Accounts whose only exclusion is unverified_email enter enrichment.
+Only helper enrichment_candidates inside the configured named-account or outreach-owner scope whose only exclusion is unverified_email enter enrichment.
 Use `policy.prospecting.event.enrich` and `policy.prospecting.event.enrich_order`.
 Never select enrichment by the needs_input label, and never enrich outside_named_accounts or contacts with other exclusions. Resolve missing guard evidence read-only first.
 For a row with no usable email, only the exact-email Apollo existing-contact/active-sequence, supplied invite-export matching and reply checks may wait for the returned address.
@@ -76,8 +89,9 @@ Verified means Apollo `verified` on a non-catch-all domain, with `catchall_domai
 Unknown catch-all evidence, any error, empty result, or out-of-credits response is unverified. Never infer verified status from a plausible email or scrub PASS.
 Keep catch-all addresses excluded under event policy unless Operator explicitly overrides them for this list. Domain mismatches stay held for review.
 After reviewing enrichment results, rerun event_list_prep. Export only eligible rows with `First Name, Last Name, Email, Company Name, Website` to sandbox CSV.
-Run `policy.tooling.scripts.event_scrub_leads scrub <eligible.csv> --output-dir <fresh-dir> --clean-column-profile full` per `01-list-prep/references/scrubber.md` "Run".
-Then independently run `policy.tooling.scripts.event_scrub_leads audit-clean-output <fresh-dir/clean_chunks> --report <audit.json>`.
+Run `policy.tooling.scripts.event_scrub_leads scrub <eligible.csv> --output-dir <fresh-dir> --clean-column-profile full`
+per `workspaces/prospecting/workflows/event-sequence/01-list-prep/references/scrubber.md` "Run".
+Then separately run `policy.tooling.scripts.event_scrub_leads audit-clean-output <fresh-dir/clean_chunks> --report <audit.json>`.
 Both reports must say PASS. Scrubbing is hygiene, not verification, approval, or enrollment. Preserve every removed or quarantined row and reason in the proposal.
 Run `policy.tooling.scripts.event_make_batches <clean_chunks> --code <event-code> --output-dir <fresh-batches-dir>`.
 Use full-column clean chunks so Website remains available for the batch domain check. Review `batches_report.json` and `domain_mismatch.csv` when present.
@@ -86,11 +100,11 @@ Keep mismatches held unless Operator explicitly resolves or overrides the named 
 
 ## No enrollment
 
-Check after prep, declined enrichment, scrubbing, and batch holds. If no eligible recipients remain and no enrichment remains to propose or perform,
-return the reconciled no-enrollment result to the Event Sequence coordinator.
+Check after prep, declined enrichment, scrubbing, and batch holds. If no eligible recipients remain and no enrichment remains to propose or perform, return to the coordinator for direct close.
 Reconcile every input row to a duplicate, exclusion, hold, or removed row with its reason. Keep evidence gaps as needs-input and preserve the open-Opportunity handoff list.
 Skip the remaining enrichment, audit of nonexistent clean files, batching, copy, enrollment approval, and Apollo writes. Never call an empty export a verified sequence.
-The coordinator completes `references/readback.md` "Handoff and close" and reports closed with no enrollment, zero enrolled, no sends, exclusions, holds, and actual handoff delivery status.
+The coordinator completes `workspaces/prospecting/workflows/event-sequence/references/readback.md` "Handoff and close".
+Report closed with no enrollment, zero enrolled, no sends, exclusions, holds, and actual handoff delivery status.
 
 ## Helper evidence
 
@@ -107,10 +121,12 @@ The coordinator completes `references/readback.md` "Handoff and close" and repor
 | `apollo_match_email`, `apollo_match_catchall_domain`, `apollo_match_run_start` | Saved same-run match email, explicit flag, and run identity for same-domain waterfall fallback |
 | `apollo_contacts_checked`, `apollo_contact_id`, `apollo_contact_email` | Complete per-contact Apollo search and exact existing identity, or explicit completed no-match |
 | `apollo_crm_linked`, `apollo_crm_owner_id` | Complete existing-contact CRM linkage and linked record owner, or explicit no link |
-| `active_sequence` | True or false from complete Apollo contact data, unknown stays needs-input |
+| `active_sequence` | True or false from complete Apollo contact data, unknown stays needs-input. The exclusion also covers prior same-event enrollment in any status |
+| `event_sequence_ids`, `apollo_sequence_enrollments` | All same-event sequence IDs and complete contact enrollment rows with sequence_id and status. Explicit empty lists require completed no-matches |
 | `event_app_invite_export_supplied`, `event_app_invite_checked`, `event_app_invite` | Export availability and complete exact-email match, or no export supplied with no match claimed |
 
 Boolean fields accept true/false JSON booleans or true/false CSV strings. Unknown values are not checked. Reply timestamps need an explicit offset and cannot be in the future.
+Sequence evidence uses JSON arrays, including JSON-encoded CSV cells. Native IDs and statuses stay in the sandbox. A missing array or malformed enrollment holds the row.
 Use `--overrides <overrides.json>` for a JSON object from normalized row ID to the exact exclusion names Operator overrode for this list. outside_named_accounts is never allowed.
 The output preserves matched exclusions and reasons, applied overrides, source row IDs, enrollment labels, enrichment_candidates, catchall_source, event_app_invite_status, and Pipeline handoffs.
 Eligible outreach-owner rows have `scope: outreach_owner`. The output records the selected column and value. Every other eligibility and approval gate still applies.

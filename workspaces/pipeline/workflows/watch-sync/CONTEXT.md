@@ -1,8 +1,8 @@
 ---
 cadence: daily
-reads: _core/policy.yaml (prospecting, pipeline, tooling), _core/rules.md, references/, Salesforce, live automations, project deal threads, approved retained-thread evidence
+reads: _core/policy.yaml (pipeline, tooling), _core/rules.md, references/, Salesforce, live automations, project deal threads, approved retained-thread evidence
 writes: nothing
-next: Pipeline receives configuration proposals, Operator approves deal-thread changes
+next: Pipeline applies watch configuration add/drop proposals after exact approval, Operator approves deal-thread create/archive proposals
 ---
 
 # Watch Sync
@@ -13,9 +13,10 @@ Reconcile active-deal buyer-email watches, shared-channel account watches, and d
 
 | Source | File/Location | Section/Scope | Why |
 |---|---|---|---|
-| Core policy | `_core/policy.yaml` | `prospecting.identity.sfdc_user_id`, `pipeline.stages`, `tooling.generic_email_domains` | Owner, shared-channel stages, and excluded domains |
-| Core rules | `_core/rules.md` | `rules#run_start`, `rules#scheduled_runs`, `rules#not_checked_means`, `rules#absence_conclusions`, `rules#approval` | Run context, evidence limits, and approval |
+| Core policy | `_core/policy.yaml` | `pipeline.stages`, `tooling.generic_email_domains` | Shared-channel stages and excluded domains. The owner is the verified run user from `rules#run_start` |
+| Core rules | `_core/rules.md` | `rules#run_start`, `rules#scheduled_runs`, `rules#not_checked_means`, `rules#absence_conclusions`, `rules#approval`, `rules#handoff_delivery` | Run context, evidence limits, and approval |
 | Reference | `references/reconcile.md` | "Read", "Compare and route" | Queries, comparison, retained-thread exceptions, and delivery |
+| Helper | `_core/scripts/interfaces.md` | `deal_thread_match`, "Account session search" | Verified deal-thread identity and ambiguity |
 | Per-run evidence | Current project automations, deal threads, and Operator's approved retained-thread list | Live identifiers, complete settings, and explicit exceptions only | Keep customer names and identifiers outside Git |
 
 ## Process
@@ -24,6 +25,9 @@ Reconcile active-deal buyer-email watches, shared-channel account watches, and d
 2. Compare domains, account lists, and deal threads per "Compare and route". Missing settings or exception evidence are not checked, never inferred empty.
 3. Number each add or drop with its Opportunity evidence. Append deal-thread proposals under `Deal threads, needs Operator approval`.
 4. Post here and route the same numbered proposals with `pplx automation notify-source --message` to Pipeline. A receipt is not approval for a thread change.
+   Pipeline applies buyer-email watch domain and channel-watch Account-list add or drop proposals after exact approval only under the adopter's verified approval.
+   Handle approved changes in a permitted execution context. A scope failure stays pending for an authorized direct turn. Claim applied only after native settings readback.
+   It reports one line per change and reads each one back. Deal-thread create or archive proposals still need Operator's approval and are never applied on receipt.
 5. If nothing differs and no thread change is needed, reply in one line and run `pplx automation suppress-run-notification`.
 
 ## Checkpoints

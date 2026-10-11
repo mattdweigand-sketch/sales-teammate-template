@@ -20,8 +20,8 @@ PAGE = ("Acme Corp today announced the appointment of Jane Doe as Chief AI Offic
 
 
 def receipt(**over):
-    base = {"account_name": "Acme Corp", "account_aliases": ["Acme", "Jane Doe"], "account_domain": "acme.test",
-            "source_url": "https://acme.test/news", "published_date": "2026-09-01",
+    base = {"account_name": "Acme Corp", "account_aliases": ["Acme", "Jane Doe"], "account_domain": "acme.com",
+            "source_url": "https://acme.com/news", "published_date": "2026-09-01",
             "quote": "appointment of Jane Doe as Chief AI Officer", "evidence_subject": "Acme Corp",
             "signal_type": "ai_exec_appointment", "quote_speaker": "account",
             "classification": "active_initiative", "relevance": "employee_use"}
@@ -171,7 +171,7 @@ class LinkedInPostDates(unittest.TestCase):
 
     def test_non_post_urls_do_not_decode(self):
         i = synthetic_post_id(NOON)
-        for url in ("https://acme.test/news", f"https://acme.test/posts/x-activity-{i}-AbCd",
+        for url in ("https://acme.com/news", f"https://acme.com/posts/x-activity-{i}-AbCd",
                     f"https://notlinkedin.com/feed/update/urn:li:activity:{i}",
                     "https://www.linkedin.com/company/acme/", "https://www.linkedin.com/pulse/acme-ai-plan-jane-doe",
                     "https://www.linkedin.com/feed/update/urn:li:activity:1234567890123456"):  # decodes to 1970

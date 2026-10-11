@@ -1,6 +1,8 @@
 # Provenance and notices
 
-Derived from a 170-file Sales workspace snapshot at revision c8387f37bcf43cd82bf517a7da8f457927763da2.
+Initially derived from revision c8387f37bcf43cd82bf517a7da8f457927763da2.
+The complete mechanism port uses Sales revision 0e887c70104d5d205a8e03c5a1c10642dee6e4cc, reviewed October 10, 2026.
+The port adapts final behavior rather than merging personal repository history. Source captures and mirror automation are excluded.
 The new repository has fresh Git history. All five original collateral files were excluded. Personal configuration was replaced by fictional demo values.
 Generalized pricing, targets, schemas and product text are examples, not an adopter's approved sales policy.
 

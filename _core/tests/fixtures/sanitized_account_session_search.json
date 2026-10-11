@@ -1,0 +1,57 @@
+[
+  {
+    "context_uuid": "00000000-0000-4000-8000-000000000105",
+    "title": "Missing Corp deal",
+    "type": "computer",
+    "url": "/computer/tasks/00000000-0000-4000-8000-000000000111",
+    "status": "completed",
+    "last_query_datetime": "2026-10-07T16:36:16.197801",
+    "project": {
+      "uuid": "00000000-0000-4000-8000-000000000101",
+      "title": "example-project",
+      "description": null,
+      "url": "https://www.seller.example/projects/example-project-AbCdEf"
+    },
+    "unread": false
+  },
+  {
+    "context_uuid": "00000000-0000-4000-8000-000000000107",
+    "title": "Missing Corp deal follow-up notes",
+    "type": "computer",
+    "url": "/computer/tasks/00000000-0000-4000-8000-000000000108",
+    "status": "completed",
+    "last_query_datetime": "2026-10-07T16:36:16.197801",
+    "project": {
+      "uuid": "00000000-0000-4000-8000-000000000101",
+      "title": "example-project",
+      "description": null,
+      "url": "https://www.seller.example/projects/example-project-AbCdEf"
+    },
+    "unread": false
+  },
+  {
+    "context_uuid": "00000000-0000-4000-8000-000000000109",
+    "title": "Missing Corp deal",
+    "type": "computer",
+    "url": "/computer/tasks/00000000-0000-4000-8000-000000000115",
+    "status": "completed",
+    "last_query_datetime": "2026-10-07T16:36:16.197801",
+    "project": {
+      "uuid": "00000000-0000-4000-8000-000000000102",
+      "title": "other-project",
+      "description": null,
+      "url": "https://www.seller.example/projects/other-project-AbCdEf"
+    },
+    "unread": false
+  },
+  {
+    "context_uuid": "00000000-0000-4000-8000-000000000103",
+    "title": "Missing Corp deal",
+    "type": "computer",
+    "url": "/computer/tasks/00000000-0000-4000-8000-000000000104",
+    "status": "completed",
+    "last_query_datetime": "2026-10-07T16:36:16.197801",
+    "project": null,
+    "unread": false
+  }
+]

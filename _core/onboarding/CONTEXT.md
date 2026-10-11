@@ -16,7 +16,7 @@ For guided setup, use the request in the root README with a coding agent that ca
 1. Collect remaining company questions together. Reuse supplied settings and explain unfamiliar IDs and mappings. Keep per-run inputs at workflow entry.
 2. Walk every system in integrations.json through adapters.md. Record configure, defer or not_used and required non-secret settings. Guide credentials into the runtime secret store.
 3. Save personal answers outside both folders. Choose a destination folder that does not exist and a separate folder for run outputs. Use the operator's actual settings.
-4. Prepare Python 3.12 and _core/requirements.txt outside both folders. Run setup to validate answers, copy the template, apply settings and create all 18 workflow pointers.
+4. Prepare Python 3.12 and _core/requirements.txt outside both folders. Run setup to validate answers, copy the template, apply settings and create all 19 workflow pointers.
 5. Run check against the new destination. The mode must be configured and all routes and helpers must resolve.
 6. Follow adapters.md for actual connection setup, readback and deployment. Keep receipts outside Git. Review the exact product, schema, permission and schedule plan before live use.
 
@@ -31,7 +31,7 @@ Review derived product wording and note style with the operator before buyer use
 |---|---|
 | Configuration | Typed answers are valid, canonical policy is updated and every system has a typed choice and any deferral has a reason |
 | Copy | Source bytes stay unchanged, destination was absent and no source Git history or runtime data was copied |
-| Routing | All 18 named skill pointers resolve their exact contract, including shared Research branch selectors |
+| Routing | All 19 named skill pointers resolve their exact contract, including shared Research branch selectors |
 | Readiness | Mode and pending live checks are explicit. Local setup never claims connector or schedule readiness |
 
 ## Outputs
@@ -59,7 +59,7 @@ Run setup and answer the company and integration questions. Every system is revi
 "$HOME/.local/share/sales-teammate/venv/bin/python" -B _core/scripts/onboard.py check --workspace "$HOME/sales-workspaces/company"
 ```
 
-Success reports `mode` as `configured`, `routes` as `18`, `integrations` as `21` and `errors` as `[]`. `external_ready` remains `false` because no live connections were checked.
+Success reports `mode` as `configured`, `routes` as `19`, `integrations` as `22` and `errors` as `[]`. `external_ready` remains `false` because no live connections were checked.
 Setup creates local configuration and pointer files. It does not create teammates in Perplexity Computer or activate schedules.
 
 To reuse saved answers, pass the external JSON file path with `--answers`. Setup derives the configured state, so the answer file has no mode field.

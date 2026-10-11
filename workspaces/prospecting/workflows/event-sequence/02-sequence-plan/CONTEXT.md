@@ -1,52 +1,55 @@
 ---
 cadence: one-off
-reads: _core/policy.yaml (prospecting, email_voice), _core/rules.md, references/, viable prepared list and current receipts
+reads: _core/policy.yaml (prospecting, email_voice, tooling), _core/rules.md, scoped sequence sections, helper interface, viable prepared list and native receipts
 writes: nothing
-next: Launch with this exact E snapshot and native approval in the same run thread
+next: Launch only after exact E approval in this Prospecting run thread
 ---
 
 # Sequence Plan
 
-Prepare the exact enrollment proposal for a viable reviewed list. This stage creates no draft, sequence or customer record.
-Empty preparation outcomes return to the coordinator before entry. Every enrichment operation retains its separate C approval.
+Present the exact enrollment proposal from a viable prepared list. This stage performs no enrichment, sequence creation, enrollment or sending.
 
 ## Inputs
 
 | Source | File/Location | Section/Scope | Why |
 |---|---|---|---|
-| Core policy | `_core/policy.yaml` | `prospecting.event`, `prospecting.identity`, `prospecting.approval`, `prospecting.outreach.lint`, `email_voice` | Event timing, exact scope and copy |
-| Core rules | `_core/rules.md` | `rules#event_sequence`, `rules#approval`, `rules#not_checked_means` | Exact approval and evidence limits |
-| Reference | `../references/sequence.md` | "Copy and timing", "Approval" | Exact copy, timing and E proposal |
-| Per-run evidence | Prospecting thread and sandbox | Viable prepared list, original rows, scrub and batch PASS, complete guard and C receipts, reply-check attachment and overrides | This run's prepared evidence |
+| Core freshness | `_core/rules.md`, `_core/scripts/interfaces.md` | `rules#repo_currency`, `workflow_revision_check`, "Workflow revisions" | E proposal scope only, no Launch preload or writes |
+| Core policy | `_core/policy.yaml` | `tooling.scripts.workflow_revision_check` | Shared freshness helper path |
+| Core policy | `_core/policy.yaml` | `prospecting.event`, `prospecting.identity`, `prospecting.approval`, `prospecting.outreach.lint`, `email_voice` | Event schedule, exact proposal and copy voice |
+| Core rules | `_core/rules.md` | `rules#run_start`, `rules#event_sequence`, `rules#approval`, `rules#write_protocol`, `rules#not_checked_means` | Original run identity and exact enrollment authority |
+| Shared sequence | `workspaces/prospecting/workflows/event-sequence/references/sequence.md` | "Copy and timing", "Approval" | Exact copy, mailbox, schedule, reply receipt and displayed E grammar |
+| Per-run evidence | Viable prepared list and native receipts in this Prospecting run thread and sandbox | Original and reviewed rows, guards, C approvals/results, scrub/audit PASS, reconciled batches, holds and Pipeline list | Actual evidence, not a sibling contract or helper label |
 
 ## Process
 
-1. Require the viable prepared list and complete supporting receipts from this run. Missing evidence stops entry and returns the gap to the coordinator.
-2. Draft exact copy and timing per `../references/sequence.md` "Copy and timing", using event policy and email_voice with advisory outreach lint.
-3. Present one exact enrollment proposal with the Apollo CRM-sync disclosure per `../references/sequence.md` "Approval".
-   Attach the bounded reply-check receipt.
-   Show exact contacts, exclusions and reasons, copy, mailbox, named schedule, intervals, timezone, expected local windows, intended enrollment, counts and every listed override.
-4. Wait for approval of that exact E proposal under `rules#approval`. Edits require a revised exact proposal and approval. No C approval substitutes for E.
-5. Hand Launch the saved exact E snapshot and matching native approval in this same run thread, with prepared evidence and receipts. Do not load Launch here.
+1. Retain original run_start and validate the viable list's actual supporting receipts, identity, full source-row reconciliation and complete deferred address checks.
+   Missing or invalid preparation stops and returns its gap to the coordinator. Empty outcomes belong to the coordinator, not a second close path here.
+2. Draft every subject, body, personalization variant and LinkedIn task instruction per shared sequence "Copy and timing". Resolve the mailbox and absolute local schedule.
+3. Snapshot this stage's consumed sources per `rules#repo_currency`, then present the exact enrollment proposal with Apollo CRM-sync disclosure per shared sequence "Approval".
+   Attach the saved reply-check receipt file, not a sandbox path.
+   Wait for approval of the list, copy, mailbox, schedule and listed overrides under its displayed E label in this same Prospecting run thread. Edits need a revised exact proposal.
+4. Pass only this approved snapshot and its matching native approval message to Launch. A matching label from another thread, forwarded approval or past campaign does not qualify.
 
 ## Checkpoints
 
 | After Step | Agent Presents | Human Decides |
 |---|---|---|
-| 3 | Exact E contacts, exclusions, copy, timing, mailbox, schedule, counts, overrides and CRM-sync disclosure | Approve exactly shown, edit or skip. Edits need a revised exact proposal |
+| 3 | Exact contacts, exclusions and reasons, full copy and personalization, mailbox, future schedule, expected counts, overrides, CRM sync and attached reply receipt | Approve exactly shown under its E label here, edit or skip |
+
+No separate list-only or copy-only approval is added.
 
 ## Audit
 
 | Check | Pass Condition |
 |---|---|
-| Intake | Prepared evidence is viable and complete. Every exclusion and hold has a reason and scrub/batch counts reconcile |
-| Proposal | Exact list, copy, mailbox and schedule shown under rules#event_sequence, with bounded reply-check receipt and CRM-sync disclosure |
-| Approval | Native approval in this same run thread matches this exact E snapshot. A skipped, unapproved or revised proposal cannot enter Launch |
-| Scope, throughout | No Apollo calls, direct Salesforce writes or customer messages. Preserve configured event scope and distinct C and E approvals |
+| Preparation | Viable recipients and every source row reconciled, required native guards, C approvals, enrichment results, scrub/audit PASS and batches available |
+| Proposal | Exact recipients, supported copy, personalization, future schedule, correct mailbox, stop on reply, counts and disclosed overrides/CRM sync |
+| Receipt | Reply window endpoints, query shapes, checked contacts, replies and holds shown, saved receipt attached to the thread message |
+| Approval | Native approval matches this exact E proposal and this same run thread. Helper labels, forwarded messages and prior campaigns never authorize enrollment |
 
 ## Outputs
 
 | Artifact | Location | Format |
 |---|---|---|
-| Exact proposal | Prospecting run thread | `../references/sequence.md` "Approval", including every exclusion and reason |
-| Launch evidence | Prospecting thread and sandbox | Exact E snapshot, same-thread native approval, prepared list and complete supporting receipts |
+| Exact E proposal and native approval | This Prospecting run thread | Shared sequence "Approval", immutable approved list, copy, mailbox, schedule and overrides |
+| Approved handoff | Current run thread and sandbox | Approved E snapshot, saved Plan source scope/baseline, original run_start and native preparation/approval evidence for `workspaces/prospecting/workflows/event-sequence/03-launch/CONTEXT.md` |

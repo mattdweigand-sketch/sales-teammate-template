@@ -14,12 +14,13 @@ Select the branch before loading branch-specific Inputs. A report is not permiss
 
 | Source | File/Location | Section/Scope | Why |
 |---|---|---|---|
-| Common policy | `_core/policy.yaml` | prospecting.identity, prospecting.salesforce, tooling, template.icp | Resolve identity, ownership and registered tools |
-| Common rules | `_core/rules.md` | rules#approval, rules#write_protocol, rules#absence_conclusions, rules#not_checked_means | Preserve authority and distinguish failed reads from absence |
+| Common policy | `_core/policy.yaml` | prospecting.identity, prospecting.salesforce, tooling | Resolve identity, ownership and registered tools |
+| Common rules | `_core/rules.md` | rules#approval, rules#write_protocol, rules#absence_conclusions, rules#not_checked_means, rules#handoff_delivery | Preserve authority and distinguish failed reads from absence |
 | Common tool | `workspaces/prospecting/scripts/prospect_account_route.py` | Docstring and route table | Route current CRM ownership and open Opportunities |
 | Common working | Current Salesforce Account and open Opportunity reads | Named Account/Id, complete current matches | Resolve the buying entity and Pipeline ownership |
 | Buying signals policy | `_core/policy.yaml` | prospecting.scan, prospecting.outreach | Source limits, warm-engagement markers and activity window |
-| Buying signals reference | `workspaces/prospecting/references/signals.md` | Discovery, interpretation and qualification | Apply live source and freshness definitions |
+| Buying signals reference | `workspaces/prospecting/references/signals.md` | Frontmatter tiers, "Signals to look for" and its subsections, "Interpret the evidence", "Identify configured product relevance" | Source types and meaning |
+| Buying signals reference | `workspaces/prospecting/references/signals.md` | "Check whether the initiative is current", "Record and use findings", "Qualification for automated stages" | Freshness and qualification |
 | Buying signals reference | `workspaces/prospecting/references/icp.md` | Target personas | Interpret evidenced responsibility |
 | Buying signals reference | `workspaces/prospecting/workflows/signal-prospecting/01-research/references/buying-signals.md` | Full file except Batch mode, load Batch mode only for lists | Aliases, fit objections, per-account evidence and report |
 | Buying signals tools | `workspaces/prospecting/scripts/prospect_evidence_gate.py`, `workspaces/prospecting/workflows/signal-prospecting/01-research/scripts/prospect_scan_verdict.py` | Docstrings and CLI | Prove quotes and render an ownership-aware next step |
@@ -30,6 +31,7 @@ Select the branch before loading branch-specific Inputs. A report is not permiss
 | Adoption tool | `workspaces/prospecting/scripts/prospect_privacy_check.py` | Docstring and CLI for account bundles | Reject extra fields and personal or activity data |
 | Adoption working | Snowflake native status, fixed-query bindings and permitted result | Current run, completed snapshot only | Preserve query and result provenance |
 
+| Company profile | `_core/policy.yaml` | `template.icp` | Adopter-reviewed product and fit |
 ## Process
 
 1. Select Buying signals or Adoption and load only common and selected branch Inputs.

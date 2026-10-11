@@ -48,7 +48,7 @@ class IntegrationOnboardingTests(unittest.TestCase):
 
     def test_inventory_resolves_every_source_and_workflow(self):
         names = {name for name, _, _ in onboard.routes(ROOT)}
-        self.assertEqual(len(self.registry), 21)
+        self.assertEqual(len(self.registry), 22)
         self.assertEqual(set().union(*(set(spec['workflows']) for spec in self.registry.values())), names)
         for key, spec in self.registry.items():
             with self.subTest(integration=key):
@@ -264,13 +264,17 @@ class IntegrationOnboardingTests(unittest.TestCase):
                     settings[key] = []
                 elif key == 'assistant_email':
                     settings[key] = 'assistant@synthetic-seller.company'
+                elif name == 'github':
+                    settings[key] = {'repository': 'synthetic-org/sales', 'remote': 'company', 'branch': 'deploy/configured'}[key]
+                elif name == 'google_slides':
+                    settings[key] = {'presentation_id': 'synthetic-deck', 'slide_title': 'Synthetic Operator | {quarter} Plan'}[key]
                 elif field.get('format') == 'tool':
                     settings[key] = 'Synthetic_' + key
                 else:
                     settings[key] = 'Synthetic company ' + key
             self.configure(name, settings)
         status = self.create()
-        self.assertEqual(len(status['integrations']), 21)
+        self.assertEqual(len(status['integrations']), 22)
         self.assertTrue(all(entry['choice'] == 'configure' and not entry['live_verified'] for entry in status['integrations'].values()))
         code, result = self.check()
         self.assertEqual(code, 0)

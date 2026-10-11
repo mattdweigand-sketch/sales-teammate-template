@@ -1,7 +1,7 @@
 # Signal Prospecting
 
-Research existing Operator-owned Accounts, prepare reviewed unsent outreach, then create follow-up Tasks only after a proven send.
-This overview routes broad requests. Named skills go directly to their stage and load only its applicable Inputs.
+Named-account prospecting from signals or permitted adoption evidence through approved unsent outreach and proven-send follow-up.
+This overview routes broad requests only. Named skills enter their stage contract directly and load only its applicable Inputs.
 
 ## Pipeline
 
@@ -13,12 +13,18 @@ This overview routes broad requests. Named skills go directly to their stage and
 
 ## Entry and handoffs
 
-Direct entry is allowed with the receiving contract's required evidence. Both Research branches run independently and write no customer records.
-Research does not automatically draft outreach. Operator chooses the bundle. Operator sends the approved draft manually before Follow-up can begin.
-An open Opportunity routes to Pipeline. Another seller's Account routes to that owner. A warm conversation stops cold outreach.
-Artifacts remain in their existing thread, sandbox, Salesforce or Gmail locations. Every external write retains its exact approval and native readback.
+Select the stage from the request and available evidence. Direct entry requires the receiving contract's evidence.
+Both Research branches run independently and write no customer records. Research never progresses automatically to drafting.
+Outreach uses the actual qualified bundle Operator chooses. Operator sends manually before Follow-up, which requires native proof of the matching send.
+Current Account ownership defines the named-account list. Open Opportunities hand evidence to Pipeline. Another seller's Account routes to that owner.
+A warm conversation stops cold outreach. Discovery and account claiming remain retired. Every external write keeps its exact approval and native readback.
+Artifacts stay in the Prospecting thread, sandbox, Salesforce or Gmail. This overview adds no skill, runtime step or mandatory read.
 
 ## Shared resources
 
-Workspace references and helpers remain under `workspaces/prospecting/references/` and `workspaces/prospecting/scripts/`.
-Each stage owns its private references and helpers. Read only its declared sections. No Event Sequence or sibling-stage Inputs are loaded for a named Signal skill.
+Load only the sections named by the receiving stage's Inputs.
+
+| Path | Holds | Edited by |
+|---|---|---|
+| `../../references/icp.md`, `../../references/signals.md` | Shared persona guidance and signal taxonomy. Outreach owns its private talk track | Operator, by hand |
+| `../../scripts/` | Helpers shared by the Signal stages. Paths and interfaces stay in the repo-wide helper catalog | Operator, with tests |

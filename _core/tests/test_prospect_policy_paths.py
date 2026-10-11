@@ -43,10 +43,7 @@ class PolicyPathTests(unittest.TestCase):
         policy = yaml.safe_load(text)
         self.assertEqual(re.findall(r"^\s*internal_domains:", text, re.M), ["  internal_domains:"])
         self.assertEqual(policy["tooling"]["internal_domains"], ["seller.example", "seller-tools.example"])
-        self.assertIn(
-            "  internal_domains: [seller.example, seller-tools.example]   # never a buyer; excluded from attendee, inbox, roster, and contact-stat reads\n",
-            text,
-        )
+        self.assertRegex(text, r"(?m)^  internal_domains: \[seller\.example, seller-tools\.example\]\s+# never a buyer; excluded from attendee, inbox, roster, and contact-stat reads$")
         self.assertNotIn("internal_domains", policy["prospecting"]["identity"])
         self.assertNotIn("internal_domains", prospect_common.load_policy(CORE)["identity"])
         fixture = yaml.safe_load((CORE / "tests/prospecting-fixtures/policy.yaml").read_text())

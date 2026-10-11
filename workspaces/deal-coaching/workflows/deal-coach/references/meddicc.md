@@ -8,13 +8,13 @@ Use zero when the reviewed evidence establishes that the element is absent. Keep
 | Element | 0 | 1 | 2 | 3 |
 |---|---|---|---|---|
 | Metrics | None | Buyer interest without a number. Contract value, purchased credits, and product usage stay at 1 until tied to a buyer-stated workflow result | Buyer-stated before and after for one workflow | Buyer-owned number tied to a business outcome and agreed as the pilot success test |
-| Economic Buyer | Unknown in reviewed evidence | Named by someone else | Met or emailed directly | Stated the budget, decision rule, and what they need to see |
-| Decision Criteria | Unknown in reviewed evidence | Generic criteria such as security and price | Written buyer list | Buyer ranked criteria and scored the product against named alternatives |
-| Decision Process | Unknown in reviewed evidence | Rep's guess | Buyer described the steps | Dated steps with owners, including security, legal, and procurement |
-| Paper Process | Unknown in reviewed evidence | Procurement expected to handle it | Paper owner named and whose paper known | Redline path, signer, PO or billing route, and target date confirmed |
+| Economic Buyer | Absent in reviewed evidence | Named by someone else | Met or emailed directly | Stated the budget, decision rule, and what they need to see |
+| Decision Criteria | Absent in reviewed evidence | Generic criteria such as security and price | Written buyer list | Buyer ranked criteria and scored the product against named alternatives |
+| Decision Process | Absent in reviewed evidence | Rep's guess | Buyer described the steps | Dated steps with owners, including security, legal, and procurement |
+| Paper Process | Absent in reviewed evidence | Procurement expected to handle it | Paper owner named and whose paper known | Redline path, signer, PO or billing route, and target date confirmed |
 | Identify Pain | None | Nice to have | Named pain with a current workaround | Pain with a cost, an owner who feels it, and a trigger for why now |
 | Champion | None | Friendly contact | Coach who shares internal information | Has power, sells internally in the rep's absence, and has been tested with an ask |
-| Competition | Unknown in reviewed evidence | Assumed | Named alternative, including build or do nothing | Known reasons to choose each option and the wedge against it |
+| Competition | Absent in reviewed evidence | Assumed | Named alternative, including build or do nothing | Known reasons to choose each option and the wedge against it |
 
 ## Stage gates
 

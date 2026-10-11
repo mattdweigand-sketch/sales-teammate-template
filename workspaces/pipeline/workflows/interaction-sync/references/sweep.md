@@ -4,7 +4,7 @@
 
 Read the deployed `rules#momentum` before enumeration. Its approved sweep exception must permit host or attendee enumeration and reading every window.
 If that exception is absent, stop with `Sweep not checked, shared Momentum exception pending approval`. Do not execute an Account-free search under the old rule.
-The exception is proposed separately in the held policy PR. This contract grants no new shared-rule authority.
+This contract grants no new shared-rule authority.
 The `momentum` policy block must also supply `sweep` settings with `page_size` and `window_hours`. Missing settings stop enumeration as not checked.
 
 ## Find every call
@@ -22,16 +22,15 @@ The `momentum` policy block must also supply `sweep` settings with `page_size` a
 
 ## Check and route
 
-1. Query all of Operator's Salesforce Tasks created since the call date, with Description and the relevant record links.
-   Description cannot be filtered in SOQL. Check locally that its first line exactly matches `policy.salesforce.call_marker` with this meeting Id.
-   A match means logged. A failed or incomplete Task read means not checked, never unlogged.
+1. Resolve the verified call's Account and Opportunity and query related call-date Tasks with Description and the relevant record links, regardless of creator or creation date.
+   Description cannot be filtered in SOQL. Check locally that its first line exactly matches either source marker,
+   `policy.salesforce.call_marker` with this meeting Id or `policy.salesforce.calendar_call_marker` with the verified Calendar event Id.
+   A match means logged. Link that Task and skip the unlogged-call handoff. A failed or incomplete Task read means not checked, never unlogged.
 2. For a verified unlogged call, resolve its Account and Opportunity. Ambiguity needs input rather than guessed Task linkage.
    Read transcript next steps and open Tasks on that Opportunity. Draft completion, buyer-stated date move, or new follow-up proposals only.
-3. Find the current project's deal thread by Account name with `pplx project sessions list --search`.
-   If one is verified, send it with `pplx session send` the meeting marker, title, date, and Task proposals.
-   On confirmed failure with no delivery, retry once with `pplx tm mail send <deal-thread session id>`. Record which command delivered. Never claim delivery without a successful send.
-  An ambiguous send needs native reconciliation or stays needs-input. Never blindly retry a missing or delayed response.
-  Keep the verified destination session ID, link and successful native delivery receipt in the run evidence. Report the exact blocker when delivery is unresolved.
+3. Use `deal_thread_match` with complete saved project pages and an Account search for every resolved Account per its interface and "Account session search".
+   If one is verified, send the meeting marker, title, date, and Task proposals once with `pplx tm mail send <deal-thread session id> "<message>"`.
+   Record delivery or failure. Never claim delivery without a successful send. Never wait, sleep or poll.
    Failed or ambiguous routing stays needs-input.
    Request the interaction-sync skill for this meeting and its lettered proposals there. Explicitly say no writes until Operator approves.
    Otherwise use `pplx automation notify-source --message` with the same evidence for Pipeline. If routing is unavailable, report it, never claim delivery.

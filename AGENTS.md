@@ -1,7 +1,8 @@
 # Sales
 
-Sales This reusable Sales system has five agent workspaces. The included runtime adapter targets Perplexity Computer. Salesforce is the record. Gmail, Calendar, and call transcripts are evidence.
-External writes require the selected contract's approval and readback gates. Read-only workflows keep their stated scope. Run artifacts and customer material stay outside the repo.
+This reusable Sales system has five agent workspaces. The included runtime adapter targets Perplexity Computer. Salesforce is the record. Gmail, Calendar, and call transcripts are evidence.
+External writes require the selected contract's approval and readback gates. Read-only workflows keep their stated scope.
+Run artifacts and customer material stay outside the repo, except generalized capture files in `workspaces/systems/captures/` with customer details removed.
 
 ## Setup gate
 
@@ -17,11 +18,12 @@ Read the selected contract explicitly. Routing and folders do not install a skil
 | Request | Entry |
 |---|---|
 | A named skill | Its contract in the Skills table below, then only its applicable Inputs rows |
-| A task or event without a skill name | `CONTEXT.md` for the owning workspace, then its AGENTS.md and CONTEXT.md |
-| Maintain the repo, agent configuration, or system health | `workspaces/systems/AGENTS.md`, then `workspaces/systems/CONTEXT.md`. Architecture stays in `_core/CONVENTIONS.md` |
+| A task or event without a skill name | Root `CONTEXT.md`, then the owning workspace's AGENTS.md and CONTEXT.md |
+| Capture a work process, maintain the repo, configure agents, or review system health | `workspaces/systems/AGENTS.md`, then `workspaces/systems/CONTEXT.md`. Architecture stays in `_core/CONVENTIONS.md` |
 | Find shared resources and their editors | `_core/CONTEXT.md` |
 
-Routine sales runs go straight to their contract. They do not load the authoring conventions or another workflow's folder. Systems loads only its routed maintenance inputs.
+Routine sales runs go straight to their contract. Event Sequence enters its coordinator, then only the selected stage. Runs never preload siblings or other workflows.
+Systems uses routed maintenance and process-capture inputs.
 Named skills use the direct routes below without relying on discovery of nested AGENTS.md files. Workspace entry files explain ownership and handoffs when routing a broader request.
 
 ## Workspaces
@@ -37,7 +39,7 @@ Named skills use the direct routes below without relying on discovery of nested 
 
 ## Skills
 
-To run a named workflow, go straight to its stage or coordinator contract. Load only its applicable Inputs.
+To run a named skill, go straight to its contract. Signal skills bypass the Signal overview. Event Sequence's coordinator loads only the selected stage when entered, never all stage Inputs.
 
 | Skill | Contract | Branch |
 |---|---|---|
@@ -54,8 +56,9 @@ To run a named workflow, go straight to its stage or coordinator contract. Load 
 | `pilot-usage` | `workspaces/pipeline/workflows/pilot-usage/CONTEXT.md` | None |
 | `customer-review` | `workspaces/pipeline/workflows/customer-review/CONTEXT.md` | Scheduled or one named Account |
 | `close` | `workspaces/pipeline/workflows/close/CONTEXT.md` | None |
-| `deal-coach` | `workspaces/deal-coaching/workflows/deal-coach/CONTEXT.md` | None |
-| `forecast-weekly` | `workspaces/forecasting/workflows/forecast-weekly/CONTEXT.md` | None |
+| `deal-coach` | `workspaces/deal-coaching/workflows/deal-coach/CONTEXT.md` | Call review, pre-meeting, deal review or criteria refresh |
+| `forecast-weekly` | `workspaces/forecasting/workflows/forecast-weekly/CONTEXT.md` | Forecast, tracking or manager update |
 | `repo-maintenance` | `workspaces/systems/workflows/repo-maintenance/CONTEXT.md` | None |
 | `agent-configuration` | `workspaces/systems/workflows/agent-configuration/CONTEXT.md` | None |
 | `system-review` | `workspaces/systems/workflows/system-review/CONTEXT.md` | None |
+| `process-capture` | `workspaces/systems/workflows/process-capture/CONTEXT.md` | None |

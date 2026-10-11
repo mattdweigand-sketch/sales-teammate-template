@@ -1,13 +1,15 @@
 # Buckets, pull-ins, and CRM proposals
 
 Read at the Bucket step.
+Run `policy.tooling.scripts.forecast_math` per `references/compute.md` for fixed predicates; evidence interpretation remains with review.
 
 Interpret timing, activity, and blockers from the combined evidence, quoting the source.
+An open blocker is a reviewed buyer-side obstacle to signing. Supply the reviewed delay and blocker fields per `references/compute.md`, never assume missing review means none.
 For current-quarter deals, a buyer-stated delay past quarter end excludes the deal before either bucket is considered. Then test in order:
 
 - Commit: S4 or S5, or S3 with a buyer-named signature/decision date inside the quarter. Activity within `policy.forecast.activity_days` from any allowed source.
   No open blocker without a named owner and date.
-- Upside: S2 or S3 with `policy.forecast.amount_field` set. Activity within `policy.forecast.activity_days` from any allowed source.
+- Upside: S2 through S5 with `policy.forecast.amount_field` set, including an S4 or S5 deal that fails Commit. Activity within `policy.forecast.activity_days` from any allowed source.
 - Excluded: everything else; name the failed condition and its source. A passed CRM CloseDate alone does not exclude; it becomes a proposal.
 
 Pull-in candidates are next-quarter S2+ deals with `policy.forecast.amount_field` set, where the buyer confirmed reviewing a sent proposal/order form

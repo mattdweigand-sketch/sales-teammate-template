@@ -77,14 +77,15 @@ class OnboardingTests(unittest.TestCase):
         source=ROOT/'_core/policy.yaml';before=hashlib.sha256(source.read_bytes()).hexdigest()
         status=self.instantiate_fixture(self.answers,self.destination)
         self.assertFalse(status['external_ready'])
-        self.assertEqual(len(list((self.destination/'_core/onboarding/skill-pointers').glob('*.md'))),18)
+        self.assertEqual(len(list((self.destination/'_core/onboarding/skill-pointers').glob('*.md'))),19)
         pointers=self.destination/'_core/onboarding/skill-pointers'
-        stages={'signal-scan':'01-research','signal-user-scan':'01-research',
-                'signal-outreach':'02-outreach','signal-followup':'03-followup'}
-        for name,stage in stages.items():
-            pointer=(pointers/f'{name}.md').read_text()
-            self.assertIn(f'`workspaces/prospecting/workflows/signal-prospecting/{stage}/CONTEXT.md`',pointer)
-            self.assertTrue((self.destination/f'workspaces/prospecting/workflows/signal-prospecting/{stage}/CONTEXT.md').is_file())
+        expected = {'signal-scan': 'workspaces/prospecting/workflows/signal-prospecting/01-research/CONTEXT.md',
+                    'signal-user-scan': 'workspaces/prospecting/workflows/signal-prospecting/01-research/CONTEXT.md',
+                    'signal-outreach': 'workspaces/prospecting/workflows/signal-prospecting/02-outreach/CONTEXT.md',
+                    'signal-followup': 'workspaces/prospecting/workflows/signal-prospecting/03-followup/CONTEXT.md'}
+        for name, contract in expected.items():
+            self.assertIn('`' + contract + '`', (pointers / (name + '.md')).read_text())
+            self.assertTrue((self.destination / contract).is_file())
         self.assertIn('Select branch Buying signals.',(pointers/'signal-scan.md').read_text())
         self.assertIn('Select branch Adoption.',(pointers/'signal-user-scan.md').read_text())
         event=(pointers/'event-sequence.md').read_text()
@@ -127,7 +128,7 @@ class OnboardingTests(unittest.TestCase):
         self.assertEqual(policy['prospecting']['event']['outreach_owner_scope'],
                          {'house_owner_ids': owners, 'include_missing_account': True})
         self.assertFalse(policy['template']['external_ready'])
-        self.assertFalse(policy['template']['auto_date_move'])
+        self.assertNotIn('auto_date_move', policy['template'])
         self.assertFalse(policy['prospecting']['approval']['unattended_writes'])
         self.assertEqual(onboard.check(self.destination), 0)
         self.assertNotIn('house_owner_ids', policy['template']['integrations']['salesforce'].get('settings', {}))
@@ -213,7 +214,7 @@ class OnboardingTests(unittest.TestCase):
         self.assertEqual(policy['prospecting']['identity']['owner_email'],answers['owner_email'])
         self.assertEqual(policy['salesforce']['instance_url'],answers['crm_url'])
         self.assertEqual(onboard.check(self.destination),0)
-        self.assertEqual(len(list((self.destination/'_core/onboarding/skill-pointers').glob('*.md'))),18)
+        self.assertEqual(len(list((self.destination/'_core/onboarding/skill-pointers').glob('*.md'))),19)
 
     def test_environment_and_answer_files_are_not_copied(self):
         import shutil
@@ -227,8 +228,7 @@ class OnboardingTests(unittest.TestCase):
     def test_interactive_company_questionnaire_has_no_mode_choice(self):
         expected=self.company_answers()
         responses=[expected[key] if spec['type']=='string' else json.dumps(expected[key])
-                   for key,spec in onboard.read_schema().items()]
-        responses = responses[:-1]
+                   for key,spec in onboard.read_schema().items() if key != 'integration_setup']
         with mock.patch('builtins.input',side_effect=responses) as prompt, \
                 mock.patch.object(onboard,'collect_integrations',return_value=expected['integration_setup']):
             answers=onboard.collect_questionnaire()
