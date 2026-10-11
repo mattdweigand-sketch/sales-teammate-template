@@ -221,5 +221,22 @@
     "targets": [
       "template.integrations"
     ]
+  },
+  "operating_policy_review": {
+    "question": "External reference for reviewed stages, cadence, targets, qualification, coaching and operating policy? This records review, never write approval.",
+    "type": "string",
+    "required": true,
+    "targets": [
+      "template.operating_policy_review"
+    ]
+  },
+  "lost_path_min_employees": {
+    "question": "Reviewed lost-path size floor, positive integer, or null to hold size-based decisions? 1000 is a sample only.",
+    "type": "positive_integer_or_null",
+    "required": false,
+    "default": null,
+    "targets": [
+      "pipeline.worth_growing_min_employees"
+    ]
   }
 }

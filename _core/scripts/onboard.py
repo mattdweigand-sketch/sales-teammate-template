@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+from string import Formatter
 import tempfile
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -69,6 +70,7 @@ def matches_type(value, spec):
                     all(isinstance(x, str) and x.strip() for x in value),
             'object': isinstance(value, dict),
             'boolean': type(value) is bool,
+            'positive_integer_or_null': value is None or (type(value) is int and value > 0),
             'number': type(value) in (int, float) and math.isfinite(value) and value >= 0}.get(kind, False)
 
 
@@ -150,6 +152,20 @@ def validate_integrations(selected, root=ROOT, *, simulation=False):
                     not re.fullmatch(r'005[A-Za-z0-9]{15}', item) or
                     (not simulation and item.startswith('005000000000')) for item in value):
                 raise ValueError(f'{label} needs actual 18-character Salesforce integration User IDs')
+        if name == 'github':
+            from workflow_revision_check import _repository_identity
+            _repository_identity(settings['repository'])
+            if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', settings['remote']):
+                raise ValueError('github.remote must be a safe Git remote name')
+            branch = settings['branch']
+            if (branch.startswith('-') or '..' in branch or '@{' in branch
+                    or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_./-]*', branch)
+                    or any(part in ('', '.', '..') or part.endswith(('.lock', '.')) for part in branch.split('/'))):
+                raise ValueError('github.branch must be a safe deployment branch')
+        if name == 'google_slides':
+            fields = [field for _, field, _, _ in Formatter().parse(settings['slide_title']) if field is not None]
+            if fields != ['quarter'] or '\n' in settings['slide_title'] or '\r' in settings['slide_title']:
+                raise ValueError('google_slides.slide_title requires one {quarter} and no other placeholders')
     return selected
 
 
@@ -263,10 +279,10 @@ def collect_questionnaire(root=ROOT):
             answers[key] = collect_integrations(root)
             continue
         default = spec.get('default')
-        hint = f" [{json.dumps(default)}]" if default is not None else ''
+        hint = f" [{json.dumps(default)}]" if 'default' in spec else ''
         value = input(f"{spec['question']}{hint} ").strip()
         if not value:
-            if default is not None:
+            if 'default' in spec:
                 answers[key] = default
             continue
         answers[key] = value if spec['type'] == 'string' else json.loads(value)
@@ -363,6 +379,8 @@ def instantiate(answers, destination, root=ROOT, *, simulation=False):
         policy['pipeline']['note_next_line'] = f"M/D/YY {values['note_initials']} - <next action in one sentence, due on or by M/D[/YY]>"
         policy['pipeline']['note_history_line'] = f"M/D/YY {values['note_initials']} - <what happened since the last note, two sentences at most>"
         policy['email_voice']['closing'] = f"Best,\n{values['owner_name']}"
+        if values['integration_setup']['google_slides']['choice'] != 'configure':
+            policy['forecast']['deck']['slide_title'] = values['owner_name'] + '  |  {quarter} New Business Bookings Plan'
         policy['pilot_usage']['pdf']['metadata_author'] = values['company_name']
         policy['pilot_usage']['pdf']['metadata_title'] = values['product_name']+' Pilot Usage Report'
         policy['prospecting']['user_scan']['statements'] = {
@@ -421,12 +439,20 @@ def check(workspace,allow_template=False):
     except (ValueError, KeyError, TypeError) as exc:
         errors.append(str(exc))
     route_list = routes(workspace)
-    if len(route_list) != 18 or any(not (workspace/path).is_file() for _,path,_ in route_list):
+    if len(route_list) != 19 or any(not (workspace/path).is_file() for _,path,_ in route_list):
         errors.append('missing workflow routes')
     for path in policy['tooling']['scripts'].values():
         if not (workspace/path).is_file():
             errors.append(f'missing helper {path}')
-    if policy['template']['auto_date_move'] or policy['prospecting']['approval']['unattended_writes']:
+    if policy['template'].get('auto_date_move') is True:
+        errors.append('legacy auto_date_move is unsupported; remove it and review triage policy')
+    floor = policy['pipeline'].get('worth_growing_min_employees')
+    if floor is not None and (type(floor) is not int or floor <= 0):
+        errors.append('worth_growing_min_employees must be a reviewed positive integer or null')
+    if mode != 'unconfigured' and (not isinstance(policy['template'].get('operating_policy_review'), str)
+                                    or not policy['template']['operating_policy_review'].strip()):
+        errors.append('missing external operating_policy_review reference')
+    if policy['prospecting']['approval']['unattended_writes']:
         errors.append('unattended writes enabled without template release review')
     registry = read_integrations(workspace)
     selected = policy['template'].get('integrations', {})

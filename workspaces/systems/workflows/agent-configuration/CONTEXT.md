@@ -1,8 +1,8 @@
 ---
 cadence: one-off
-reads: _core/CONVENTIONS.md, approved ownership, deployed contract paths, project-skill pointers, agent instructions, automation settings
+reads: _core/CONVENTIONS.md, _core/rules.md, approved ownership, deployed contract paths, project-skill pointers, agent instructions, automation settings
 writes: authorized project-skill pointers and agent or automation configuration, after approval
-next: verified receipt to the requesting domain or repo-maintenance for missing deployed targets
+next: Systems receipt with a necessary requesting-domain handoff only, or repo-maintenance for missing deployed targets
 ---
 
 # Agent Configuration
@@ -13,7 +13,9 @@ Align actual settings with approved ownership and deployed workflow contracts. D
 
 | Source | File/Location | Section/Scope | Why |
 |---|---|---|---|
-| Approval | `_core/CONVENTIONS.md` | "Review boundaries", "Cadence and library pointers" | Existing authority and deployment order |
+| Approval | `_core/CONVENTIONS.md` | "Review boundaries", "Cadence and library pointers", "Platform limits" | Existing authority and deployment order |
+| Deployment | `_core/CONVENTIONS.md` | "Deployment communication" | One canonical receipt and necessary handoff, no guidance broadcasts |
+| Handoff rule | `_core/rules.md` | `rules#handoff_delivery` | Necessary domain handoff delivery result and visible failure |
 | Request | Operator or requesting domain thread | Approved ownership, exact intended change, permission boundaries, and approval evidence | Scope and intent |
 | Deployed repository | Verified revision and requested contract paths | Target existence, workspace role, workflow Inputs, outputs, and current boundaries | Correct destination |
 | Per-run evidence | Live project-skill pointers, agent instructions, and automation settings | Only settings affected by this request, including existing matching schedules | Actual before state and duplicates |
@@ -25,7 +27,11 @@ Align actual settings with approved ownership and deployed workflow contracts. D
 3. Propose exact before and after pointer or configuration values, expected routing, and verification criteria. Name any material schedule, permission, or behavior change.
 4. Apply only authorized changes after the referenced files are deployed, per `_core/CONVENTIONS.md` "Review boundaries". Approved path-only changes need no repeat approval.
 5. Read back actual settings. Trace each route through the intended workspace and contract. Verify permissions, schedule uniqueness, and the requested behavior.
-6. Return a deployment receipt with before and after targets, verified revision and settings, and blocked or not-checked items. Route missing repo targets to repo-maintenance.
+6. Record before/after targets, verified revision/settings and blocked or not-checked items per `_core/CONVENTIONS.md` "Deployment communication". Route missing targets to repo-maintenance.
+
+Recovery from a connector or platform failure. Stop at the failing step and quote the exact error with the command or tool that raised it. Nothing after that step is assumed applied.
+Verify which tools, permissions and settings are still readable, then read back actual settings to establish what was applied and what the before state is now.
+Retry only under the original authorization, within the same step. A newly observed limit becomes a proposed `_core/CONVENTIONS.md` "Platform limits" line through repo-maintenance, never a workaround.
 
 ## Checkpoints
 
@@ -48,5 +54,5 @@ Align actual settings with approved ownership and deployed workflow contracts. D
 | Artifact | Location | Format |
 |---|---|---|
 | Verified configuration | Project skills or agent and automation settings, after approval | Authorized values read back against deployed targets |
-| Deployment receipt | Systems or requesting thread, evidence in sandbox | Exact before and after targets, revision, route check, and remaining actions |
+| Deployment receipt | Systems thread, evidence in sandbox | Exact before/after targets, revision, route check and remaining actions, with necessary handoff per "Deployment communication" |
 | Pending changes | Systems thread or sandbox | Exact proposed settings, blocked or not-checked evidence, and required owner action |

@@ -4,6 +4,8 @@
 
 Review the helper's inventory against native results. It is a mechanical check, not evidence of demand or approval.
 Report billed seats or unknown, roster seats, active users over `policy.pilot_usage.window_days`, last-seven-day active users, weekly trend, idle seats, feature mix and supported use cases separately.
+Use only supported work-related use cases in the assessment or customer-facing examples. Exclude personal, sensitive and unclear samples from themes and quotations.
+If none qualify, say `No supported work-related use cases in the retrieved sample`. Never remove those queries from activity totals or infer that no work use occurred.
 Assess only due milestones, in a few lines followed by numbered recommended actions. Already-reviewed matches show the receipt date, not a repeated scheduled assessment.
 - 3 months, Adoption: billed versus roster versus 60-day and 7-day active users, weekly trend, idle seats, feature mix, buyer-reported barriers and support needs.
 - 6 months, Value and growth: buyer-stated results, usage trend and any buyer evidence for more seats. Billed seats stay distinct from roster and activity.
@@ -11,29 +13,21 @@ Assess only due milestones, in a few lines followed by numbered recommended acti
 Read buyer evidence from the previous milestone date, or the anchor for the first milestone, through as_of in both modes. Unread sources are not checked. Recommendations are not demand inference.
 Complete usage presented completes the review. Unknown billed seats need a follow-up to verify seats, not a hold.
 Hold unreadable usage, including org mismatch, failed or incomplete queries or stale data.
-Buyer context is optional. Failed reads are "not checked". No contact found becomes "no recent buyer contact since <date>" with dates searched, never a hold or invented absence.
+Buyer context is optional. Failed reads are "not checked". No contact found becomes "no buyer contact retrieved, <dates searched>", never a hold or a statement of absence. Keep the check-in proposal.
 End each assessment with numbered follow-ups drawn from usage facts and cite the numbers.
 Propose training for idle seats, a seat conversation near or above billed seats, or declining-trend health checks.
 Include a check-in for no recent contact. Add no fixed numeric threshold. Follow-ups may become Salesforce Task proposals with the existing approval, duplicate check and native readback gates.
 Do not infer more purchased seats from members alone. No Gmail drafts or outreach.
 When activity and buyer evidence support more seats, explain that evidence and the proposed increment. Show any idle seats, alternative adoption work, and uncertainty.
 Expansion Opportunity proposals still require buyer evidence for demand. No expansion proposal for unknown enterprise status, mismatched org, incomplete usage, or any open Opportunity.
-With any open Opportunity, the assessment remains read-only. Send recommended actions, including renewal work, to its active deal thread first, otherwise to Pipeline hygiene.
+With any open Opportunity, the assessment remains read-only. Send recommended actions to its active deal thread first, otherwise to Pipeline hygiene.
 Ask that owner to merge with any open proposal on the same record. Propose nothing on that record here.
-For Pipeline hygiene, use its verified session ID for both transports. Ambiguous deal ownership holds the handoff instead of assuming no owner.
-Try `pplx session send` once. On confirmed failure with no delivery, retry once with `pplx tm mail send <deal-thread session id>`. Record which command delivered.
+Send once with `pplx tm mail send <deal-thread session id> "<message>"`. Record delivery or failure. Never wait, sleep or poll.
 Failed or ambiguous routing stays needs-input for the handoff. Never claim delivery without a successful send.
-An ambiguous send needs native reconciliation or stays needs-input. Never blindly retry a missing or delayed response.
-Keep the verified destination session ID, link and successful native delivery receipt in the run evidence. Report the exact blocker when delivery is unresolved.
 
-For each reviewed current subscription, use `Opportunity.Subscription_Cancel_Date__c` for Subscription End Date.
-Verified Salesforce subscription dates remain review evidence when org or usage is missing or conflicting. Unknown usage stays null and blocks expansion, not independent renewal evidence.
-Renewal evidence is not automatic Task creation or proof that all proposal prerequisites are satisfied. Retain every Salesforce identity, date, duplicate, required-field, approval and readback gate.
-Task due date is end date minus `policy.pipeline.customer_review.renewal_notice_days` calendar days. Scheduled future notices are bounded by the next policy occurrence.
-The 12-month milestone never sets or substitutes for the subscription end date. Renewal notices remain independent even without a due milestone.
-If notice is before today, report notice window passed with the subscription end date. Do not move it to today or invent a new date. Operator decides the follow-up.
-Missing or ambiguous end dates stay needs-input. A trial end date is not the subscription renewal date or an expansion CloseDate.
-Read renewal Opportunities linked by Renewed_from_Opportunity__c and open Tasks before proposing. Existing renewal work is linked, not duplicated.
+Use `Opportunity.Subscription_Cancel_Date__c` only as known Subscription End Date context for account health.
+Do not produce renewal notices, renewal Task proposals or renewal hold entries. The 12-month milestone never substitutes for the subscription end date.
+A trial end date is not an expansion CloseDate.
 
 ## Numbered proposals
 
@@ -45,10 +39,8 @@ An expansion Opportunity uses the reviewed AccountId, current OwnerId, `policy.p
 Propose Name and buyer-supported CloseDate. Confirm any Salesforce-required fields by describe and fresh record evidence. Never invent Amount, ARR, seat demand, or a signature date.
 The proposal's reason states seats versus active use, source org and window, buyer evidence, and the new-seat rationale. It is installed-base expansion, not ARR growth.
 
-A renewal Task uses the reviewed source Opportunity Id for WhatId, current OwnerId, proposed Subject, and the exact notice date for ActivityDate.
-Use Status Not Started and Priority Normal only after confirming those valid picklist values. Show the Description with `policy.salesforce.note_prefix` expanded for today.
-The note links the source subscription, its end date, the renewal action, and the evidence. Include WhoId only for a reviewed customer Contact.
-Check existing open Tasks on both Account and source Opportunity, including future-dated Tasks. Same renewal action and subscription means duplicate, regardless of Subject wording.
+Check existing open Tasks on both Account and related Opportunities before a check-in proposal, including future-dated Tasks.
+The same check-in action means duplicate, regardless of Subject wording.
 
 ```sql
 SELECT Id, WhatId, WhoId, OwnerId, Subject, Description, ActivityDate, Status, IsClosed
@@ -57,18 +49,17 @@ WHERE IsClosed = false AND (WhatId IN (<accountAndOpportunityIds>))
 ```
 
 Scheduled runs propose and wait in their run thread under `rules#scheduled_runs`. No reply writes nothing. No pre-approval or automatic creation applies.
-Before each approved label, re-read Account owner, all related open Opportunities, source subscription, existing renewals and Tasks, and required fields.
-Recompute the notice against the current Pacific date after approval. A newly passed notice window becomes a question for Operator, never a past-dated Task.
+Before each approved label, re-read Account owner, all related open Opportunities and Tasks, and required fields.
 Stop stale, duplicate, or newly out-of-scope proposals and report why. Apply only unchanged approved fields per `rules#write_protocol`.
 Read each created or updated record natively, compare every approved field, and report mismatches without claiming success. Retrying a failed write requires a fresh duplicate check.
 
 ## Report and receipt
 
-The scheduled report includes only helper-selected rows: due milestones, already-reviewed suppressions, superseded entries, holds or carries, unresolved anchors and renewal candidates in the window.
-Every other owned customer is not_due_count only. Subscription-date needs-input on these unselected Accounts is one subscription_date_needs_input_count, not per-Account monthly flags.
-Selected rows show won links, owner, org, evidence dates, separate seats and activity, renewal dates and status. On-demand shows only its named Account, including none due.
+The scheduled report includes only helper-selected rows: due milestones, already-reviewed suppressions, superseded entries, holds or carries and unresolved anchors.
+Every other owned customer is not_due_count only.
+Selected rows show won links, owner, org, evidence dates, separate seats and activity. On-demand shows only its named Account, including none due.
 List open-deal Pipeline action handoffs with live Opportunity links. List unknowns and failed reads. Never claim a partial inventory is complete.
-Number ready proposals across the whole report. Keep questions, skipped duplicates, and passed notice windows visibly separate.
+Number ready proposals across the whole report. Keep questions and skipped duplicates visibly separate.
 The receipt lists approved labels, exact written records and readbacks, skipped or declined labels, pending approval, needs-input items, and failed or not-checked writes.
 Say Nothing written if nothing was approved or verified. Salesforce records remain the handoff to pipeline-review. No outreach, schedule changes, or project files are produced.
 Every run, including incomplete and early exits, ends with exactly one fenced JSON block named `customer_review_receipt` in its message:
@@ -81,9 +72,11 @@ Every run, including incomplete and early exits, ends with exactly one fenced JS
 
 On-demand mode is `on_demand` and omits window_start, but includes as_of, the run-start ISO datetime with an offset. Reviewed entries take receipt_date from that block's as_of.
 Only mode scheduled receipts supply the next window_start; an on-demand as_of never moves it. Native message timestamps are not the receipt clock.
-Every reviewed, held and superseded entry carries account_id, milestone_months and milestone_date.
+Milestone reviewed, held and superseded entries carry account_id, milestone_months and milestone_date.
 Reviewed requires usage_ready true and the assessment shown, not helper selection or approval of actions.
+The reviewed receipt clock cannot precede the milestone date in the policy timezone. A valid receipt schema alone does not prove that usage or the assessment was completed.
 Held includes unreadable usage and not reached, including unresolved carry-forward entries. Buyer context and unknown billed seats never hold.
+Ignore old receipt entries with kind `renewal`. Do not copy them into reviewed, held or superseded output.
 Missing anchors use null milestone_months and milestone_date.
 Only mark earlier catch-up milestones superseded once their latest assessment actually completes; otherwise retain them as held. No receipt block means not reviewed.
 Scheduled receipts stay in the scheduled run thread. On-demand runs in Pipeline or sends the same receipt block there. Never create a new state file or store.

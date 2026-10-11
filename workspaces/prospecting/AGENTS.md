@@ -1,13 +1,12 @@
 # Prospecting
 
-Own Signal Prospecting and Event Sequence for named accounts.
-Signal Prospecting has Research, Outreach and Follow-up stages. Event Sequence coordinates List Prep, Sequence Plan and Launch.
-Read `workspaces/prospecting/CONTEXT.md` for routing, or go directly to the named skill's contract in root AGENTS.md.
+Own Signal Prospecting's Research, Outreach and Follow-up stages, and Event Sequence's List Prep, Sequence Plan and Launch stages, all within named accounts.
+Read `workspaces/prospecting/CONTEXT.md` for the two workflow routes, or go directly to the named skill's stage or Event coordinator in root AGENTS.md.
 
 ## Boundaries
 
 Named accounts are existing Salesforce Accounts whose OwnerId is `policy.prospecting.identity.sfdc_user_id`. Resolve one current Account before research or outreach.
-For Signal, missing, ambiguous, house-owned, inactive other-owner, and other seller Accounts are outside scope. Never discover new accounts, create Accounts, or change Account ownership.
+Missing, ambiguous, house-owned, inactive other-owner, and other seller Accounts are outside scope. Never discover new accounts, create Accounts, or change Account ownership.
 For research, outreach, and follow-up, any open Opportunity belongs to Pipeline. Stop prospecting writes and hand evidence to Pipeline, regardless of Opportunity owner.
 Event Sequence uses the same named-account scope.
 For an event list Operator names, rows marked with Operator as outreach owner are in scope when the Salesforce Account is unassigned or missing. Other sellers' Accounts stay out.

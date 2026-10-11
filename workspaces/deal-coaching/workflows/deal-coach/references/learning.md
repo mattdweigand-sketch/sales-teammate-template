@@ -10,8 +10,11 @@ Use linked deal-thread evidence to verify the sequence. A later outcome alone do
 
 At the slot in `policy.coach.schedule.criteria_refresh`, review signals since the previous refresh and propose numbered edits to this workflow's references.
 Also prepare a Patterns section for the previous calendar month, separate from the since-last-refresh window for criteria edits. State the month's dates in the refresh schedule's timezone.
-Read owned Opportunity call Tasks and Next_Steps__c, Momentum transcripts, and linked deal evidence for that month per `rules#momentum`, `policy.momentum`, and `policy.tooling`.
-Respect supported retrieval windows and limits. Name unread or out-of-lookback evidence as not checked, never as an absence of patterns.
+Read owned Opportunity Salesforce call Tasks and Next_Steps__c for the full previous calendar month, with linked deal evidence.
+Restrict Momentum transcripts to the intersection of that month and the supported lookback per `rules#momentum`, `policy.momentum`, and `policy.tooling`, using Account-filtered windows.
+Read every Account-filtered window in that overlap rather than stopping after one call.
+Respect supported retrieval windows and limits. A Momentum window that returns `policy.momentum.sweep.page_size` meetings is incomplete. Split it in half and rerun until every window returns fewer.
+Name unread or out-of-lookback evidence as not checked, never as an absence of patterns.
 Cover objections, blockers, and product gaps recurring on two or more distinct deals, not merely repeated calls on one deal. Give at most 10 patterns.
 For each pattern, give the accounts, one dated piece of evidence per deal, and a suggested owner from product, security, deal desk, or enablement.
 Post Patterns on the scheduled refresh even when no criteria edit is supported. Post nothing only when there are neither patterns nor supported edits.

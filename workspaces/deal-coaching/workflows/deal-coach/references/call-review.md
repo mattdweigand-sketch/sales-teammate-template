@@ -4,7 +4,8 @@
 
 Use the requested call or window. For a scheduled run, review external calls since the previous scheduled call-review slot through run start, including intervening weekend days.
 Resolve the Account and Opportunity from Salesforce and the completed calls from Calendar. Use attendee addresses as well as Account names per `rules#calendar_search`.
-Retrieve each target call's Momentum transcript per `rules#momentum` and `policy.momentum`. Verify the meeting identity before evaluating it.
+Retrieve each target call's Momentum transcript per `rules#momentum` and `policy.momentum`. The first-match stop applies to that target-call lookup only.
+Verify the meeting identity before evaluating it. It does not end collection for other selected Calendar calls.
 If a transcript is missing or outside the supported lookback, name the call as not checked. A meeting title never establishes what was said.
 Read relevant Gmail threads, Salesforce fields and Contact Roles, and deal-thread context only for the calls selected. Keep conflicting sources visible with their dates.
 

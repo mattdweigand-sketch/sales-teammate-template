@@ -107,13 +107,7 @@ only.
 ## Boundaries
 
 - Drafting, wording, or sending any message. That is `signal-outreach`.
-- Reading Gmail, Slack, Snowflake, or Example Product adoption data. Adoption is `signal-user-scan`.
+- Reading Gmail, Slack, Snowflake, or configured product adoption data. Adoption is `signal-user-scan`.
 - Any write to Salesforce, Gmail, or project files.
 - Treating "no usable signal" as proof the account is not moving.
 - Applying a rule not named in this stage contract, `policy.yaml`, or the taxonomy. Any rule cited in the report names its file.
-
-## Sales authority
-
-Use rules#approval and rules#write_protocol for each exact proposal, approval and native readback. Never treat a live policy mirror as independent approval.
-An open Opportunity belongs to Pipeline. Re-read current owner, open Opportunities and duplicates before proposals and again before every approved write.
-Never retry a failed or mismatched create blindly. Report the actual partial result and one corrective proposal for approval.

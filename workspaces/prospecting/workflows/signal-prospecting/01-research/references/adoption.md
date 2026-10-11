@@ -45,9 +45,4 @@ Next: individuals_only may go to signal-outreach; org_adopted needs a qualified 
 - Editing the query to add columns. Change the policy and the check first, in a separate approved edit.
 - Any write to Salesforce, Snowflake, Gmail, or project files.
 - Drafting or wording a message. That is `signal-outreach`.
-
-## Sales authority
-
-Use rules#approval and rules#write_protocol for each exact proposal, approval and native readback. Never treat a live policy mirror as independent approval.
-An open Opportunity belongs to Pipeline. Re-read current owner, open Opportunities and duplicates before proposals and again before every approved write.
-Never retry a failed or mismatched create blindly. Report the actual partial result and one corrective proposal for approval.
+- Inferring a champion's identity, personal payment, unsanctioned use, or company disapproval from adoption facts. Public mentions never substitute for the warehouse check.

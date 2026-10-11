@@ -33,8 +33,13 @@ Each proposal applies on `approved <label>` per `rules#approval`; use separate l
   Exact text per the template in `workspaces/pipeline/workflows/close/references/paths.md`, to `policy.close.ops_channel`, mentioning `policy.close.ops_owners`.
   Re-run the search immediately before posting; approval may be hours old.
 - **E. Follow-up Task.** Only when D was posted or a downstream status is pending.
-  First query `SELECT Id, Subject, ActivityDate, Status FROM Task WHERE WhatId = '<OppId>' AND IsClosed = false`.
-  An open Task awaiting the same downstream item is reused or rescheduled by Id, never duplicated.
+  Initial downstream-status creates remain Close's exception in standalone runs. Deal-thread runs make no unprompted Task proposals.
+  Operator's typed Task commands use Pipeline AGENTS.md "Typed deal commands", not Close's E exception. The following E ownership restrictions still apply to Close runs.
+  First query `SELECT Id, Subject, ActivityDate, Status, IsClosed, OwnerId, Description FROM Task WHERE WhatId = '<OppId>' AND IsClosed = false`.
+  An open Task awaiting the same downstream item is reused unchanged. Only native other-owner Tasks may be rescheduled in standalone Close runs, never duplicated.
+  Never complete, reschedule or replace any Operator-owned open Task per `rules#task_date_coordination`. State `Triage owns Task <Id>` and propose only Close's own fields.
+  OwnerId must equal the run user for triage ownership. Other owners keep current behavior. Missing or unreadable owner evidence holds that Task as needs-input.
+  A genuinely new action may get a new Task after the duplicate check. A same-action due Task stays open for triage, not a reason to create another.
   Otherwise propose a Task due today plus `policy.close.followup_days`, Subject naming the downstream item awaited,
   linked to the Opportunity and to the Contact whose email is the resolved admin email, else the primary Contact Role.
 
@@ -44,3 +49,4 @@ D's first line reads the live `StageName`.
 ## Apply
 
 Writes per `rules#write_protocol`. A verified Closed Won is never reopened or undone by this skill.
+Fresh-read existing Tasks' OwnerId and date immediately before writing. A Operator-owned open Task stops its old change proposal and stays with triage. Unknown owners hold as needs-input.

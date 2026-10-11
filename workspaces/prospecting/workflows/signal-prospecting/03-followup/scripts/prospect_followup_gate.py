@@ -2,8 +2,9 @@
 """Check one follow-up packet and emit the exact Salesforce Task to propose. signal-followup calls this once per send.
 
 Usage:
-    python3 workspaces/prospecting/workflows/signal-prospecting/03-followup/scripts/prospect_followup_gate.py --packet packet.json [--today YYYY-MM-DD]
+    python3 workspaces/prospecting/workflows/signal-prospecting/03-followup/scripts/prospect_followup_gate.py --packet packet.json [--core _core] [--today YYYY-MM-DD]
     --today is for tests. Default is today in identity.timezone.
+    --core supplies both policy reads, the prospecting block and salesforce.note_prefix, from one policy.yaml.
 
 Policy input requires prospecting.identity.timezone, prospecting.identity.sfdc_user_id,
 prospecting.followup.due_calendar_days, prospecting.followup.closed_statuses, prospecting.followup.task.Subject,
@@ -12,14 +13,15 @@ prospecting.followup.task.Description, and shared salesforce.note_prefix.
 
 packet.json
     {
-      "sent": [ {"message_id": "...", "thread_id": "...", "subject": "...", "sent_at": "<aware ISO-8601>", "to": "x@acme.test"} ],   # live Gmail in:sent hits
+      "sent": [ {"message_id": "...", "thread_id": "...", "subject": "...", "sent_at": "<aware ISO-8601>", "to": "x@acme.com"} ],   # live Gmail in:sent hits
       "account": {"id": "001...", "owner_id": "005..."},
-      "contacts": [ {"id": "003...", "email": "x@acme.test"} ],                # Contacts on the Account whose Email matches the recipient
+      "contacts": [ {"id": "003...", "email": "x@acme.com"} ],                # Contacts on the Account whose Email matches the recipient
       "tasks": [ {"id": "00T...", "subject": "...", "description": "...", "status": "Not Started"} ],  # existing Tasks on the Contact, any status
+      "open_opportunities": [ {"id": "006..."} ],   # live open Opportunity read on the Account (prospecting.salesforce.open_opportunity), empty when none
       "signal": {"signal_type": "ai_exec_appointment", "angle": "Model flexibility"}   # from the approved outreach verdict in the thread
     }
 
-Checks, in order. Every failing check names its reason. Checks 1 through 6 all run before the verdict. Check 7 runs
+Checks, in order. Every failing check names its reason. Checks 1 through 7 all run before the verdict. Check 8 runs
 only when they pass.
     1. proof: exactly one sent hit. Zero is no proof. Two or more is ambiguous
     2. signal: signal_type and angle are nonempty labels from the approved outreach verdict. Preserve historical
@@ -31,7 +33,9 @@ only when they pass.
        empty when none). A missing or null tasks field blocks. No task whose subject equals the proposed Subject,
        whose description contains the message id, or which is open with a subject starting with the
        followup.task.Subject prefix ("Follow up:")
-    7. due date: sent_at is an aware timestamp not after now. identity.timezone send date + followup.due_calendar_days.
+    7. open Opportunity: open_opportunities must be a list (the live open Opportunity read on the Account, empty when
+       none). A missing or null field blocks. Any open Opportunity blocks, Pipeline owns that Account
+    8. due date: sent_at is an aware timestamp not after now. identity.timezone send date + followup.due_calendar_days.
        Blocks when the due date is before today (--today overrides both today and now)
 
 
@@ -58,7 +62,12 @@ def due_date(sent, policy):
     return sent.astimezone(prospect_common.policy_tz(policy)).date() + timedelta(days=policy["followup"]["due_calendar_days"])
 
 
-def check(packet, policy, today=None, now=None):
+def note_prefix(core=CORE):
+    """salesforce.note_prefix from the same policy.yaml that --core selects."""
+    return yaml.safe_load((Path(core) / "policy.yaml").read_text())["salesforce"]["note_prefix"]
+
+
+def check(packet, policy, today=None, now=None, prefix_template=None):
     if now is None:
         now = datetime.combine(today, datetime.max.time(), tzinfo=prospect_common.policy_tz(policy)) if today else prospect_common.policy_now(policy)
     today = today or now.date()
@@ -119,6 +128,13 @@ def check(packet, policy, today=None, now=None):
             reasons.append(f"open follow-up Task already exists {t.get('id')}")
             break
 
+    opportunities = packet.get("open_opportunities")
+    if not isinstance(opportunities, list):
+        reasons.append("open_opportunities missing or not a list. Read the Account's open Opportunities and pass the list, empty when there are none")
+    elif opportunities:
+        ids = ", ".join(str(o.get("id") if isinstance(o, dict) else o) for o in opportunities)
+        reasons.append(f"open Opportunity {ids} on the Account. Pipeline owns this account")
+
     if reasons:
         return {"verdict": "block", "reasons": reasons}
 
@@ -131,8 +147,9 @@ def check(packet, policy, today=None, now=None):
     if due < today:
         return {"verdict": "block", "reasons": [f"due date {due.isoformat()} is before today. Send is older than the follow-up window"]}
 
-    shared_policy = yaml.safe_load((CORE / "policy.yaml").read_text())
-    prefix = shared_policy["salesforce"]["note_prefix"].replace("M/D/YY", f"{today.month}/{today.day}/{today:%y}")
+    if prefix_template is None:
+        prefix_template = note_prefix()
+    prefix = prefix_template.replace("M/D/YY", f"{today.month}/{today.day}/{today:%y}")
     task = {"Subject": subject, "WhatId": acct["id"]}
     if contacts:
         task["WhoId"] = contacts[0]["id"]
@@ -158,7 +175,7 @@ def main():
         core = Path(a.core)
         packet = json.loads(Path(a.packet).read_text())
         policy = prospect_common.load_policy(core)
-        out = check(packet, policy, date.fromisoformat(a.today) if a.today else None)
+        out = check(packet, policy, date.fromisoformat(a.today) if a.today else None, prefix_template=note_prefix(core))
     except prospect_common.INPUT_ERRORS as e:
         print(prospect_common.error_json(e))
         return 2

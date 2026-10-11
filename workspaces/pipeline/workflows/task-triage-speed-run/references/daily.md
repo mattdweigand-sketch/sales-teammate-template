@@ -1,33 +1,32 @@
-# Scheduled triage
+# Daily run
 
-## Evidence and routing
+Scheduled and typed runs use the same triage approval and evidence gates. No reply writes nothing.
 
-- Run the existing triage contract for Operator's due and overdue Tasks, applying `references/grouping.md` "Pipeline ownership" and retaining undated-Task coverage.
-- Before proposing, read Gmail sent mail, Calendar, and Momentum per `rules#momentum` for completed actions and buyer-stated dates.
-  Propose completion when Operator already handled the action, or the date the buyer actually stated. An unread source is not checked, never proof of completion.
-- Search current project deal threads by Account name with `pplx project sessions list --search`.
-  Send matched Tasks and evidence with `pplx session send` to the verified deal thread instead of proposing them in the scheduled run.
-  On confirmed failure with no delivery, retry once with `pplx tm mail send <deal-thread session id>`. Record which command delivered. Never claim delivery without a successful send.
-  An ambiguous send needs native reconciliation or stays needs-input. Never blindly retry a missing or delayed response.
-  Keep the verified destination session ID, link and successful native delivery receipt in the run evidence. Report the exact blocker when delivery is unresolved.
-  Mark those rows routed, not completed. Do not auto-move or otherwise write them here. Failed or ambiguous routing is needs-input.
-- Show draft text only. Create Gmail drafts only after approval. Apply the ownership order in `references/grouping.md` "Pipeline ownership".
+## Morning pass
+
+- Collect all due, overdue and undated Tasks and current-action gaps per `references/collect.md`. Future Tasks serve only the pre-create duplicate check, never decisions, holds or counts.
+- Read recent Gmail, Calendar, Slack and Momentum per `rules#momentum` for matching completed actions and quoted buyer dates. Unread sources are not checked, never evidence of completion.
+- Use complete saved project pages and bounded Account searches with `deal_thread_match`. Read every matched deal thread's recent context yourself, read-only, with no message or wait.
+  Include those Tasks in this one triage message, including eligible follow-up drafts. Never send email. Deal context never receives a Task proposal.
+  `local` follows the local or unthreaded Opportunity branch; `needs_input` or `incomplete` holds that record. Never omit a held Task or claim a thread was read when it was not.
+- Without action evidence, keep the Task due or overdue and prepare its action. Only a quoted buyer date or moved meeting can support a date proposal.
+- Prepare full Task follow-up drafts, including deal accounts, without creating them. Verified creation after approval can qualify the displayed pair. The next Task first checks whether it was sent.
 
 ## Meeting preparation
 
-- Read `triage` settings from the `pipeline` policy block for `meeting_lookahead_business_days` and `prep_lead_business_days`.
-  If unavailable, report meeting preparation not checked and continue the existing Task pass. Never invent timing defaults.
-- Read Calendar for external meetings within the configured business-day lookahead on Operator's open Opportunities, per `rules#calendar_search`.
-  Determine external attendees with `policy.tooling.internal_domains`. Scheduling alone does not establish completed action.
-- Read open prep Tasks on each Opportunity. An adequate prep Task is due at least the configured business-day lead before the meeting.
-- For each meeting without one, propose a Task due that lead before it. The Subject names the asset to prepare and WhoId links the verified primary Contact.
-  Show the exact Opportunity, Contact, date, and proposed fields. Missing Contact, ambiguous linkage, or a past prep date needs input, not a guessed record.
-  Recheck duplicates before any approved create. Treat the create as its own explicit record approval after the main pass, never as an automatic date move.
+This section loads only on an explicit typed request such as "prep tasks". Scheduled Morning pass and delivery inputs stay as today.
+Unrequested prep is not applicable, not a not-checked result, and not a notification trigger. The existing Task approval and duplicate check stay.
+
+- Read `triage` settings from `pipeline` for `meeting_lookahead_business_days` and `prep_lead_business_days`. If unavailable, report meeting preparation not checked without inventing defaults.
+- Search external meetings in that business-day window on Operator's open Opportunities per `rules#calendar_search`, identifying external attendees with `policy.tooling.internal_domains`.
+- Future prep Tasks serve only the pre-create duplicate check. Name an exact-action existing Task instead of creating a duplicate, never use its date to change the proposed lead or hold triage.
+- If none exists, propose a Task due that lead before the meeting, with verified Opportunity, Contact, Subject and exact fields. Past prep dates or ambiguous links need input.
+- Recheck duplicates before its own explicit record approval after the main pass. This creates a missing prep Task, never moves an existing Task or proves an action happened.
 
 ## Approval and delivery
 
-- Apply only qualifying next-business-day moves under `rules#auto_date_move`, with complete readback and the label `Auto-moved`.
-- Group all other local proposals and wait for Operator in this run thread. Apply only approved items with readback. No reply writes nothing else.
-- Report routed rows and prep proposals separately from the due-Task pass. No email is sent.
-- If complete reads show no due or overdue Tasks and no prep proposals, reply in one line and run `pplx automation suppress-run-notification`.
-  Do not suppress actionable proposals or incomplete-source warnings merely because the initial Task queue is empty.
+- Group every due Task in one message and wait for Operator's one main-pass approval. No automatic writes. CRM corrections and new meeting-prep Tasks retain their existing separate record approvals.
+- After approved writes, post the combined run receipt to Operator before deal receipts per `references/writes.md` "Writes" receipt instructions.
+- Report verified results, blockers, remaining approvals and failed reads. Report undelivered receipts in a follow-up line per the same instructions.
+- Only complete reads showing no due or overdue Tasks, no gap, next-step or prep proposals, no prioritized actions and no incomplete evidence qualify for the quiet one-line receipt and `pplx
+  automation suppress-run-notification`.

@@ -79,6 +79,7 @@ ORDER BY kind DESC, queries DESC
 
 `mode` rows are complete, so the mix sums to 100 percent. `model` rows are the top five.
 `product_mode` legend: asi = Computer; search_mode = Search; chat_mode = Chat; study_mode, research, research_mode, scheduled_tasks, pro, and NULL roll into Other; display_model is the model.
+For unlisted modes such as `realtime`, report the raw value and count as unmapped. Never guess a product mapping or drop its queries.
 
 ## 3. Use-case sample (slow table)
 
@@ -100,7 +101,7 @@ recent AS (
   ORDER BY q.date_pt DESC, q.query_submitted_at_utc DESC
   LIMIT 2000
 )
-SELECT TO_VARCHAR(date_pt) AS day, user_email, product_mode, LEFT(query_string, 120) AS query_text
+SELECT TO_VARCHAR(date_pt) AS day, user_email, product_mode, LEFT(query_string, <policy.pilot_usage.query_text_max_chars>) AS query_text
 FROM recent
 QUALIFY ROW_NUMBER() OVER (PARTITION BY LEFT(query_string, 60) ORDER BY date_pt DESC) = 1
    AND ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date_pt DESC, query_submitted_at_utc DESC) <= 8
@@ -109,7 +110,7 @@ LIMIT <use_case_sample>
 ```
 
 The `recent` CTE caps the scan at the newest 2000 rows before the window functions run. At most 8 rows per user, so one heavy session cannot fill the sample.
-Quote one example per theme verbatim, at the 120-character cut above. Skip file names, JSON, and single words.
+Quote one example per theme verbatim, cut at `policy.pilot_usage.query_text_max_chars` characters above. Skip file names, JSON, and single words.
 
 ## 4. Credit grants (pdf mode, cheap)
 
@@ -155,7 +156,7 @@ first_q AS (
   QUALIFY ROW_NUMBER() OVER (PARTITION BY q.context_uuid ORDER BY q.query_submitted_at_utc) = 1
 )
 SELECT t.context_uuid, r.user_email, TO_VARCHAR(t.first_date) AS first_date,
-       TO_VARCHAR(t.amount_cents) AS amount_cents, LEFT(f.query_string, 120) AS task_title
+       TO_VARCHAR(t.amount_cents) AS amount_cents, LEFT(f.query_string, <policy.pilot_usage.query_text_max_chars>) AS task_title
 FROM tasks t
 JOIN roster r ON TO_VARCHAR(r.user_id) = t.user_id
 LEFT JOIN first_q f ON f.context_uuid = t.context_uuid
@@ -165,4 +166,5 @@ ORDER BY t.first_date, t.amount_cents DESC
 One row per billed Computer context (`context_uuid`); `first_date` is its first billing date within the selected window, not necessarily its creation date.
 Neither completion nor later return activity is established.
 `amount_cents` is the raw billed sum; `policy.tooling.scripts.pilot_usage_build` rounds per `policy.pilot_usage.pdf.credit_display_rule`, then sums. The end date is bound in SQL before aggregation.
-`task_title` is the first prompt, 120 characters, for the category review only; it never prints in the PDF. `fct_billing_usage_asi` holds only `asi_*` meter rows, so no meter filter is needed.
+`task_title` is the first prompt, cut at `policy.pilot_usage.query_text_max_chars` characters, for the category review only. It never prints in the PDF.
+`fct_billing_usage_asi` holds only `asi_*` meter rows, so no meter filter is needed.

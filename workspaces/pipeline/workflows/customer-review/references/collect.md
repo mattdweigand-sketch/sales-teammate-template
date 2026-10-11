@@ -17,20 +17,21 @@ Fetch all pages. For these Account ids, query all Opportunities, not only won de
 
 ```sql
 SELECT Id, AccountId, OwnerId, Name, IsClosed, IsWon, StageName, Type, Deal_Type__c,
-       CloseDate, Trial_Expiration_Date__c, Subscription_Cancel_Date__c, Renewed_from_Opportunity__c
+       CloseDate, Trial_Expiration_Date__c, Subscription_Cancel_Date__c
 FROM Opportunity
 WHERE AccountId IN (<ownedAccountIds>)
 ```
 
 Any open Opportunity still permits the milestone assessment, but routes recommended actions to its active deal thread first, otherwise to Pipeline hygiene, with no new Opportunity proposal.
-Find current project sessions by Account name with `pplx project sessions list --search` and verify the exact `<Account> deal` title. Ambiguous ownership is needs-input for the handoff.
+For each such Account, save complete offset-bound project pages and an Account search, then run `deal_thread_match --input <sandbox.json>` per its interface and "Account session search".
+Its matched owner session is the deal thread. Its holds, ambiguity and incomplete evidence are needs-input for the handoff. Never filter the listing with `--search` or guess a match.
 List won and open Opportunity links. The anchor is the earliest verified non-trial Closed Won CloseDate; later wins never reset age.
 Missing, invalid, future or conflicting anchor evidence is needs-input with no milestone computed. Paid Trial is excluded from the anchor.
 Group by Account and keep all non-trial won Opportunity ids and subscription dates visible.
-Do not sum historical purchases or collapse different contracts into one renewal date. Flag ambiguous or overlapping subscriptions for Operator.
+Do not sum historical purchases. Subscription end dates are account-health context only, never a trigger for renewal work.
 Report unavailable pages as incomplete. Include held carry-forward Accounts in retrieval even when no new milestone falls in this window.
 
-Pipeline confirmed on October 3, 2026 that `Opportunity.Subscription_Cancel_Date__c`, labeled Subscription End Date, is the renewal date.
+Pipeline confirmed on October 3, 2026 that `Opportunity.Subscription_Cancel_Date__c` is labeled Subscription End Date.
 Do not substitute other cancellation or deactivation fields, Account renewal dates, or automated renewal fields.
 
 ## Window and receipts
@@ -38,10 +39,12 @@ Do not substitute other cancellation or deactivation fields, Account renewal dat
 Use only fenced `customer_review_receipt` blocks in the scheduled run thread and Pipeline thread; their ids arrive in the prompt, never the contract.
 Scheduled `--window-start` is the latest scheduled receipt's `as_of` in the scheduled run thread. A platform completed flag or a run without a receipt never advances window_start.
 With no readable scheduled receipt, omit --window-start. The nominal run is the latest policy occurrence at or before as_of; start at the occurrence before that nominal run.
-Late starts and no-receipt retries never collapse coverage to today's occurrence. Keep the actual run-start as_of and the renewal next-occurrence lookahead unchanged.
+Late starts and no-receipt retries never collapse coverage to today's occurrence. Keep the actual run-start as_of unchanged.
 Use run-start for --as-of. The window is window_start exclusive to as-of inclusive in `policy.pipeline.customer_review.schedule.tz`.
 Milestone dates are the anchor plus `policy.pipeline.customer_review.milestone_months` calendar months, clamped to month end and evaluated at local midnight.
 Carry-forward is the previous scheduled receipt's held entries. Reviewed comes from both threads' reviewed entries; add receipt_date from each block's as_of, including on-demand blocks.
+Ignore entries with kind `renewal` in old held and reviewed receipts, even when their removed fields are missing or invalid.
+Never turn them into milestone holds, proposals or output receipt entries.
 Only mode scheduled receipts in the scheduled run thread supply window_start. An on-demand as_of never advances that boundary.
 An unresolved anchor may carry null milestone_months and milestone_date; keep it held until current evidence resolves the anchor, then select the latest due milestone.
 Save those two derived JSON lists in the sandbox and pass --carry-forward and --reviewed. Missing or unread receipt evidence is not proof of review; report access gaps.
@@ -49,7 +52,6 @@ Suppress matching account_id, milestone_months and milestone_date, showing its r
 When several dates are due, including held dates, assess the latest only; earlier dates are superseded by that review. Preserve unresolved carry_forward_held in the final receipt.
 On-demand selects one --account-id or --account-name and the latest milestone dated on or before today. It ignores reviewed suppression and never changes the scheduled window.
 An explicit --milestone-months may reassess another policy milestone on or before today. Run in Pipeline or send its receipt there for scheduler suppression.
-Renewal candidates include notice dates in this window and future dates through the policy's next occurrence, even without a milestone. Past notices never become past-dated Tasks.
 
 ## Usage
 
@@ -83,7 +85,7 @@ For the first milestone, start at the verified anchor. The scheduling window is 
 Read Salesforce Tasks, Events and notes for that Account and related deals within those dates. Search Gmail by its verified Contacts, fetch every page and full relevant threads.
 For calls, load call-transcript-skill and apply `rules#momentum` and `policy.momentum`, including Account Id, window and lookback limits and error reporting.
 Separate buyer statements from inferred interpretations. A failed or incomplete read is "not checked" with its dates. Buyer evidence is optional context and never holds the usage assessment.
-If completed reads find no contact, flag "no recent buyer contact since <date>" with the dates searched and propose a check-in. Never claim absence from failed reads.
+If completed reads find no contact, flag "no buyer contact retrieved, <dates searched>" and propose a check-in. Never state absence; failed or incomplete reads remain "not checked".
 
 ## Helper input
 
@@ -105,6 +107,5 @@ Rows are query 1 dictionaries with user_email, window_queries, and l7_queries. A
 weekly_trend holds query 1b rows with week_start, active_users and queries. feature_mix holds query 2 rows with kind, value, queries and users. Empty complete results are valid, not missing.
 The helper sets usage_ready true only for due rows with a complete matching usage summary through yesterday. Buyer reads and unknown billed seats never block that boolean.
 The helper rechecks org identity with `policy.tooling.scripts.account_usage`, ownership, open deals, date windows, and distinct usage counts.
-It reports renewal notice dates from policy and leaves task_due_date null when the notice window passed. It never writes or approves records.
-Stop on exit 2 or valid false and show the error. Unknown or invalid usage remains visible and blocks expansion proposals, not the independent renewal review.
-Renewal Task proposals retain their existing Salesforce identity, date, duplicate, required-field, approval and readback gates.
+It never produces renewal notices or renewal holds and never writes or approves records.
+Stop on exit 2 or valid false and show the error. Unknown or invalid usage remains visible and blocks expansion proposals.

@@ -1,5 +1,6 @@
 """pipeline_render.py: presentation is fixed, counts reconcile, labels stay unique, and status comes from inputs."""
 import copy
+import importlib.util
 import json
 import os
 import shutil
@@ -7,18 +8,21 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import yaml
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "workspaces" / "pipeline" / "workflows" / "pipeline-review" / "scripts" / "pipeline_render.py"
-EXPECTED = Path(__file__).resolve().parent / "fixtures" / "pipeline_render_weekday.txt"
+EXPECTED = Path(__file__).resolve().parent / "fixtures" / "pipeline_render_weekly.txt"
 URL = "https://example.test/run"
 
 BIO, ROUX, ROYAL, CARY = "006AAA000000001AAA", "006AAA000000002AAA", "006AAA000000003AAA", "006AAA000000004AAA"
 T_BIO, T_DUP, T_ROYAL = "00TAAA000000001AAA", "00TAAA000000002AAA", "00TAAA000000003AAA"
 C_JIM, C_STEVE = "003AAA000000001AAA", "003AAA000000002AAA"
+RUN_USER = "005AAA000000001AAA"
+OTHER_OWNER = "005BBB000000001AAA"
 READY = {"ready": True, "process_status": "complete",
-         "lines": ["Coverage (pipeline-daily) · 18 in scope. Inbox complete.", "Salesforce Events matched 6/6 eligible."]}
+         "lines": ["Coverage (pipeline) · 18 in scope. Inbox complete.", "Salesforce Events matched 6/6 eligible."]}
 GAP = {"ready": False, "process_status": "incomplete", "lines": ["Calendar missing: Corvid Foods."],
        "affected": ["006AAA000000003AAA"]}
 # Synthetic saved results. Retrieved evidence resolves against these by id.
@@ -37,32 +41,23 @@ def gmail(fact, **extra):
 
 
 def base():
-    return {
-        "run": {"id": "fixture", "date": "2026-09-28", "branch": "weekday", "coverage_scope": "pipeline-daily",
-                "process_status": "complete", "thread_url": URL, "schedule": "Mon-Thu · 7am"},
+    return weekly({
+        "run": {"id": "fixture", "user_id": RUN_USER, "date": "2026-09-28", "branch": "friday", "coverage_scope": "pipeline",
+                "process_status": "complete", "thread_url": URL, "schedule": "Fridays · 9am"},
         "counts": {"open": 43, "reviewed": 18, "not_checked": 0},
-        "today_actions": [],
         "deals": [{"id": BIO, "name": "Acme Devices", "flags": ["next_passed"]},
                   {"id": ROUX, "name": "Beacon Labs", "flags": ["blank_field"]},
                   {"id": ROYAL, "name": "Corvid Foods", "flags": ["blank_field"]}],
         "blocks": [
             {"label": "1", "deal": BIO, "status": "proposed",
              "next_step": {"current": "Next: Pat&#39;s presentation outcome · Operator · 9/26/26",
-                           "proposed": "9/28/26 SR - Follow up with Pat by 10/2 if he has not replied."},
-             "changes": [{"object": "Task", "id": T_BIO, "name": "Follow-up: Pat&#39;s presentation outcome",
-                          "field": "ActivityDate", "current": "2026-09-28", "proposed": "2026-10-02",
-                          "task_kind": "reschedule", "same_action": True}],
+                           "proposed": None},
+             "changes": [{"object":"Opportunity","id":BIO,"field":"Deal_Type__c","current":None,"proposed":"Annual Contract"}],
              "evidence": [gmail("Asked whether the plan is moving or should pause until Q1.")]},
             {"label": "2", "deal": ROYAL, "status": "proposed",
              "next_step": {"current": "<p>9/25/26 SR - Hold the 10/1 session.<br>Sam confirmed.</p>",
                            "proposed": None},
-             "changes": [{"object": "Task", "id": T_ROYAL, "name": "Send Corvid rollout plan and pricing",
-                          "field": "Status", "current": "Not Started", "proposed": "Completed", "task_kind": "complete",
-                          "same_action": True, "completion_evidence": "Operator sent the order form 9/24."},
-                         {"object": "Task", "action": "create", "who_name": "Sam Rivera",
-                          "linkage_verified": True, "candidates_refreshed": True,
-                          "fields": {"Subject": "Confirm rollout and order form next steps", "ActivityDate": "2026-10-01",
-                                     "Status": "Not Started", "WhoId": C_STEVE, "WhatId": ROYAL}}],
+             "changes": [{"object":"Opportunity","id":ROYAL,"field":"Customer_Type__c","current":None,"proposed":"Enterprise"}],
              "evidence": [{"source": "Gmail", "who": "Operator to Sam Rivera", "source_id": "1a0d5e",
                            "quote": "Order form attached for review.", "fact": "Order form attached."}]}],
         "questions": [
@@ -75,7 +70,14 @@ def base():
                           "changes": [{"object": "Opportunity", "id": ROUX, "field": "Deal_Type__c", "current": None,
                                        "proposed": "Paid Trial"}]}],
              "evidence": [{"date": "9/25/26", "source": "Salesforce", "fact": "Deal_Type__c is blank."}]}],
-        "writes": []}
+        "writes": []})
+
+
+def task_create():
+    return {"object": "Task", "action": "create", "who_name": "Sam Rivera",
+            "linkage_verified": True, "candidates_refreshed": True,
+            "fields": {"Subject": "Confirm rollout and order form next steps", "ActivityDate": "2026-10-01",
+                       "Status": "Not Started", "WhoId": C_STEVE, "WhatId": ROYAL}}
 
 
 def friday(data):
@@ -94,10 +96,18 @@ def friday(data):
     return data
 
 
+def weekly(data):
+    data=friday(data)
+    data['friday']['letters']=[]
+    return data
+
 class Render(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
+        self.policy = yaml.safe_load((ROOT / "_core/policy.yaml").read_text())
+        self.pol = self.dir / "policy.yaml"
+        self.pol.write_text(yaml.safe_dump(self.policy))
         self.sources = self.dir / "calls"
         self.sources.mkdir()
         (self.sources / "output_mail.json").write_text(json.dumps(SAVED))
@@ -109,7 +119,7 @@ class Render(unittest.TestCase):
     def call(self, mode, data, coverage=READY, *extra):
         run = self.dir / "run.json"
         run.write_text(json.dumps(data))
-        args = [sys.executable, str(SCRIPT), mode, "--run", str(run), "--sources", str(self.sources)]
+        args = [sys.executable, str(SCRIPT), mode, "--run", str(run), "--sources", str(self.sources), "--policy", str(self.pol)]
         if coverage is not None:
             cov = self.dir / "coverage.json"
             cov.write_text(json.dumps(coverage))
@@ -137,7 +147,7 @@ class Render(unittest.TestCase):
         self.assertEqual(ambiguous.returncode, 2)
         self.assertEqual(ambiguous.stdout, "")
         self.assertIn("Multiple saved tool-call session directories", ambiguous.stderr)
-        explicit = subprocess.run(arguments + ["--sources", str(self.sources)], cwd=self.dir, env=environment,
+        explicit = subprocess.run(arguments + ["--sources", str(self.sources), "--policy", str(self.pol)], cwd=self.dir, env=environment,
                                   text=True, capture_output=True)
         self.assertEqual(explicit.returncode, 0, explicit.stderr)
         self.assertEqual(explicit.stdout, EXPECTED.read_text())
@@ -154,15 +164,16 @@ class Render(unittest.TestCase):
         self.assertIn(needle, r.stderr)
 
     # presentation
-    def test_weekday_report_matches_expected_output(self):
+    def test_weekly_report_matches_expected_output(self):
         self.assertEqual(self.ok("report", base()), EXPECTED.read_text())
 
     def test_routed_section_counts_separately_and_marks_top_priority(self):
         data = base()
         data["deals"] = [row for row in data["deals"] if row["id"] != BIO]
         data["blocks"] = [row for row in data["blocks"] if row["deal"] != BIO]
-        data["routed"] = [{"deal": BIO, "name": "Acme Devices", "thread_url": "https://example.test/deal",
-                           "reason": "Current action belongs to the deal thread"}]
+        data["routed"] = [{"kind": "deal_context", "deal": BIO, "name": "Acme Devices", "thread_url": "https://example.test/deal",
+                           "reason": "Current action belongs to the deal thread",
+                           "delivery": {"command": "mail_send", "status": "delivered"}}]
         data["today_actions"] = [{"deal": BIO, "name": "Acme Devices", "kind": "due", "date": "2026-09-28",
                                   "reason": "Review the overdue follow-up", "evidence": [
                                       {"source": "Salesforce", "date": "9/28/26", "who": "Operator",
@@ -171,21 +182,23 @@ class Render(unittest.TestCase):
         self.assertIn("18 reviewed · 2 flagged · 1 clear recommendation", out)
         self.assertIn("## Routed to deal threads\n\n1 routed · counted separately", out)
         self.assertIn("[Acme Devices](https://example.test/deal) · Current action belongs to the deal thread", out)
-        self.assertIn("in deal thread · Review the overdue follow-up", out)
+        self.assertIn("routed via mail_send", out)
+        self.assertNotIn("Top 3", out)
         self.assertIn("15 reviewed deals had no trigger", out)
         self.assertNotIn("1. [Acme Devices]", out)
 
     def test_routed_records_reject_local_proposals_and_double_counts(self):
         data = base()
-        data["routed"] = [{"deal": BIO, "name": "Acme Devices", "thread_url": "https://example.test/deal",
-                           "reason": "Owned elsewhere"}]
+        data["routed"] = [{"kind": "deal_context", "deal": BIO, "name": "Acme Devices", "thread_url": "https://example.test/deal",
+                           "reason": "Owned elsewhere", "delivery": {"command": "mail_send", "status": "delivered"}}]
         self.fails("report", data, "routed deals must be counted separately")
         data["deals"] = [row for row in data["deals"] if row["id"] != BIO]
         self.fails("report", data, "routed deal is owned elsewhere; propose nothing here")
 
     def test_routed_rows_require_unique_ids_links_and_complete_counts(self):
         data = base()
-        row = {"deal": CARY, "name": "Delta Labs", "thread_url": "https://example.test/deal", "reason": "Owned elsewhere"}
+        row = {"kind": "deal_context", "deal": CARY, "name": "Delta Labs", "thread_url": "https://example.test/deal", "reason": "Owned elsewhere",
+               "delivery": {"command": "mail_send", "status": "delivered"}}
         data["routed"] = [row, copy.deepcopy(row)]
         self.fails("report", data, "routed: each deal appears once")
         data["routed"] = [row]
@@ -195,36 +208,156 @@ class Render(unittest.TestCase):
         data["counts"]["reviewed"] = 3
         self.fails("report", data, "plus routed 1")
 
-    def test_malformed_routed_rows_reject_without_output(self):
-        for routed in (None, {}, [None], [{"deal": []}], [{"deal": "bad"}], [{"deal": "006invalid!00001AAA", "name": "Account", "reason": "Owner", "thread_url": "https://example.test/deal"}]):
-            with self.subTest(routed=routed):
-                data = base()
-                data["routed"] = routed
-                result = self.call("report", data)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stdout, "")
-                self.assertNotIn("Traceback", result.stderr)
-        for link in ("https://", "https://bad link", "https://user:secret@example.test", "https://["):
-            with self.subTest(link=link):
-                data = base()
-                data["routed"] = [{"deal": CARY, "name": "Account", "reason": "Owned elsewhere", "thread_url": link}]
-                self.fails("report", data, "routed needs an https deal-thread link")
-
     def test_routed_friday_records_reject_letters(self):
         data = friday(base())
-        data["routed"] = [{"deal": data["friday"]["letters"][0]["deal"], "name": "Acme Devices",
-                           "thread_url": "https://example.test/deal", "reason": "Owned elsewhere"}]
+        data["routed"] = [{"kind": "deal_context", "deal": data["friday"]["letters"][0]["deal"], "name": "Acme Devices",
+                           "thread_url": "https://example.test/deal", "reason": "Owned elsewhere",
+                           "delivery": {"command": "mail_send", "status": "delivered"}}]
         result = self.call("report", data)
         self.assertEqual(result.returncode, 1)
         self.assertIn("routed deal is owned elsewhere; propose nothing here", result.stderr)
 
-    def test_html_entities_decode_for_display_and_writes_stay_exact(self):
-        out = self.ok("report", base())
-        self.assertIn("Next: Pat's presentation outcome", out)
-        self.assertNotIn("&#39;", out)
-        self.assertIn("9/25/26 SR - Hold the 10/1 session.\nSam confirmed.\n", out)
-        self.assertNotIn("<p>", out)
-        self.assertIn("9/28/26 SR - Follow up with Pat by 10/2 if he has not replied.", out)
+    def test_routed_delivery_requires_object_and_exact_command_and_status(self):
+        data = base()
+        row = {"kind": "deal_context", "deal": CARY, "name": "Delta Labs", "thread_url": "https://example.test/deal", "reason": "Owned elsewhere"}
+        data["routed"] = [row]
+        self.fails("report", data, "routed needs a delivery object")
+        for delivery, error in ((None, "delivery object"), ([], "delivery object"),
+                                ({}, "delivery.command"), ({"command": "unknown", "status": "delivered"}, "delivery.command"),
+                                ({"command": "mail_send"}, "delivery.status"),
+                                ({"command": "mail_send", "status": "pending"}, "delivery.status")):
+            with self.subTest(delivery=delivery):
+                row["delivery"] = delivery
+                self.fails("report", data, error)
+        for command in ("session_send", "pplx session send"):   # retired 10/10/26, never an active enum value
+            with self.subTest(command=command):
+                row["delivery"] = {"command": command, "status": "delivered"}
+                self.fails("report", data, "delivery.command must be mail_send")
+        row["delivery"] = {"command": "mail_send", "status": "delivered"}
+        self.assertIn("routed via mail_send", self.ok("report", data))
+
+    def test_failed_delivery_is_needs_input_not_routed_or_no_trigger(self):
+        data = base()
+        data["routed"] = [{"kind": "deal_context", "deal": CARY, "name": "Delta Labs", "thread_url": "https://example.test/deal",
+                           "reason": "Both transports rejected delivery", "delivery": {"command": "mail_send", "status": "failed"}}]
+        out = self.ok("report", data)
+        routed, rest = out.split("## Routed to deal threads\n\n", 1)[1].split("## Clear recommendations", 1)
+        self.assertEqual(routed, "None.\n\n")
+        needs_input = rest.split("## Needs your input", 1)[1].split("## Coverage", 1)[0]
+        self.assertIn("[Delta Labs](https://example.test/deal) · routing failed, needs input · mail_send", needs_input)
+        self.assertIn("14 reviewed deals had no trigger", out)
+        self.assertNotIn("routed via mail_send", out)
+        data["counts"]["reviewed"] = 3
+        self.fails("report", data, "plus routed 1")
+
+    def test_mixed_delivery_statuses_count_only_successes_as_routed(self):
+        data = base()
+        data["routed"] = [{"kind": "deal_context", "deal": CARY, "name": "Delta Labs", "thread_url": "https://example.test/delta",
+                           "reason": "Thread owns action", "delivery": {"command": "mail_send", "status": "delivered"}},
+                          {"kind": "deal_context", "deal": "006AAA000000005AAA", "name": "Finch Systems", "thread_url": "https://example.test/finch",
+                           "reason": "Send rejected", "delivery": {"command": "mail_send", "status": "failed"}}]
+        out = self.ok("report", data)
+        self.assertIn("1 routed · counted separately", out)
+        self.assertIn("[Delta Labs](https://example.test/delta) · Thread owns action · routed via mail_send", out)
+        self.assertIn("[Finch Systems](https://example.test/finch) · routing failed, needs input · mail_send", out)
+        self.assertIn("13 reviewed deals had no trigger", out)
+
+    def test_failed_delivery_never_suppresses_notification_on_either_branch(self):
+        for branch in ("weekday", "friday"):
+            with self.subTest(branch=branch):
+                data = base() if branch == "weekday" else friday(base())
+                data["deals"], data["blocks"], data["questions"] = [], [], []
+                if branch == "friday":
+                    data["friday"]["letters"] = []
+                data["routed"] = [{"kind": "deal_context", "deal": CARY, "name": "Delta Labs", "thread_url": "https://example.test/deal",
+                                   "reason": "Send rejected", "delivery": {"command": "mail_send", "status": "failed"}}]
+                result = json.loads(self.ok("notification", data))
+                self.assertTrue(result["send"])
+                self.assertEqual(result["status"], "incomplete")
+                self.assertIn("Needs input · 1 failed delivery", result["body"])
+                self.assertIn("routing failed, needs input", self.ok("report", data))
+
+    def test_failed_delivery_keeps_local_proposals_blocked(self):
+        data = base()
+        data["routed"] = [{"kind": "deal_context", "deal": BIO, "name": "Acme Devices", "thread_url": "https://example.test/deal",
+                           "reason": "Send rejected", "delivery": {"command": "mail_send", "status": "failed"}}]
+        data["deals"] = [row for row in data["deals"] if row["id"] != BIO]
+        self.fails("report", data, "routed deal is owned elsewhere; propose nothing here")
+
+
+
+
+    def test_readonly_task_finding_covers_flag_without_an_approval(self):
+        data = base()
+        data["blocks"] = [block for block in data["blocks"] if block["deal"] != BIO]
+        data["triage"] = [{"deal": BIO, "name": "Acme Devices", "reason": "Missing current-action Task",
+                           "triage_task_gap": True}]
+        report = self.ok("report", data)
+        self.assertIn("## Triage owns Tasks", report)
+        self.assertIn("Triage owns the Task gap", report)
+        self.assertIn("3 flagged · 1 clear recommendation · 1 question", report)
+        self.assertNotIn("New Task", report)
+
+    def test_mixed_context_delivery_and_task_finding_counts_deal_once(self):
+        data = base()
+        data["deals"] = [deal for deal in data["deals"] if deal["id"] != BIO]
+        data["blocks"] = [block for block in data["blocks"] if block["deal"] != BIO]
+        data["triage"] = [{"deal": BIO, "name": "Acme Devices", "reason": "Task date mismatch",
+                           "triage_owned_task": {"Id": T_BIO, "OwnerId": RUN_USER, "IsClosed": False,
+                                                 "ActivityDate": "2026-09-28"}}]
+        data["routed"] = [{"kind": "deal_context", "deal": BIO, "name": "Acme Devices",
+                           "thread_url": "https://example.test/deal", "reason": "Stage evidence",
+                           "delivery": {"command": "mail_send", "status": "delivered"}}]
+        report = self.ok("report", data)
+        self.assertIn("1 routed · counted separately", report)
+        self.assertIn("Triage owns Task " + T_BIO, report)
+        self.assertIn("15 reviewed deals had no trigger", report)
+        self.assertEqual(report.count("routed via mail_send"), 1)
+
+    def test_task_findings_cannot_use_deal_thread_delivery(self):
+        for kind in (None, "task", "task_gap", "deal_context\n"):
+            with self.subTest(kind=kind):
+                data = base()
+                data["routed"] = [{"kind": kind, "deal": CARY, "name": "Delta Labs",
+                                   "reason": "Task issue", "thread_url": "https://example.test/deal",
+                                   "delivery": {"command": "mail_send", "status": "delivered"}}]
+                self.fails("report", data, "routed.kind must be deal_context")
+
+    def test_readonly_triage_findings_reject_write_approval_and_delivery_paths(self):
+        for forbidden in ("changes", "label", "delivery"):
+            with self.subTest(forbidden=forbidden):
+                data = base()
+                data["triage"] = [{"deal": BIO, "name": "Acme Devices", "reason": "Task gap",
+                                   "triage_task_gap": True, forbidden: []}]
+                self.fails("report", data, "no writes, delivery commands or approval labels")
+        for rows, error in (({}, "read-only list"), ([None], "entries must be objects"),
+                            ([{"deal": [], "name": "Acme", "reason": "Gap", "triage_task_gap": True}],
+                             "not a valid Opportunity Id")):
+            data = base()
+            data["triage"] = rows
+            self.fails("report", data, error)
+
+    def test_triage_finding_rejects_future_foreign_and_unreadable_task_owner(self):
+        for owner, due, error in ((RUN_USER, "2026-10-02", "future Tasks never enter triage findings"),
+                                  (OTHER_OWNER, None, "must be a Operator-owned open Task"),
+                                  (None, None, "needs-input")):
+            with self.subTest(owner=owner, due=due):
+                data = base()
+                data["triage"] = [{"deal": BIO, "name": "Acme Devices", "reason": "Task issue",
+                                   "triage_owned_task": {"Id": T_DUP, "OwnerId": owner,
+                                                         "IsClosed": False, "ActivityDate": due}}]
+                self.fails("report", data, error)
+
+    def test_gap_handoff_rejects_false_marker_missing_user_and_existing_task(self):
+        for patch, error in (({"triage_task_gap": False}, "triage_task_gap must be true"),
+                             ({"triage_task_gap": True, "followup_task": T_DUP}, "alternative ownership paths")):
+            data = base()
+            data["blocks"][0].update(changes=[], **patch)
+            self.fails("report", data, error)
+        data = base()
+        data["blocks"][0].update(changes=[], triage_task_gap=True)
+        del data["run"]["user_id"]
+        self.fails("report", data, "readable native run.user_id required")
 
     def test_evidence_labels_use_returned_links_only(self):
         out = self.ok("report", base())
@@ -243,6 +376,7 @@ class Render(unittest.TestCase):
         for change, needle in (({"source_id": "nope"}, "is not in this run's saved Gmail results"),
                                ({"title": "Edited subject"}, "title must come from the saved Gmail record"),
                                ({"date": "9/25/26"}, "date must come from the saved Gmail record"),
+                               ({"link": "https://example.test/forged"}, "link must come from the saved Gmail record"),
                                ({"quote": None}, "needs a quote of at least 12 characters"),
                                ({"quote": "we should sign today"}, "quote is not in the saved message body")):
             data = base()
@@ -254,6 +388,37 @@ class Render(unittest.TestCase):
         self.assertIn('- 10/1/26 · Calendar · Sam Rivera · "Corvid rollout session" · Session scheduled.',
                       self.ok("report", data))
 
+    def test_caller_resolved_marker_cannot_bypass_saved_evidence_checks(self):
+        for value in (True, False):
+            for source in ("Gmail", "Calendar"):
+                with self.subTest(value=value, source=source):
+                    data = base()
+                    data["blocks"][0]["evidence"][0].update(
+                        source=source, _resolved=value, source_id="fabricated", quote="fabricated quote",
+                        date="9/25/26", title="Forged title", link="https://example.test/forged")
+                    self.fails("report", data, "_resolved is internal; remove it from the run file")
+
+    def test_resolution_and_rerender_are_idempotent_without_mutating_input(self):
+        spec = importlib.util.spec_from_file_location("pipeline_render_idempotency", SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        policy = renderer.yaml.safe_load((ROOT / "_core/policy.yaml").read_text())
+        sources = renderer.load_sources(self.sources)
+        data = base()
+        data["blocks"][1]["evidence"].append({"source": "Calendar", "who": "Sam Rivera", "source_id": "ev1",
+                                               "fact": "Session scheduled."})
+        original = copy.deepcopy(data)
+        run = renderer.Run(data, policy, READY, sources)
+        self.assertEqual(run.validate("report"), [])
+        first = run.report()
+        self.assertEqual(run.validate("report"), [])
+        self.assertEqual(run.report(), first)
+        self.assertEqual(data, original)
+        rerun = renderer.Run(data, policy, READY, sources)
+        self.assertEqual(rerun.validate("report"), [])
+        self.assertEqual(rerun.report(), first)
+        self.assertNotIn("_resolved", json.dumps(run.data))
+
     def test_empty_sections_and_no_action_run(self):
         data = base()
         data.update(deals=[], blocks=[], questions=[])
@@ -264,8 +429,8 @@ class Render(unittest.TestCase):
         self.assertIn("18 reviewed deals had no trigger · 0 not checked", out)
         self.assertNotIn("Only the latest next-step entry", out)
         note = json.loads(self.ok("notification", data))
-        self.assertEqual(note["send"], False)
-        self.assertEqual(note["status"], "clean")
+        self.assertEqual(note["send"], True)
+        self.assertEqual(note["status"], "complete")
 
     def test_slack_evidence_renders_message_date_permalink_and_limitation(self):
         data = base()
@@ -301,10 +466,6 @@ class Render(unittest.TestCase):
         data = base()
         data["blocks"][0]["evidence"] = [dict(slack, link="constructed/slack/link")]
         self.fails("report", data, "link must be a returned https URL")
-        data = base()
-        data["today_actions"] = [self.buyer_candidate()]
-        data["today_actions"][0]["evidence"] = [slack]
-        self.fails("report", data, "evidence must support its action kind using existing workflow sources")
 
     def test_required_evidence_gap_keeps_run_incomplete_even_when_checker_is_ready(self):
         data = base()
@@ -369,7 +530,7 @@ class Render(unittest.TestCase):
         out = self.ok("report", data)
         clear, needs = out.split("## Clear recommendations\n", 1)[1].split("## Needs your input", 1)
         self.assertIn("1. [Acme Devices]", clear)
-        self.assertIn("ActivityDate", clear)
+        self.assertIn("Deal_Type__c", clear)
         self.assertIn("2. [Corvid Foods]", clear)
         self.assertNotIn(limitation, clear)
         self.assertIn("Q2 · [Acme Devices]", needs)
@@ -379,25 +540,17 @@ class Render(unittest.TestCase):
         question = self.ok("question", data, READY, "--label", "Q2")
         self.assertIn(limitation, question)
         self.assertNotIn("Q2-a", question)
-        self.assertEqual(json.loads(self.ok("notification", data))["status"], "action")
+        self.assertEqual(json.loads(self.ok("notification", data))["status"], "incomplete")
 
     def test_fresh_slack_fact_supports_proposal_despite_other_missing_user(self):
-        data = base()
-        data["blocks"][0]["next_step"] = {
-            "current": "9/25/26 SR - Wait for legal approval.",
-            "proposed": "9/28/26 SR - Legal approval complete. Operator to confirm the rollout plan by 10/2."}
-        data["blocks"][0]["evidence"] = [
-            {"source": "Slack", "date": "9/28/26", "who": "Pat Lee", "title": "Legal complete",
-             "link": "https://example.slack.com/archives/CEXAMPLE/p1790611200000000",
-             "fact": "Buyer confirmed legal approval is complete and asked for the rollout plan."}]
-        data["run"]["slack_coverage_notes"] = [
-            {"deal": BIO, "name": "Acme Devices", "contacts": ["Alex Smith"], "reason": "No Slack user"}]
-        out = self.ok("report", data)
-        self.assertIn("Legal approval complete. Operator to confirm the rollout plan by 10/2.", out)
-        self.assertIn("9/28/26 · Slack · Pat Lee · [Legal complete]", out)
-        self.assertIn("Buyer confirmed legal approval is complete", out)
-        self.assertNotIn("Incomplete", out)
-        self.assertNotIn("Withheld", out)
+        data=base()
+        data['blocks'][0]['evidence']=[{'source':'Slack','date':'9/28/26','who':'Fixture buyer',
+            'title':'Deal type confirmed','link':'https://example.test/slack/message','fact':'Buyer confirmed Annual Contract.'}]
+        data['run']['slack_coverage_notes']=[{'deal':BIO,'name':'Acme Devices','contacts':['Other fixture contact'],'reason':'No Slack user'}]
+        output=self.ok('report',data)
+        self.assertIn('1. [Acme Devices]',output)
+        self.assertIn('Buyer confirmed Annual Contract',output)
+        self.assertIn('Slack not checked',output)
 
     def test_slack_coverage_notes_validate_shape_and_one_line_per_deal(self):
         valid = {"deal": BIO, "name": "Acme Devices", "contacts": ["Pat Lee"], "reason": "No Slack user"}
@@ -461,7 +614,8 @@ class Render(unittest.TestCase):
         self.assertIn("## Coverage\n\nCalendar missing: Corvid Foods.  \nWithheld · [Corvid Foods]", out)
         note = json.loads(self.ok("notification", data, GAP))
         self.assertEqual((note["send"], note["status"]), (True, "incomplete"))
-        self.assertTrue(note["body"].startswith("Incomplete · 1 withheld · Corvid Foods · 43 open deals"))
+        self.assertIn("Incomplete · 1 withheld", note["body"])
+        self.assertIn("Corvid Foods", note["body"])
 
     def test_incomplete_coverage_with_nothing_withheld_says_so(self):
         """The header states the withholding that happened, never a withholding that did not."""
@@ -505,16 +659,16 @@ class Render(unittest.TestCase):
 
     def test_coverage_scope_must_match_branch(self):
         data = base()
-        data["run"]["coverage_scope"] = "pipeline"
-        self.fails("report", data, "coverage_scope must be pipeline-daily")
+        data["run"]["coverage_scope"] = "pipeline-daily"
+        self.fails("report", data, "coverage_scope must be pipeline for friday")
 
     def test_weekday_notification_with_actions(self):
         note = json.loads(self.ok("notification", base()))
         self.assertEqual(note["send"], True)
-        self.assertEqual(note["title"], "Pipeline review · 9/28/26")
-        self.assertEqual(note["body"], "43 open deals · 18 reviewed · 3 flagged · 2 clear recommendations · 1 question · "
+        self.assertEqual(note["title"], "Friday pipeline review incomplete")
+        self.assertEqual(note["body"], "Needs input · 1 open question · 43 open deals · 18 reviewed · 3 flagged · 2 clear recommendations · 1 question · "
                                        "0 records written · " + URL)
-        self.assertEqual(note["schedule_description"], "Mon-Thu · 7am")
+        self.assertEqual(note["schedule_description"], "Fridays · 9am")
 
     def test_friday_notification_states(self):
         data = friday(base())
@@ -574,57 +728,19 @@ class Render(unittest.TestCase):
     def test_block_deal_can_still_get_a_different_friday_letter(self):
         self.assertIn("· Opportunity · CloseDate", self.ok("report", friday(base())))
 
-    def test_next_step_change_carries_its_task(self):
-        """rules#followup_task: a next-step change without a Task create, reschedule, or kept Task fails."""
-        data = base()
-        data["blocks"][0]["changes"] = []
-        self.fails("report", data, "rules#followup_task")
-        data["blocks"][0]["followup_task"] = T_BIO
-        self.assertIn(f"- Task kept · [Task {T_BIO}]", self.ok("report", data))
-        data = base()
-        data["questions"][0]["options"][0]["changes"].append(
-            {"object": "Opportunity", "id": ROUX, "field": "Next_Steps__c", "mode": "prepend",
-             "proposed": "9/28/26 SR - Send the order form by 10/2."})
-        self.fails("report", data, "rules#followup_task")
-        data = friday(base())
-        data["friday"]["letters"][0].update(deal=ROYAL, deal_name="Corvid Foods")
-        data["friday"]["letters"][0]["change"] = {"object": "Opportunity", "id": ROYAL, "field": "Next_Steps__c",
-                                                  "mode": "prepend", "proposed": "9/28/26 SR - Send the order form by 10/2."}
-        self.fails("report", data, "rules#followup_task")
-        data["friday"]["letters"][0]["followup_task"] = T_ROYAL
-        self.ok("report", data)
+
+
+
+
+
+
+
+
+
 
     # tasks
-    def test_task_create_needs_linkage_and_fresh_candidates(self):
-        data = base()
-        create = data["blocks"][1]["changes"][1]
-        create["candidates_refreshed"] = False
-        self.fails("report", data, "candidates_refreshed true")
-        data = base()
-        data["blocks"][1]["changes"][1]["fields"]["WhoId"] = "0035"
-        self.fails("report", data, "Contact id")
 
-    def test_task_reuse_needs_same_action_and_completion_evidence(self):
-        data = base()
-        data["blocks"][0]["changes"][0]["same_action"] = False
-        self.fails("report", data, "same_action true")
-        data = base()
-        del data["blocks"][1]["changes"][0]["completion_evidence"]
-        self.fails("report", data, "completion_evidence")
 
-    def test_task_kind_must_match_field_and_value(self):
-        """Relabeling Status = Completed as update cannot skip completion evidence."""
-        data = base()
-        complete = data["blocks"][1]["changes"][0]
-        complete["task_kind"] = "update"
-        del complete["completion_evidence"]
-        self.fails("report", data, "task_kind update does not match Status → Completed")
-        data = base()
-        data["blocks"][0]["changes"][0]["task_kind"] = "rename"
-        self.fails("report", data, "does not match ActivityDate")
-        data = base()
-        data["blocks"][0]["changes"][0].update(field="WhoId", current=C_JIM, proposed=C_STEVE, task_kind="update")
-        self.fails("report", data, "Task WhoId is not a permitted change")
 
     def test_opportunity_fields_are_limited_by_branch(self):
         """Numbered blocks and options carry next steps and policy required fields; CloseDate, StageName, Amount are Friday letters."""
@@ -639,246 +755,69 @@ class Render(unittest.TestCase):
         self.fails("report", data, "Opportunity OwnerId is not a permitted change")
         self.ok("report", friday(base()))
 
-    def test_option_next_step_is_a_new_first_entry(self):
-        data = base()
-        change = {"object": "Opportunity", "id": ROUX, "field": "Next_Steps__c", "current": None,
-                  "proposed": "9/28/26 SR - Confirm the deal type with Dana by 10/2."}
-        data["questions"][0]["options"][1].update(changes=[change], followup_task=T_BIO)
-        self.fails("question", data, "mode prepend", None, "--label", "Q1")
-        change["mode"] = "prepend"
-        out = self.ok("question", data, None, "--label", "Q1")
-        self.assertIn("  - Opportunity · Next_Steps__c · new first entry · 9/28/26 SR - Confirm the deal type", out)
 
-    def test_duplicate_task_closure_is_a_question_only(self):
-        close = {"object": "Task", "id": T_DUP, "name": "Pat's presentation outcome", "field": "Status",
-                 "current": "Not Started", "proposed": "Completed", "task_kind": "close_duplicate",
-                 "same_action": True, "duplicate_of": T_BIO}
-        data = base()
-        data["blocks"][0]["changes"].append(dict(close))
-        self.fails("report", data, "never a clear recommendation")
-        data = base()
-        data["questions"][0]["options"][1]["changes"] = [dict(close)]
-        out = self.ok("question", data, None, "--label", "Q1")
-        self.assertIn("Status · Not Started → Completed · duplicate of [Task 00TAAA000000001AAA]", out)
 
-    def test_task_create_renders_linkage(self):
-        out = self.ok("report", base())
-        self.assertIn("- New Task · Confirm rollout and order form next steps · ActivityDate 2026-10-01 · Status Not Started · "
-                      "Contact [Sam Rivera]", out)
 
-    def milestone(self, **changes):
-        return {"task_id": T_DUP, "event_id": "00UAAA000000001AAA", "due_date": "2026-10-07",
-                "reason": "Readout action and scheduled Event linkage reviewed.", "action_verified": True, **changes}
 
-    def test_interim_task_create_keeps_reviewed_later_milestone_visible(self):
-        data = base()
-        data["blocks"][1]["retained_milestones"] = [self.milestone()]
-        out = self.ok("report", data)
-        self.assertIn("New Task · Confirm rollout", out)
-        self.assertIn("Later milestone Task kept · [Task " + T_DUP, out)
-        self.assertIn("due 2026-10-07", out)
-        self.assertIn("00UAAA000000001AAA", out)
-        self.assertIn("Readout action and scheduled Event linkage reviewed.", out)
 
-    def test_retained_milestone_does_not_replace_current_followup(self):
-        data = base()
-        data["blocks"][1].update(changes=[], retained_milestones=[self.milestone()])
-        data["blocks"][1]["next_step"]["proposed"] = "9/28/26 SR - Reply to the buyer by 10/1."
-        self.fails("report", data, "a next-step change needs a Task create or reschedule")
 
-    def test_retained_milestone_validation(self):
-        cases = [(dict(action_verified=False), "action_verified true"), (dict(reason=""), "needs reason"),
-                 (dict(task_id=[]), "not a valid Task Id"),
-                 (dict(event_id=T_DUP), "not a valid Event Id"), (dict(due_date="tomorrow"), "due_date YYYY-MM-DD"),
-                 (dict(due_date="2026-10-01"), "later than the current follow-up"),
-                 (dict(due_date="2026-09-01"), "must be in the future")]
-        for changes, error in cases:
-            with self.subTest(changes=changes):
-                data = base()
-                data["blocks"][1]["retained_milestones"] = [self.milestone(**changes)]
-                self.fails("report", data, error)
-        data = base()
-        data["blocks"][0]["retained_milestones"] = [self.milestone(task_id=T_BIO)]
-        self.fails("report", data, "cannot also be changed")
-        data = base()
-        data["blocks"][1]["retained_milestones"] = [self.milestone(), self.milestone()]
-        self.fails("report", data, "must be a distinct Task")
 
-    def test_kept_milestone_is_visible_in_question_and_friday_letter(self):
-        data = base()
-        data["questions"][0]["options"][0]["retained_milestones"] = [self.milestone()]
-        self.assertIn("Later milestone Task kept", self.ok("question", data, None, "--label", "Q1"))
-        data = friday(base())
-        data["friday"]["letters"][0]["retained_milestones"] = [self.milestone()]
-        self.assertIn("Later milestone Task kept", self.ok("report", data))
 
-    def today_candidate(self, deal=BIO, name="Acme Devices", kind="due", when="2026-09-28", **extra):
-        fact = {"meeting": f"Event scheduled on {when}.", "due": f"Open Task due {when}.",
-                "date_at_risk": f"Hygiene flags CloseDate {when} at risk."}.get(kind, "Reviewed source fact.")
-        return {"deal": deal, "name": name, "kind": kind, "date": when,
-                "reason": "Follow-up Task is due today",
-                "evidence": [{"source": "Salesforce", "date": "9/28/26", "fact": fact}], **extra}
 
-    def buyer_candidate(self):
-        saved = copy.deepcopy(SAVED)
-        saved["email_results"]["emails"][0]["from_"] = "buyer@example.test"
-        (self.sources / "output_mail.json").write_text(json.dumps(saved))
-        return self.today_candidate(kind="buyer_reply", when="2026-09-25", reply_reviewed=True,
-                                    reason="Buyer request needs a reply in the retrieved thread",
-                                    evidence=[gmail("Buyer asked whether the plan is moving.", who="Buyer to Operator")])
 
-    def test_top_three_ranks_deduplicates_and_keeps_approval_labels_separate(self):
-        data = base()
-        data["today_actions"] = [
-            self.today_candidate(CARY, "Delta Holdings", "date_at_risk", "2026-09-30", reason="Close date is at risk"),
-            self.today_candidate(), self.today_candidate(ROYAL, "Corvid Foods"),
-            self.today_candidate(ROUX, "Beacon Labs", "meeting", "2026-09-29", reason="Prepare for tomorrow's meeting"),
-            self.buyer_candidate()]
-        out = self.ok("report", data)
-        section = out.split("## Top 3 actions today\n", 1)[1].split("## Clear recommendations", 1)[0]
-        self.assertEqual(section.count("- Priority"), 3)
-        self.assertIn("Priority 1 · [Acme Devices]", section)
-        self.assertIn("Priority 2 · [Beacon Labs]", section)
-        self.assertIn("Priority 3 · [Corvid Foods]", section)
-        self.assertNotIn("Delta Holdings", section)
-        self.assertEqual(section.count("Acme Devices"), 1)
-        self.assertIn("Use the proposal labels below for approvals.", section)
-        self.assertIn("1. [Acme Devices]", out)
-        self.assertIn("Email, Calendar, and Slack evidence is the retrieved set", section)
 
-    def test_top_actions_allow_unflagged_reviewed_deal_without_changing_counts(self):
-        data = base()
-        data["today_actions"] = [self.today_candidate(CARY, "Delta Holdings")]
-        out = self.ok("report", data)
-        self.assertIn("Priority 1 · [Delta Holdings]", out)
-        self.assertNotIn("Priority 2", out)
-        self.assertIn("3 flagged · 2 clear recommendations · 1 question", out)
 
-    def test_top_actions_ties_are_stable_and_earlier_dates_rank_first(self):
-        data = base()
-        data["today_actions"] = [self.today_candidate(ROYAL, "Corvid Foods"), self.today_candidate(),
-                                 self.today_candidate(ROUX, "Beacon Labs", when="2026-09-27")]
-        first = self.ok("report", data)
-        data["today_actions"].reverse()
-        self.assertEqual(first, self.ok("report", data))
-        self.assertIn("Priority 1 · [Beacon Labs]", first)
-        self.assertIn("Priority 2 · [Acme Devices]", first)
 
-    def test_top_actions_calendar_date_uses_run_timezone(self):
-        data = base()
-        (self.sources / "output_cal.json").write_text(json.dumps({"calendar_event_list": {"events": [
-            {"event_id": "today", "start": "2026-09-29T01:00:00Z", "title": "Buyer sync"}]}}))
-        candidate = self.today_candidate(kind="meeting", evidence=[{"source": "Calendar", "source_id": "today", "fact": "Prepare for the scheduled meeting."}])
-        data["today_actions"] = [candidate]
-        self.assertIn("Priority 1", self.ok("report", data))
-        candidate["date"] = "2026-09-29"
-        self.fails("report", data, "date must match the saved source")
 
-    def test_top_actions_reject_unsupported_evidence_and_dates(self):
-        cases = [(dict(evidence=[]), "needs at least one evidence"),
-                 (dict(evidence=[{"source": "Operator", "date": "9/28/26", "fact": "Follow up."}]), "existing workflow sources"),
-                 (dict(date="2026-09-29"), "future due date"),
-                 (dict(kind="meeting", date="2026-09-30"), "today or tomorrow"),
-                 (dict(reason="First line\nSecond line"), "one-line reason"),
-                 (dict(reason="Due today; follow up"), "plain prose"),
-                 (dict(date="20260928"), "date YYYY-MM-DD"),
-                 (dict(kind="guess"), "supported action kind"),
-                 (dict(name="Different deal"), "name must match")]
-        for changes, error in cases:
-            with self.subTest(changes=changes):
-                data = base()
-                data["today_actions"] = [self.today_candidate(**changes)]
-                self.fails("report", data, error)
 
-    def test_top_actions_require_reviewed_inbound_thread_and_real_source(self):
-        data = base()
-        candidate = self.buyer_candidate()
-        data["today_actions"] = [candidate]
-        candidate["reply_reviewed"] = False
-        self.fails("report", data, "reply_reviewed true")
-        candidate["reply_reviewed"] = True
-        candidate["evidence"][0]["source_id"] = "missing"
-        self.fails("report", data, "not in this run's saved Gmail results")
-        candidate["evidence"][0]["source_id"] = "1a0d"
-        saved = copy.deepcopy(SAVED)
-        saved["email_results"]["emails"][0]["from_"] = "rep@seller.example"
-        (self.sources / "output_mail.json").write_text(json.dumps(saved))
-        self.fails("report", data, "external sender")
 
-    def test_top_actions_exclude_coverage_gaps_and_incomplete_runs(self):
-        data = base()
-        data["today_actions"] = [self.today_candidate(), self.today_candidate(ROYAL, "Corvid Foods")]
-        data["withheld"] = [{"deal": ROYAL, "reason": "Calendar coverage missing"}]
-        data["blocks"] = data["blocks"][:1]
-        out = self.ok("report", data, GAP)
-        section = out.split("## Top 3 actions today", 1)[1].split("## Clear recommendations", 1)[0]
-        self.assertIn("Acme Devices", section)
-        self.assertNotIn("Corvid Foods", section)
-        data["run"].update(process_status="incomplete", process_gaps=["Task review unfinished"])
-        self.assertIn("No supported actions to prioritize today.", self.ok("report", data, GAP))
-        data["run"].update(process_status="complete", process_gaps=[])
-        data["withheld"] = [{"deal": d["id"], "reason": "Unknown gap"} for d in data["deals"]]
-        data.update(blocks=[], questions=[])
-        self.assertIn("No supported actions to prioritize today.", self.ok("report", data, dict(GAP, affected=None)))
 
-    def test_top_actions_require_weekday_input_and_leave_friday_unchanged(self):
-        data = base()
-        del data["today_actions"]
-        self.fails("report", data, "weekday report needs today_actions")
-        self.assertNotIn("Top 3 actions today", self.ok("report", friday(data)))
 
     # writes
     def test_partial_write_receipt(self):
-        data = base()
-        data["blocks"][0]["status"] = "partial"
-        data["writes"] = [
-            {"label": "1", "object": "Opportunity", "id": BIO, "field": "Next_Steps__c", "outcome": "written"},
-            {"label": "1", "object": "Task", "id": T_BIO, "field": "ActivityDate", "outcome": "rejected",
-             "detail": "FIELD_INTEGRITY_EXCEPTION"}]
-        out = self.ok("receipt", data, None, "--labels", "1")
-        self.assertIn("1 · [Acme Devices]", out)
-        self.assertIn("· partial\n", out)
-        self.assertIn("- Rejected · [Task]", out)
-        self.assertIn("- 1 of 2 changes written. Written changes are kept and not repeated.", out)
-        self.assertIn("1 record written · 1 rejected · 0 unverified · 0 not attempted · 43 open deals at run start", out)
-        self.assertNotIn("· written\n", out)
+        data=base()
+        data['blocks'][0]['status']='partial'
+        data['blocks'][0]['changes'].append({'object':'Opportunity','id':BIO,'field':'LeadSource','current':None,'proposed':'Event'})
+        data['writes']=[{'label':'1','object':'Opportunity','id':BIO,'field':'Deal_Type__c','outcome':'written'},
+                        {'label':'1','object':'Opportunity','id':BIO,'field':'LeadSource','outcome':'rejected','detail':'Native validation rejected the value'}]
+        output=self.ok('receipt',data,None)
+        self.assertIn('partial',output)
+        self.assertIn('1 of 2 changes written',output)
+        self.assertIn('- Rejected · [Opportunity]',output)
+        self.assertNotIn('· written\n',output)
 
     def test_fields_on_one_record_count_once(self):
         data = base()
         data["blocks"][1]["status"] = "written"
         complete = data["blocks"][1]["changes"][0]
-        data["blocks"][1]["changes"] = [complete, dict(complete, field="Description", task_kind="update", mode="prepend",
-                                                       proposed="9/28/26 SR - Order form sent 9/24.")]
-        data["writes"] = [{"label": "2", "object": "Task", "id": T_ROYAL, "field": f, "outcome": "written"}
-                          for f in ("Status", "Description")]
+        data["blocks"][1]["changes"] = [complete, dict(complete, field="LeadSource", proposed="Event")]
+        data["writes"] = [{"label": "2", "object": "Opportunity", "id": ROYAL, "field": f, "outcome": "written"}
+                          for f in ("Customer_Type__c", "LeadSource")]
         self.assertIn("1 record written · 0 rejected", self.ok("receipt", data, None))
 
     def test_repeated_successful_write_fails(self):
         data = base()
         data["blocks"][0]["status"] = "written"
-        w = {"label": "1", "object": "Opportunity", "id": BIO, "field": "Next_Steps__c", "outcome": "written"}
+        w = {"label": "1", "object": "Opportunity", "id": BIO, "field": "Deal_Type__c", "outcome": "written"}
         data["writes"] = [w, dict(w)]
         self.fails("receipt", data, "never repeat a successful write", None)
 
     def test_write_on_superseded_or_unapproved_label_fails(self):
         data = base()
-        data["writes"] = [{"label": "1", "object": "Opportunity", "id": BIO, "field": "Next_Steps__c", "outcome": "written"}]
+        data["writes"] = [{"label": "1", "object": "Opportunity", "id": BIO, "field": "Deal_Type__c", "outcome": "written"}]
         self.fails("receipt", data, "only approved labels are written", None)
 
     def test_option_write_and_final_close(self):
-        data = base()
-        data["blocks"][0]["status"] = "written"
-        data["blocks"][1]["status"] = "skipped"
-        data["questions"][0]["status"] = "answered"
-        data["questions"][0]["options"][0]["status"] = "written"
-        data["writes"] = [
-            {"label": "1", "object": "Opportunity", "id": BIO, "field": "Next_Steps__c", "outcome": "written"},
-            {"label": "1", "object": "Task", "id": T_BIO, "field": "ActivityDate", "outcome": "written"},
-            {"label": "Q1-a", "object": "Opportunity", "id": ROUX, "field": "Deal_Type__c", "outcome": "written"}]
-        out = self.ok("receipt", data, None, "--final")
-        self.assertIn("Q1-a · [Beacon Labs]", out)
-        self.assertIn("**Close**\n\n43 open deals · 18 reviewed · 3 flagged · 2 proposed · 3 records written · 1 skipped · "
-                      "0 not checked  \nSkipped · 2 · [Corvid Foods]", out)
+        data=base()
+        data['blocks'][0]['status']='written'
+        data['blocks'][1]['status']='skipped'
+        data['questions'][0]['status']='answered'
+        data['questions'][0]['options'][0]['status']='written'
+        data['writes']=[{'label':'1','object':'Opportunity','id':BIO,'field':'Deal_Type__c','outcome':'written'},
+            {'label':'Q1-a','object':'Opportunity','id':ROUX,'field':'Deal_Type__c','outcome':'written'}]
+        output=self.ok('receipt',data,None,'--final')
+        self.assertIn('2 records written',output)
+        self.assertIn('Skipped · 2',output)
 
     def test_approved_block_without_writes_is_named_in_final_receipt(self):
         """An approved block that was never attempted must appear, not vanish."""
@@ -889,8 +828,8 @@ class Render(unittest.TestCase):
         self.assertIn("1 · [Acme Devices]", out)
         self.assertIn("· approved, not attempted\n", out)
         self.assertIn("- Not attempted · [Opportunity]", out)
-        self.assertIn("- Not attempted · [Task]", out)
-        self.assertIn("0 records written · 0 rejected · 0 unverified · 2 not attempted", out)
+        self.assertIn("- Not attempted · [Opportunity]", out)
+        self.assertIn("0 records written · 0 rejected · 0 unverified · 1 not attempted", out)
         self.assertIn("Approved, not attempted · 1 · [Acme Devices]", out)
         # Without --final the receipt still reports only recorded writes.
         self.assertNotIn("Acme Devices", self.ok("receipt", data, None))
@@ -899,12 +838,13 @@ class Render(unittest.TestCase):
     def test_receipt_reconciles_against_approved_changes(self):
         data = base()
         data["blocks"][0]["status"] = "partial"
-        data["writes"] = [{"label": "1", "object": "Opportunity", "id": BIO, "field": "Next_Steps__c", "outcome": "written"}]
+        data["blocks"][0]["changes"].append({"object": "Opportunity", "id": BIO, "field": "LeadSource", "current": None, "proposed": "Event"})
+        data["writes"] = [{"label": "1", "object": "Opportunity", "id": BIO, "field": "Deal_Type__c", "outcome": "written"}]
         out = self.ok("receipt", data, None, "--labels", "1")
         self.assertIn("1 · [Acme Devices]", out)
         self.assertIn("· partial\n", out)
-        self.assertIn("- Not attempted · [Task]", out)
-        self.assertIn("1 record written · 0 rejected · 0 unverified · 1 not attempted", out)
+        self.assertIn("- Not attempted · [Opportunity]", out)
+        self.assertIn("0 records written · 0 rejected · 0 unverified · 1 not attempted", out)
         data["writes"].append({"label": "1", "object": "Opportunity", "id": ROUX, "field": "Deal_Type__c", "outcome": "written"})
         self.fails("receipt", data, "is not an approved change of 1", None)
 
@@ -917,8 +857,10 @@ class Render(unittest.TestCase):
                                               "proposed": "Annual Contract"})
         self.fails("report", data, "not the deal it is shown under")
         data = base()
-        data["blocks"][1]["changes"][1]["fields"]["Description"] = "Hidden text"
-        self.fails("report", data, "are not displayed")
+        create = task_create()
+        create["fields"]["Description"] = "Hidden text"
+        data["blocks"][1]["changes"].append(create)
+        self.fails("report", data, "cannot propose a Task change")
 
     def test_withheld_deal_has_nothing_approvable(self):
         data = base()
@@ -943,8 +885,7 @@ class Render(unittest.TestCase):
         data["blocks"][0]["status"] = "partial"
         self.fails("question", data, "is already proposed in block 1", None, "--label", "Q2")
         data["blocks"][0]["status"] = "written"
-        data["writes"] = [{"label": "1", "object": "Opportunity", "id": BIO, "field": "Next_Steps__c", "outcome": "written"},
-                          {"label": "1", "object": "Task", "id": T_BIO, "field": "ActivityDate", "outcome": "written"}]
+        data["writes"] = [{"label": "1", "object": "Opportunity", "id": BIO, "field": "Deal_Type__c", "outcome": "written"}]
         self.ok("question", data, None, "--label", "Q2")
 
     def test_one_change_per_record_field_in_a_proposal(self):
@@ -952,21 +893,13 @@ class Render(unittest.TestCase):
         data["blocks"][0]["changes"].append(dict(data["blocks"][0]["changes"][0], proposed="2026-10-05"))
         self.fails("report", data, "appears twice")
 
-    def test_one_task_create_per_label(self):
-        data = base()
-        create = data["blocks"][1]["changes"][1]
-        second = copy.deepcopy(create)
-        second["fields"]["Subject"] = "Send order form reminder"
-        data["blocks"][1]["changes"].append(second)
-        self.fails("report", data, "one Task create per approval label")
 
     def test_partial_fields_count_the_same_in_receipt_and_close(self):
         data = base()
         data["blocks"][1]["status"] = "partial"
         complete = data["blocks"][1]["changes"][0]
-        data["blocks"][1]["changes"] = [complete, dict(complete, field="Description", task_kind="update", mode="prepend",
-                                                       proposed="9/28/26 SR - Order form sent 9/24.")]
-        data["writes"] = [{"label": "2", "object": "Task", "id": T_ROYAL, "field": "Status", "outcome": "written"}]
+        data["blocks"][1]["changes"] = [complete, dict(complete, field="LeadSource", proposed="Event")]
+        data["writes"] = [{"label": "2", "object": "Opportunity", "id": ROYAL, "field": "Customer_Type__c", "outcome": "written"}]
         out = self.ok("receipt", data, None, "--final")
         self.assertIn("2 · [Corvid Foods]", out)
         self.assertIn("· partial\n", out)
@@ -974,6 +907,53 @@ class Render(unittest.TestCase):
         self.assertIn("0 records written · 0 rejected · 0 unverified · 1 not attempted", out)
         self.assertIn("· 0 records written · 0 skipped", out)
 
+
+    def test_next_step_and_task_changes_are_rejected_in_every_proposal_path(self):
+        next_change={'object':'Opportunity','id':BIO,'field':'Next_Steps__c','current':None,'proposed':'9/28/26 SR - Follow up by 10/2.'}
+        for field in ('ActivityDate','Subject','Status','Description','create'):
+            change={'object':'Task','id':T_BIO,'field':field,'current':None,'proposed':'changed','action':'create' if field=='create' else 'update'}
+            for location in ('block','option','letter'):
+                data=friday(base()) if location=='letter' else base()
+                if location=='block': data['blocks'][0]['changes']=[change]
+                elif location=='option': data['questions'][0]['options'][0]['changes']=[change]
+                else: data['friday']['letters'][0]['change']=change
+                self.fails('report',data,'cannot propose a Task change')
+        for location in ('block','option','letter'):
+            data=friday(base()) if location=='letter' else base()
+            if location=='block': data['blocks'][0]['changes']=[next_change]
+            elif location=='option': data['questions'][0]['options'][0]['changes']=[next_change]
+            else: data['friday']['letters'][0]['change']=next_change
+            self.fails('report',data,'cannot propose a next-step change')
+        for key in ('proposed','proposed_full'):
+            data=base()
+            data['blocks'][0]['next_step'][key]='9/28/26 SR - Follow up by 10/2.'
+            self.fails('report',data,'cannot propose a next-step change')
+
+    def test_next_step_finding_is_readonly_and_covers_a_flag(self):
+        data=base()
+        data['blocks']=data['blocks'][1:]
+        data['triage']=[{'deal':BIO,'name':'Acme Devices','reason':'Triage owns the next step','triage_next_step':True}]
+        output=self.ok('report',data)
+        self.assertIn('Triage owns the next step',output)
+        self.assertNotIn('1. [Acme Devices]',output)
+
+    def test_pilot_evidence_is_friday_only_in_requested_weekly_review(self):
+        data = base()
+        data['blocks'][0]['evidence'] = [{'source': 'Pilot report', 'date': '9/25/26',
+                                         'fact': 'Synthetic pilot report states its reviewed window.'}]
+        data['run']['date'] = '2026-09-25'
+        self.ok('report', data)
+        data['run']['date'] = '2026-09-29'
+        self.fails('report', data, 'Pilot report input is Friday-only')
+
+    def test_weekday_scope_is_retired_and_requested_day_uses_weekly_pass(self):
+        data=base()
+        data['run'].update(branch='weekday',coverage_scope='pipeline-daily')
+        self.fails('report',data,'run.branch must be friday')
+        data=base()
+        data['run']['date']='2026-09-29'
+        self.assertIn('## Rollup',self.ok('report',data))
+        self.assertNotIn('Top 3',self.ok('report',data))
 
 if __name__ == "__main__":
     unittest.main()

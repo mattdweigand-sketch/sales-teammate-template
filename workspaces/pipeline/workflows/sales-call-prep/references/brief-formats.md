@@ -26,7 +26,7 @@ Two to four sentences. Where the deal stands, what this call must accomplish, th
 ## What the business does
 - Three to five bullets. Business lines, scale, current-year strategy signals, AI or data moves, incumbent tools. Each with a dated link.
 
-## Example Product footprint
+## Product footprint
 One line per external email: org name, service type, billing status, billed seats, members, or `Org status unverified for <email>: <response>` (`rules#org_lookup`).
 
 ## Where to open
@@ -44,7 +44,7 @@ Skip this section if none. One bullet per record problem flagged in `workspaces/
 Say "log this call" after the meeting and I will hand off to interaction-sync.
 ```
 
-Target length: 300 to 450 words for an intro, up to 600 for a proposal or customer call.
+Target length: 300 to 450 words for an intro, up to 600 for discovery, demo, proposal or customer calls.
 
 ## Multi-call window
 

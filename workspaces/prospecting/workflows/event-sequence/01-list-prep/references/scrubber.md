@@ -18,7 +18,9 @@ policy.tooling.scripts.event_scrub_leads \
   --clean-column-profile full
 ```
 
-Then independently audit the clean chunks:
+Then separately audit the clean chunks.
+Both audits use the same classifier. The standalone run can detect changed or imported files, not errors shared by that classifier.
+Keep both required PASS reports.
 
 ```bash
 policy.tooling.scripts.event_scrub_leads \
@@ -33,7 +35,7 @@ preferred finder results. Use `--email-column "Column Name"` only when you need 
 ## Output Contract
 
 - `clean_chunks/clean_part_001.csv`, `clean_part_002.csv`, etc. Each file has at most 25,000 clean rows.
-  After independent audit PASS, route full-column chunks to `policy.tooling.scripts.event_make_batches`.
+  After standalone audit PASS, route full-column chunks to `policy.tooling.scripts.event_make_batches`.
 - `removed_leads.csv` holds rows excluded from enrollment. In final mode, this includes internally removed and internally quarantined rows, with source and diagnostic columns.
 - `output_manifest.json`: deterministic output proof with selected email columns, row counts, file sizes, and SHA256 hashes for clean chunks and removed rows.
 - `audit_report.json`: machine-readable audit.

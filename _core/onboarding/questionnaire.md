@@ -34,7 +34,7 @@ Collect actual company settings. Required questions have no fictional defaults. 
 
 | `event_house_owner_ids` | Verified Salesforce house-owner User IDs allowed for explicitly marked event rows, or [] to disable? | prospecting.event.outreach_owner_scope.house_owner_ids |
 | `event_include_missing_account` | Allow explicitly marked event rows when a complete Salesforce lookup finds no Account? Default false. | prospecting.event.outreach_owner_scope.include_missing_account |
-| `integration_setup` | Explicit configuration choice and non-secret settings for all 21 integrations? | template.integrations and named setting targets |
+| `integration_setup` | Explicit configuration choice and non-secret settings for all 22 integrations? | template.integrations and named setting targets |
 
 Event options default to [] and false. Selecting either changes eligibility, grants no enrollment approval and verifies no connection.
 The terminal accepts actual JSON true or false for the boolean. House IDs must be distinct verified User IDs other than the operator.

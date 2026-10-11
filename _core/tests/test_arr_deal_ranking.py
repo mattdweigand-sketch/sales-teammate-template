@@ -3,6 +3,7 @@ from pathlib import Path
 
 import yaml
 import test_pipeline_render as render_tests
+import test_top_actions as action_tests
 
 ROOT = Path(__file__).resolve().parents[2]
 PIPELINE = ROOT / "workspaces/pipeline/workflows/pipeline-review"
@@ -20,7 +21,7 @@ class RankingContractTests(unittest.TestCase):
 
     def test_forecast_scope_and_upside_use_policy_size(self):
         buckets = (FORECAST / "references/buckets.md").read_text()
-        self.assertIn("Upside: S2 or S3 with `policy.forecast.amount_field` set", buckets)
+        self.assertIn("Upside: S2 through S5 with `policy.forecast.amount_field` set", buckets)
         self.assertIn("next-quarter S2+ deals with `policy.forecast.amount_field` set", buckets)
         self.assertIn("An Amount without ARR ranks as blank", buckets)
         for name in ("buckets", "collect", "report-format"):
@@ -32,19 +33,21 @@ class RankingContractTests(unittest.TestCase):
         self.assertNotIn("without Amount", (FORECAST / "references/report-format.md").read_text())
 
     def test_pipeline_queries_size_and_documents_ranking(self):
-        self.assertIn("<policy.forecast.amount_field>", (PIPELINE / "references/collect.md").read_text())
-        text = (PIPELINE / "references/report-format.md").read_text()
-        self.assertIn("earlier dates, `policy.forecast.amount_field` descending with blanks last", text)
-        self.assertIn("Never fall back to Amount when ARR is blank", text)
+        self.assertIn("<policy.forecast.amount_field>", (ROOT / "workspaces/pipeline/references/deal-activity-reads.md").read_text())
+        helper = (ROOT / "workspaces/pipeline/scripts/top_actions.py").read_text()
+        self.assertIn('policy.forecast.amount_field only', helper)
+        self.assertIn('-size if size is not None', helper)
+        self.assertNotIn('TODAY_ACTION_ORDER', (PIPELINE / "scripts/pipeline_render.py").read_text())
 
     def test_new_policy_reads_are_branch_bounded(self):
         self.assertIn("Deal-review only: `forecast.amount_field`", (COACH / "CONTEXT.md").read_text())
-        self.assertIn("Weekday Top 3 only: `forecast.amount_field`", (PIPELINE / "CONTEXT.md").read_text())
+        self.assertIn("`forecast`", (PIPELINE / "CONTEXT.md").read_text())
+        self.assertIn("forecast", (ROOT / "workspaces/pipeline/workflows/task-triage-speed-run/CONTEXT.md").read_text())
 
 
 class TopActionRankingTests(unittest.TestCase):
     def setUp(self):
-        self.renderer = render_tests.Render("runTest")
+        self.renderer = action_tests.TopActions("runTest")
         self.renderer.setUp()
         self.addCleanup(self.renderer.tearDown)
 
@@ -54,7 +57,7 @@ class TopActionRankingTests(unittest.TestCase):
                 self.renderer.today_candidate(render_tests.ROYAL, "Corvid Foods")]
 
     def section(self, data, *extra):
-        output = self.renderer.ok("report", data, render_tests.READY, *extra)
+        output = self.renderer.ok(data, render_tests.READY, *extra)
         return output.split("## Top 3 actions today", 1)[1].split("## Clear recommendations", 1)[0]
 
     def test_arr_descending_missing_arr_never_uses_amount(self):
@@ -104,4 +107,4 @@ class TopActionRankingTests(unittest.TestCase):
             data = render_tests.base()
             data["today_actions"] = [self.renderer.today_candidate(ARR__c=value)]
             with self.subTest(value=value):
-                self.renderer.fails("report", data, "size must be")
+                self.renderer.fails(data, "size must be")

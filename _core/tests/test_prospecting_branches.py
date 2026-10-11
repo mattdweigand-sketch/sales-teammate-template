@@ -1,6 +1,6 @@
 from pathlib import Path
 import unittest
-from test_skill_contracts import CONTRACT_PATHS, SKILL_BRANCHES
+from test_skill_contracts import CONTRACT_PATHS, SKILL_BRANCHES, SIGNAL_WORKFLOW
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,7 +27,13 @@ class ProspectingBranches(unittest.TestCase):
             groups.setdefault(path, []).append(name)
         shared = [set(names) for names in groups.values() if len(names) > 1]
         self.assertEqual(shared, [{"signal-scan", "signal-user-scan"}])
-        self.assertEqual(len(list((ROOT / "workspaces/prospecting/workflows").rglob("CONTEXT.md"))), 8)
+        contexts = set((ROOT / "workspaces/prospecting/workflows").rglob("CONTEXT.md"))
+        self.assertEqual(contexts, {SIGNAL_WORKFLOW / "CONTEXT.md", CONTRACT_PATHS["signal-scan"],
+                                   CONTRACT_PATHS["signal-outreach"], CONTRACT_PATHS["signal-followup"],
+                                   CONTRACT_PATHS["event-sequence"],
+                                   *(CONTRACT_PATHS["event-sequence"].parent / stage / "CONTEXT.md"
+                                     for stage in ("01-list-prep", "02-sequence-plan", "03-launch"))})
+        self.assertEqual(len(list(CONTRACT_PATHS["event-sequence"].parent.glob("*/CONTEXT.md"))), 3)
         self.assertNotEqual(CONTRACT_PATHS["event-sequence"], CONTRACT_PATHS["signal-scan"])
 
     def test_buying_signals_batch_routes_by_named_sections(self):

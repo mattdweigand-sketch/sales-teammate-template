@@ -68,7 +68,7 @@ def _saved(calls: Path, suffix: str, marker: str, handle: str, columns, rows) ->
 
 
 def _user_row(index: int, tasks: int, credits: int) -> dict:
-    return {"user_id": f"u{index}@x.test", "display_name": f"User {index:02d}", "task_count": tasks,
+    return {"user_id": f"u{index}@x.com", "display_name": f"User {index:02d}", "task_count": tasks,
             "week_one_tasks": tasks, "week_two_tasks": 0, "credits": credits, "active_days": min(tasks, 1),
             "participation_note": ""}
 
@@ -82,19 +82,19 @@ class PilotUsagePdfTests(unittest.TestCase):
         self.policy = load_pilot_usage_policy(POLICY)
         _saved(self.calls, "a", "q1_roster", "h1",
                ["USER_EMAIL", "FIRST_QUERY", "LAST_QUERY", "L7_QUERIES", "WINDOW_QUERIES", "WINDOW_COMPUTER_QUERIES"],
-               [["a@x.test", "2026-08-13", "2026-08-20", "1", "5", "5"], ["b@x.test", None, None, "0", "0", "0"]])
+               [["a@x.com", "2026-08-13", "2026-08-20", "1", "5", "5"], ["b@x.com", None, None, "0", "0", "0"]])
         _saved(self.calls, "b", "q4_grants", "h4",
                ["USER_EMAIL", "BILLING_CREDIT_NAME", "BILLING_CREDIT_CATEGORY_ENRICHED", "EFFECTIVE_AT", "EXPIRES_AT", "VOIDED_AT", "AMOUNT_DOLLARS"],
-               [["a@x.test", "n", "c", "2026-08-12 10:00:00.000", "2026-09-12 10:00:00.000", None, "150.000000"],
-                ["a@x.test", "n", "c", "2026-08-12 10:00:01.000", "2026-09-12 10:00:00.000", "2026-08-13 00:00:00.000", "500.000000"],
-                ["b@x.test", "n", "c", "2026-10-01 10:00:00.000", "2026-11-01 10:00:00.000", None, "150.000000"]])
+               [["a@x.com", "n", "c", "2026-08-12 10:00:00.000", "2026-09-12 10:00:00.000", None, "150.000000"],
+                ["a@x.com", "n", "c", "2026-08-12 10:00:01.000", "2026-09-12 10:00:00.000", "2026-08-13 00:00:00.000", "500.000000"],
+                ["b@x.com", "n", "c", "2026-10-01 10:00:00.000", "2026-11-01 10:00:00.000", None, "150.000000"]])
         _saved(self.calls, "c", "q5_tasks", "h5", Q5_COLUMNS,
-               [["ctx-1", "a@x.test", "2026-08-13", "100.5", "Draft a memo"],
-                ["ctx-2", "a@x.test", "2026-08-20", "2.4999", None]])
+               [["ctx-1", "a@x.com", "2026-08-13", "100.5", "Draft a memo"],
+                ["ctx-2", "a@x.com", "2026-08-20", "2.4999", None]])
         self.review = {
             "customer_name": "Test LLP", "organization_uuid": ORG, "prepared_by": "Sales Operator",
             "pilot_start": START, "pilot_end": "2026-09-24", "data_through": THROUGH, "approved": True,
-            "display_names": {"a@x.test": "A Person"},
+            "display_names": {"a@x.com": "A Person"},
             "categories": [{"category_id": "drafting", "label": "Drafting", "description": "Memos."}],
             "task_categories": {"ctx-1": "drafting"},
             "narratives": {"scope_note": "s", "usage_highlights": [], "representative_work": [],
@@ -156,22 +156,22 @@ class PilotUsagePdfTests(unittest.TestCase):
     def test_grants_round_half_up(self) -> None:
         _page(self.calls, "br1", "h4",
               ["USER_EMAIL", "BILLING_CREDIT_NAME", "BILLING_CREDIT_CATEGORY_ENRICHED", "EFFECTIVE_AT", "EXPIRES_AT", "VOIDED_AT", "AMOUNT_DOLLARS"],
-              [["a@x.test", "n", "c", "2026-08-12 10:00:00.000", "2026-09-12 10:00:00.000", None, "150.005000"]])
+              [["a@x.com", "n", "c", "2026-08-12 10:00:00.000", "2026-09-12 10:00:00.000", None, "150.005000"]])
         self.assertEqual(self._input()["report"]["total_granted_credits"], 15001)
 
     def test_internal_domain_roster_and_tasks_are_filtered(self) -> None:
         _page(self.calls, "ar1", "h1", ["USER_EMAIL", "FIRST_QUERY"],
-              [["a@x.test", "2026-08-13"], ["b@x.test", None], ["rep@seller.example", "2026-08-13"]])
-        self._replace_q5([["ctx-1", "a@x.test", "2026-08-13", "100.5", "Draft a memo"],
-                          ["ctx-9", "rep@seller.example", "2026-08-14", "40", "Internal test"]])
+              [["a@x.com", "2026-08-13"], ["b@x.com", None], ["operator@seller.example", "2026-08-13"]])
+        self._replace_q5([["ctx-1", "a@x.com", "2026-08-13", "100.5", "Draft a memo"],
+                          ["ctx-9", "operator@seller.example", "2026-08-14", "40", "Internal test"]])
         normalized = self._input()
-        self.assertEqual([r["user_id"] for r in normalized["roster"]], ["a@x.test", "b@x.test"])
+        self.assertEqual([r["user_id"] for r in normalized["roster"]], ["a@x.com", "b@x.com"])
         self.assertEqual([s["context_uuid"] for s in normalized["sessions"]], ["ctx-1"])
 
     def test_task_outside_window_is_filtered(self) -> None:
-        self._replace_q5([["ctx-1", "a@x.test", "2026-08-13", "100.5", "Draft a memo"],
-                          ["ctx-late", "a@x.test", "2026-09-21", "5", "after data_through"],
-                          ["ctx-early", "a@x.test", "2026-08-11", "5", "before pilot_start"]])
+        self._replace_q5([["ctx-1", "a@x.com", "2026-08-13", "100.5", "Draft a memo"],
+                          ["ctx-late", "a@x.com", "2026-09-21", "5", "after data_through"],
+                          ["ctx-early", "a@x.com", "2026-08-11", "5", "before pilot_start"]])
         normalized = self._input()
         self.assertEqual([s["context_uuid"] for s in normalized["sessions"]], ["ctx-1"])
         self.assertEqual(validate_computed_pilot_usage_report(
@@ -221,6 +221,59 @@ class PilotUsagePdfTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "marked failed.*invalid identifier"):
             self._load()
 
+    def test_wrapper_failure_markers_fail_the_selected_handle(self) -> None:
+        final = self.calls / "output_cr1.json"
+        original = json.loads(final.read_text())
+        for marker in ({"isError": True}, {"error": "connector failed"}, {"truncated": True},
+                       {"status": "FAILED_WITH_ERROR", "message": "wrapper status"}):
+            with self.subTest(marker=marker):
+                page = copy.deepcopy(original)
+                page.update(marker)
+                final.write_text(json.dumps(page))
+                with self.assertRaisesRegex(RuntimeError, "selected q5_tasks result h5 is marked failed \\(wrapper: "):
+                    self._load()
+        final.write_text(json.dumps(original))
+        self.assertEqual(len(self._load()["q5_tasks"]), 2)
+
+    def test_inner_incomplete_or_error_markers_fail_even_with_rows(self) -> None:
+        final = self.calls / "output_cr1.json"
+        original = json.loads(final.read_text())
+        for marker in ({"truncated": True}, {"isError": True}, {"error": "partial result"}):
+            with self.subTest(marker=marker):
+                page = copy.deepcopy(original)
+                page["result"].update(marker)
+                final.write_text(json.dumps(page))
+                with self.assertRaisesRegex(RuntimeError, "marked failed \\(result: "):
+                    self._load()
+        final.write_text(json.dumps(original))
+
+    def test_marked_partition_fails_the_statement_despite_a_good_partition(self) -> None:
+        (self.calls / "output_cr1.json").unlink()
+        _page(self.calls, "cp0", "h5", Q5_COLUMNS,
+              [["ctx-1", "a@x.com", "2026-08-13", "100.5", "Draft a memo"],
+               ["ctx-2", "a@x.com", "2026-08-20", "2.4999", None]],
+              partition=0, total_partitions=2, total_row_count=3)
+        _page(self.calls, "cp1", "h5", None, [["ctx-3", "b@x.com", "2026-08-21", "10", "Second page"]],
+              partition=1, truncated=True)
+        with self.assertRaisesRegex(RuntimeError, "selected q5_tasks result h5 is marked failed \\(result: truncated\\)"):
+            self._load()
+
+    def test_explicit_complete_zero_rows_stay_valid(self) -> None:
+        _page(self.calls, "cr1", "h5", Q5_COLUMNS, [])
+        self.assertEqual(self._load()["q5_tasks"], [])
+
+    def test_negative_markers_and_unrelated_failures_do_not_poison_the_selected_handle(self) -> None:
+        final = self.calls / "output_cr1.json"
+        page = json.loads(final.read_text())
+        page.update(isError=False, error=None, truncated=False)
+        page["result"].update(isError=False, error=None, truncated=False)
+        final.write_text(json.dumps(page))
+        (self.calls / "output_other.json").write_text(json.dumps(
+            {"tool": "snowflake__get_query_results", "isError": True, "error": "other statement failed",
+             "result": {"statement_handle": "h-other", "status": "FAILED_WITH_ERROR", "data": None}}))
+        (self.calls / "output_text.json").write_text(json.dumps({"isError": True, "result": "connector error text"}))
+        self.assertEqual(len(self._load()["q5_tasks"]), 2)
+
     def test_final_page_beats_running_placeholder_on_equal_mtime(self) -> None:
         stamp = (self.calls / "output_cr0.json").stat().st_mtime
         os.utime(self.calls / "output_cr1.json", (stamp, stamp))
@@ -229,13 +282,13 @@ class PilotUsagePdfTests(unittest.TestCase):
     def test_two_partition_result_merges_in_order(self) -> None:
         (self.calls / "output_cr1.json").unlink()
         _page(self.calls, "cp0", "h5", Q5_COLUMNS,
-              [["ctx-1", "a@x.test", "2026-08-13", "100.5", "Draft a memo"],
-               ["ctx-2", "a@x.test", "2026-08-20", "2.4999", None]],
+              [["ctx-1", "a@x.com", "2026-08-13", "100.5", "Draft a memo"],
+               ["ctx-2", "a@x.com", "2026-08-20", "2.4999", None]],
               partition=0, total_partitions=2, total_row_count=3)
-        _page(self.calls, "cp1", "h5", None, [["ctx-3", "b@x.test", "2026-08-21", "10", "Second page"]], partition=1)
+        _page(self.calls, "cp1", "h5", None, [["ctx-3", "b@x.com", "2026-08-21", "10", "Second page"]], partition=1)
         rows = self._load()["q5_tasks"]
         self.assertEqual([r["context_uuid"] for r in rows], ["ctx-1", "ctx-2", "ctx-3"])
-        self.assertEqual(rows[2]["user_email"], "b@x.test")
+        self.assertEqual(rows[2]["user_email"], "b@x.com")
         (self.calls / "output_cp1.json").unlink()
         with self.assertRaisesRegex(RuntimeError, "pages incomplete"):
             self._load()
@@ -289,10 +342,10 @@ class PilotUsagePdfTests(unittest.TestCase):
 
     def test_top_users_comes_from_policy(self) -> None:
         normalized = self._input()
-        normalized["roster"] = [{"user_id": f"u{i}@x.test", "display_name": f"U{i}", "participation_note": ""}
+        normalized["roster"] = [{"user_id": f"u{i}@x.com", "display_name": f"U{i}", "participation_note": ""}
                                 for i in range(8)]
         normalized["sessions"] = [
-            {"context_uuid": f"c{i}", "user_id": f"u{i}@x.test", "date": "2026-08-13", "credits": 10,
+            {"context_uuid": f"c{i}", "user_id": f"u{i}@x.com", "date": "2026-08-13", "credits": 10,
              "category_id": "drafting", "task_title": "", "classification_reviewed": True}
             for i in range(8)
         ]
@@ -320,7 +373,7 @@ class PilotUsagePdfTests(unittest.TestCase):
         self.assertEqual(_format_date_range("2026-12-30", "2027-01-02"), "Dec 30, 2026 – Jan 2, 2027")
 
     def test_render_html_uses_policy_values(self) -> None:
-        self.review["participation_notes"] = {"a@x.test": "Joined late."}
+        self.review["participation_notes"] = {"a@x.com": "Joined late."}
         report = self._report()
         html = _render_pilot_usage_report_html(report, self.policy)
         fonts = self.policy["fonts"]
@@ -504,6 +557,7 @@ class PilotUsagePdfTests(unittest.TestCase):
         replacements = {
             "<org_uuid>": ORG, "<pilot_start>": START, "<data_through>": THROUGH,
             "<window_days>": str(document["pilot_usage"]["window_days"]),
+            "<policy.pilot_usage.query_text_max_chars>": str(document["pilot_usage"]["query_text_max_chars"]),
             "<internal_domain_filter>": " AND ".join(
                 f"user_email NOT ILIKE '%@{domain}'" for domain in self.policy["internal_domains"]),
         }
@@ -518,6 +572,13 @@ class PilotUsagePdfTests(unittest.TestCase):
             call["arguments"]["input"]["statement"] = statement
             path.write_text(json.dumps(call))
         self.assertEqual(len(self._load()["q5_tasks"]), 2)
+
+    def test_query_text_cuts_take_the_policy_placeholder_not_a_literal(self):
+        source = (ROOT / "workspaces/pipeline/references/pilot-usage-queries.md").read_text()
+        self.assertNotIn("120", source)
+        self.assertIn("LEFT(query_string, <policy.pilot_usage.query_text_max_chars>)", source)
+        self.assertIn("LEFT(f.query_string, <policy.pilot_usage.query_text_max_chars>)", source)
+        self.assertIn("cut at `policy.pilot_usage.query_text_max_chars` characters", source)
 
     def test_render_uses_only_evidence_supported_labels(self) -> None:
         rendered = _render_pilot_usage_report_html(self._report(), self.policy)

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Verify current-run source pages and the narrow queries used by sales workflows.
 
-Run from the sandbox root: coverage_check.py --scope pipeline|pipeline-daily|forecast
---since <ISO datetime with local offset> [--hygiene FILE] [--json] [--policy FILE] [--calls-dir DIR].
+Run from the sandbox root: coverage_check.py --scope pipeline|forecast
+--since <ISO datetime with local offset> [--json] [--policy FILE] [--calls-dir DIR].
 --json adds `affected`, the in-scope Opportunity Ids whose proposals must be withheld, or null when unknown.
 """
 import argparse
@@ -159,26 +159,142 @@ def account_name(opp):
     return (opp.get('Account') or {}).get('Name') or opp.get('AccountId') or '?'
 
 
-def activity_scope(groups, obj):
-    """IDs quoted in complete Task or Event queries, or None when one such query had no literal and so covered everything.
+# Documented Task and Event templates. Pipeline: workspaces/pipeline/references/deal-activity-reads.md "Activity".
+# Forecast: workspaces/forecasting/workflows/forecast-weekly/references/collect.md. Field names compare lowercase.
+ACTIVITY_FIELDS = {
+    ('pipeline', 'task'): ('Id', 'Subject', 'ActivityDate', 'Status', 'IsClosed', 'OwnerId', 'Description', 'LastModifiedDate',
+                           'WhatId', 'AccountId', 'WhoId', 'Who.Name'),
+    ('pipeline', 'event'): ('Id', 'Subject', 'ActivityDate', 'StartDateTime', 'EndDateTime', 'WhatId', 'AccountId', 'WhoId', 'OwnerId'),
+    ('forecast', 'task'): ('Id', 'Subject', 'ActivityDate', 'Status', 'IsClosed', 'WhatId', 'AccountId', 'Who.Name'),
+    ('forecast', 'event'): ('Id', 'Subject', 'ActivityDate', 'StartDateTime', 'EndDateTime', 'WhatId', 'AccountId', 'OwnerId'),
+}
+ACTIVITY_WINDOW = {'task': ('isclosed=false', 'activitydate=last_n_days:'), 'event': ('activitydate>=today', 'activitydate=last_n_days:')}
+SCOPE_TERM = re.compile(r"(?:whatid in \('[^()]*'\)(?: or accountid in \('[^()]*'\))?|accountid in \('[^()]*'\)(?: or whatid in \('[^()]*'\))?)")
 
-    The repository's Task and Event templates scope only by quoted Opportunity and Account Ids, so a quoted
-    literal is a scope Id. This is a bounded check of those templates, not a SOQL parser."""
+
+def top_level_terms(condition):
+    """Split a WHERE condition on AND outside parentheses and quotes. Bounded template support, not a SOQL parser."""
+    terms, depth, start, i, upper = [], 0, 0, 0, condition.upper()
+    while i < len(condition):
+        char = condition[i]
+        if char == "'":
+            close = condition.find("'", i + 1)
+            i = len(condition) if close < 0 else close + 1
+            continue
+        if char == '(':
+            depth += 1
+        elif char == ')':
+            depth -= 1
+        elif (depth == 0 and upper.startswith('AND', i) and (i == 0 or condition[i - 1].isspace())
+              and (i + 3 == len(condition) or condition[i + 3].isspace())):
+            terms.append(condition[start:i])
+            start = i = i + 3
+            continue
+        i += 1
+    terms.append(condition[start:])
+    return [unwrapped(term.strip()) for term in terms]
+
+
+def unwrapped(term):
+    """Remove parentheses that enclose the whole term."""
+    while term.startswith('(') and term.endswith(')'):
+        depth = 0
+        for position, char in enumerate(term):
+            depth += (char == '(') - (char == ')')
+            if depth == 0 and position < len(term) - 1:
+                return term
+        term = term[1:-1].strip()
+    return term
+
+
+def compact(term):
+    term = re.sub(r'\s+', ' ', term.lower()).strip()
+    term = re.sub(r'\s*(!=|>=|<=|=)\s*', r'\1', term)
+    return re.sub(r'\s*,\s*', ',', re.sub(r'\(\s*', '(', re.sub(r'\s*\)', ')', term)))
+
+
+def activity_window(term, obj, min_days):
+    """None when the term is the documented two-part window with at least min_days, else a reason."""
+    parts = sorted(part.strip() for part in re.split(r'\s+or\s+', term))
+    fixed, prefix = ACTIVITY_WINDOW[obj]
+    if len(parts) != 2 or fixed not in parts:
+        return f'window {term!r} is not the documented form'
+    days = next((part[len(prefix):] for part in parts if part.startswith(prefix)), None)
+    if days is None or not days.isdigit():
+        return f'window {term!r} is not the documented form'
+    if int(days) < min_days:
+        return f'window LAST_N_DAYS:{days} is shorter than the required {min_days} days'
+    return None
+
+
+def activity_query_form(query, obj, scope_kind, min_days):
+    """Match one complete Task or Event query against the documented template for scope_kind.
+
+    Returns (True, ids) where ids are the quoted scope Ids, or None when no scope term bounds the query, so it covers
+    every Account. Returns (False, reason) when the query cannot certify coverage, for example a SELECT without a
+    required field, a Subject term, or a shorter window. Normal whitespace, case and `=` spacing are equivalent."""
+    parts = re.split(rf'\bFROM\s+{obj}\b', query, maxsplit=1, flags=re.I)
+    if len(parts) != 2:
+        return False, f'not a single {obj} query'
+    select = re.sub(r'\s+', '', parts[0].lower())
+    if not select.startswith('select'):
+        return False, 'not a SELECT query'
+    fields = set(select[len('select'):].split(','))
+    missing = [field for field in ACTIVITY_FIELDS[(scope_kind, obj)] if field.lower() not in fields]
+    if missing:
+        return False, 'SELECT lacks ' + ', '.join(missing)
+    tail = re.sub(r'\s+ORDER\s+BY\s+[\w.]+(?:\s+(?:ASC|DESC))?\s*$', '', parts[1].strip(), flags=re.I)
+    match = re.match(r'WHERE\s+(.+)$', tail, re.I | re.S)
+    if not match:
+        return False, 'no WHERE clause'
+    ids, scoped, windowed = set(), False, False
+    for raw in top_level_terms(match[1]):
+        term = compact(raw)
+        if SCOPE_TERM.fullmatch(term):
+            if scoped:
+                return False, 'more than one scope term'
+            scoped = True
+            ids.update(QUOTED_LITERAL.findall(raw))
+        elif term == 'activitydate!=null' and (scope_kind, obj) == ('forecast', 'task'):
+            continue
+        elif ' or ' in term and not windowed:
+            reason = activity_window(term, obj, min_days)
+            if reason:
+                return False, reason
+            windowed = True
+        else:
+            return False, f'term {raw.strip()!r} is not in the documented template'
+    if not windowed:
+        return False, 'no documented window term'
+    return True, ids if scoped else None
+
+
+def activity_scope(groups, obj, scope_kind, min_days):
+    """IDs quoted in complete documented Task or Event queries, or None when one such query had no scope term and so
+    covered everything. A complete query outside the documented template is reported and certifies nothing."""
     ids, unbounded = set(), False
     for group in groups:
         if group['meta']['tool'] != 'salesforce' or not group['complete'] or obj not in group['meta']['objects']:
             continue
-        found = QUOTED_LITERAL.findall(group['meta']['query'])
-        if found:
-            ids.update(found)
-        else:
+        ok, value = activity_query_form(group['meta']['query'], obj, scope_kind, min_days)
+        if not ok:
+            print(f"{group['meta']['name']}: ignored narrowed {obj.capitalize()} query, {value}")
+        elif value is None:
             unbounded = True
+        else:
+            ids.update(value)
     return None if unbounded else ids
 
 
-def unscoped_accounts(scope, groups, obj):
-    """In-scope Accounts whose Opportunity Id and Account Id both miss every complete query for obj."""
-    ids = activity_scope(groups, obj)
+def activity_min_days(policy, scope_kind):
+    if scope_kind == 'forecast':
+        return int(policy.get('forecast', {}).get('activity_days', 14))
+    return int(policy['pipeline'].get('activity_query_days', 30))
+
+
+def unscoped_accounts(scope, groups, obj, scope_kind, min_days):
+    """In-scope Accounts whose Opportunity Id and Account Id both miss every complete documented query for obj."""
+    ids = activity_scope(groups, obj, scope_kind, min_days)
     if ids is None:
         return []
     return sorted(account_name(opp) for opp in scope if opp['Id'] not in ids and opp.get('AccountId') not in ids)
@@ -192,16 +308,6 @@ def quarter_bounds(today):
     return start, shift(3), shift(6)
 
 
-def previous_scheduled_date(today, policy):
-    schedule = policy['pipeline'].get('schedule', {})
-    days = set(schedule.get('daily', {}).get('days', ['MO', 'TU', 'WE', 'TH'])) | set(schedule.get('friday', {}).get('days', ['FR']))
-    names = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
-    if not days & set(names):
-        raise ValueError('pipeline schedule has no valid days')
-    for distance in range(1, 8):
-        previous = today - dt.timedelta(days=distance)
-        if names[previous.weekday()] in days:
-            return previous
 
 
 def email_query(query):
@@ -279,7 +385,7 @@ def collect(root, since, cap=50):
             continue
         if objects:
             key = ('salesforce', ' '.join(query.lower().split()))
-            meta = {'tool':'salesforce', 'query':query, 'objects':objects, 'args':args, 'sequence':sequence}
+            meta = {'tool':'salesforce', 'query':query, 'objects':objects, 'args':args, 'sequence':sequence, 'name':path.name}
         elif cursor in pending_sf:
             key = pending_sf[cursor]
             meta = groups[key]['meta']
@@ -365,12 +471,19 @@ def collect(root, since, cap=50):
     return list(groups.values()), failures, errors, tool_of
 
 
-def check_coverage(scope_kind, since, policy, root, stage_min=2, list_accounts=False, hygiene=None):
+def check_coverage(scope_kind, since, policy, root, stage_min=None, list_accounts=False):
     groups, failures, errors, tool_of = collect(root, since, int(policy['tooling'].get('calendar_result_cap', 50)))
     unmatched_ids, thread_missing_ids = set(), set()
     internal = set(policy['tooling']['internal_domains'])
     generic = set(policy['tooling'].get('generic_email_domains', []))
-    daily = scope_kind == 'pipeline-daily'
+    if scope_kind not in ('pipeline', 'forecast'):
+        raise ValueError('scope must be pipeline or forecast')
+    if stage_min is None:
+        # Pipeline review reads every open stage. Forecast uses the one floor in policy.forecast.open_min_stage,
+        # shared with collection and the qualified-pipeline total, never Pipeline's hygiene stages.
+        stage_min = 0 if scope_kind == 'pipeline' else stage_num(policy.get('forecast', {}).get('open_min_stage'))
+        if stage_min is None:
+            raise ValueError('policy.forecast.open_min_stage must be S0..S5')
     required_collections = {'current_open','next_open','booked'} if scope_kind == 'forecast' else {'open'}
     opps, contacts, objects, collections, owners, sf_events = {}, [], set(), set(), set(), []
     for group in groups:
@@ -410,7 +523,8 @@ def check_coverage(scope_kind, since, policy, root, stage_min=2, list_accounts=F
             except ValueError:
                 errors.append(f"{account_name(opp)}: CloseDate missing or invalid")
                 continue
-            if not q_start <= close < q_end or (close >= q_next and opp.get('Amount') in (None, 0)):
+            amount_field = policy['forecast']['amount_field']
+            if not q_start <= close < q_end or (close >= q_next and opp.get(amount_field) in (None, '', 0)):
                 continue
         scope.append(opp)
     missing_objects = {'opportunity','task','event','contact'} - objects
@@ -418,12 +532,12 @@ def check_coverage(scope_kind, since, policy, root, stage_min=2, list_accounts=F
         errors.append('Missing Salesforce source queries: ' + ', '.join(sorted(missing_objects)))
     for obj, label in (('task', 'Task'), ('event', 'Event')):
         if obj in objects:
-            unscoped = unscoped_accounts(scope, groups, obj)
+            unscoped = unscoped_accounts(scope, groups, obj, scope_kind, activity_min_days(policy, scope_kind))
             if unscoped:
                 errors.append(f'{label} query scope missing: ' + ', '.join(unscoped))
     if scope and 'contact' not in objects:
         errors.append(f"No Contact records saved since {since.isoformat(timespec='minutes')}. Run the Contact query, then rerun. Report not ready.")
-    scan_start = previous_scheduled_date(since.date(), policy) if daily else since.date()-dt.timedelta(days=policy['tooling'].get('calendar_lookback_days',30))
+    scan_start = since.date()-dt.timedelta(days=policy['tooling'].get('calendar_lookback_days',30))
     calendar_end = since.date()+dt.timedelta(days=policy['tooling'].get('calendar_lookahead_days',30))
     cal_queries, calendars, mail, inbox, seen_events, domains_by_opp = [], [], [], [], set(), {}
     for group in groups:
@@ -444,8 +558,8 @@ def check_coverage(scope_kind, since, policy, root, stage_min=2, list_accounts=F
                             inbox.extend(group['pages'])
                     except ValueError:
                         pass
-    # Calendar: per defined term, complete uncapped windows count together. Their union must cover the
-    # required window with no gap; a capped or incomplete call is superseded when they do (rules#calendar_search).
+    # Defined searches need the full workflow window. Supplemental Subject/date searches only
+    # corroborate Events and must not replace a defined search or expand its required range.
     cal_lo = dt.datetime.combine(scan_start, dt.time.min, since.tzinfo)
     cal_hi = dt.datetime.combine(calendar_end, dt.time(23,59,59), since.tzinfo)
     cal_recovered, cal_unrecovered = False, False
@@ -454,20 +568,29 @@ def check_coverage(scope_kind, since, policy, root, stage_min=2, list_accounts=F
         if group['meta']['tool']=='search_calendar':
             by_term.setdefault(group['meta']['queries'], []).append(group)
     for term, term_groups in by_term.items():
+        defined = any(calendar_covered(account_name(opp), contact_domains(opp, contacts, internal, generic)[0], term)
+                      for opp in scope)
         complete_ranges = []
+        supplemental_ranges = []
         for group in term_groups:
             rng = calendar_range(group['meta']['args'], since.tzinfo)
-            if group['complete'] and rng is None:
+            if rng is None:
                 errors.append(f'calendar range missing or insufficient for {list(term)}: start_date/end_date missing or naive')
             elif group['complete']:
                 complete_ranges.append(rng)
-        gap = union_gap(complete_ranges, cal_lo, cal_hi) if complete_ranges else cal_lo
+            elif not defined:
+                supplemental_ranges.append(rng)
+        required_ranges = [(cal_lo, cal_hi)] if defined else supplemental_ranges
+        gap = next((gap for lo, hi in required_ranges
+                    if (gap := union_gap(complete_ranges, lo, hi)) is not None), None)
         if gap is None:
-            cal_queries.extend(term)
+            if defined:
+                cal_queries.extend(term)
             for group in term_groups:
                 if not group['complete']:
                     cal_recovered = True
-                    print(f"Superseded Calendar call for {list(term)}: complete split windows cover {cal_lo.date()} to {cal_hi.date()}.")
+                    lo, hi = (cal_lo, cal_hi) if defined else calendar_range(group['meta']['args'], since.tzinfo) or (cal_lo, cal_hi)
+                    print(f"Superseded Calendar call for {list(term)}: complete split windows cover {lo.date()} to {hi.date()}.")
                     continue
                 for event in (event for page in group['pages'] for event in page['events']):
                     key = event.get('event_id') or json.dumps(event, sort_keys=True)
@@ -480,10 +603,6 @@ def check_coverage(scope_kind, since, policy, root, stage_min=2, list_accounts=F
             for group in term_groups:
                 errors.extend(group.get('deferred', []))
                 cal_unrecovered |= bool(group.get('capped'))
-    if daily:
-        print(f'Daily scan window: {scan_start} through {since.date()} (previous scheduled run).')
-        if not inbox:
-            errors.append('Missing successful weekday inbox search')
     missing_calendar, missing_mail, no_domain, matched_mail, matched_events, covered_threads = [], [], [], [], [], set()
     mail_start = q_start if scope_kind=='forecast' else since.date()-dt.timedelta(days=policy['pipeline'].get('activity_query_days',30))
     for opp in scope:
@@ -504,7 +623,7 @@ def check_coverage(scope_kind, since, policy, root, stage_min=2, list_accounts=F
             if retried_from is not None:
                 covered_threads.add(opp['Id'])
                 print(f'Not checked: {account}; Gmail retry succeeded, earlier window {mail_start} to {retried_from} unread.')
-        if not daily and opp['Id'] not in covered_threads:
+        if opp['Id'] not in covered_threads:
             missing_mail.append(account)
         for page in inbox:
             for email in page['emails']:
@@ -530,20 +649,8 @@ def check_coverage(scope_kind, since, policy, root, stage_min=2, list_accounts=F
         if unmatched:
             event_summary += '; unmatched (reconcile before proposing on these Accounts): ' + ' | '.join(unmatched)
     n=len(scope)
-    if daily:
-        print(f"Coverage (pipeline-daily): {n} in scope. Inbox {'complete' if inbox else 'incomplete'}. Calendar {n-len(missing_calendar)}/{n}. Contact domains {n-len(no_domain)}/{n}.")
-        print('Domain-matched email receipts: '+json.dumps(matched_mail))
-        print('Domain-matched calendar receipts: '+json.dumps(matched_events))
-        if hygiene is not None:
-            flagged=[d for d in hygiene if d.get('triggers')]
-            missing=[d.get('Account') or d['Id'] for d in flagged if d['Id'] not in covered_threads]
-            thread_missing_ids={d['Id'] for d in flagged if d['Id'] not in covered_threads}
-            print(f'Thread reads {len(flagged)-len(missing)}/{len(flagged)}.')
-            if missing:
-                errors.append('Thread read missing: '+', '.join(missing))
-    else:
-        desc=f'open S{stage_min}+' if scope_kind=='pipeline' else f'S{stage_min}+ CloseDate this quarter, or next quarter with Amount'
-        print(f"Coverage ({scope_kind}, calls since {since.isoformat(timespec='minutes')}): {n} deals in scope ({desc}). Gmail {n-len(missing_mail)}/{n}. Calendar {n-len(missing_calendar)}/{n}.")
+    desc=f'open S{stage_min}+' if scope_kind=='pipeline' else f"S{stage_min}+ CloseDate this quarter, or next quarter with {policy['forecast']['amount_field']}"
+    print(f"Coverage ({scope_kind}, calls since {since.isoformat(timespec='minutes')}): {n} deals in scope ({desc}). Gmail {n-len(missing_mail)}/{n}. Calendar {n-len(missing_calendar)}/{n}.")
     if cal_unrecovered:
         print('Calendar: result cap reached; retrieval incomplete.')
     elif cal_recovered:
@@ -556,7 +663,7 @@ def check_coverage(scope_kind, since, policy, root, stage_min=2, list_accounts=F
         for opp in sorted(scope,key=account_name):
             print('  '+account_name(opp))
     if no_domain and 'contact' in objects:
-        errors.append(('Contact domain unavailable: ' if daily else 'No Contact domain in evidence: ')+', '.join(sorted(no_domain)))
+        errors.append('No Contact domain in evidence: '+', '.join(sorted(no_domain)))
     if missing_mail:
         errors.append('Gmail missing: '+', '.join(sorted(missing_mail)))
     if missing_calendar:
@@ -583,13 +690,12 @@ def check_coverage(scope_kind, since, policy, root, stage_min=2, list_accounts=F
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--scope',choices=['pipeline','pipeline-daily','forecast'],required=True)
+    parser.add_argument('--scope',choices=['pipeline','forecast'],required=True)
     parser.add_argument('--since',required=True)
     parser.add_argument('--policy',default=str(Path(__file__).resolve().parents[1]/'policy.yaml'))
     parser.add_argument('--calls-dir',type=Path,help='Explicit saved connector result directory; required when multiple sessions exist')
     parser.add_argument('--stage-min',type=int)
     parser.add_argument('--list',action='store_true')
-    parser.add_argument('--hygiene')
     parser.add_argument('--json',action='store_true')
     args=parser.parse_args(argv)
     try:
@@ -597,10 +703,9 @@ def main(argv=None):
         if since.tzinfo is None:
             raise ValueError('--since needs a timezone offset')
         policy=yaml.safe_load(Path(args.policy).read_text())
-        hygiene=json.loads(Path(args.hygiene).read_text()) if args.hygiene else None
         output=io.StringIO()
         with contextlib.redirect_stdout(output):
-            code=check_coverage(args.scope,since,policy,resolve_calls_dir(args.calls_dir),args.stage_min if args.stage_min is not None else stage_num(policy['pipeline']['stages'][0]),args.list,hygiene)
+            code=check_coverage(args.scope,since,policy,resolve_calls_dir(args.calls_dir),args.stage_min,args.list)
         lines=output.getvalue().splitlines()
         affected=next((json.loads(l[len(AFFECTED_PREFIX):]) for l in lines if l.startswith(AFFECTED_PREFIX)),None)
     except (ValueError, OSError, TypeError) as exc:

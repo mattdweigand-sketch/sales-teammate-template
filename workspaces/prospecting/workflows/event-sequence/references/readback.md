@@ -4,15 +4,22 @@
 
 Use the full saved `apollo_sequences_create` or `apollo_sequences_update` response for the exact approved sequence as native copy evidence.
 Use its stored steps, touches, and templates with subject and body.
+Use the confirmed sideloaded emailer_steps, emailer_touches and emailer_templates joined by native IDs. Native template copy is subject and body_html, not a model-reshaped response.
 Compare each touch's subject and body with the approved copy after normalizing only the HTML Apollo sanitizes.
+Compare each native touch's include_signature with its approved step's required boolean. A mismatch is FAIL with no enrollment payload. Missing approved values are a ValueError.
+Record the approved and native signature flags. Bodies already ending with a sign-off should use approved false, so Apollo does not append another signature.
 Preserve text and links. Merge variables must match exactly. Unexplained differences stay partial.
 Report the pre-enrollment comparison result against the approved snapshot, including steps, touches, subject/body templates, merge variables, schedule and stop on reply.
+Include the saved event_launch_check PASS, FAIL or STOP, exact mismatches, missing fields, structure errors and full not_checked list in the receipt.
+FAIL stops enrollment with one fix proposal. STOP for missing documented fields or unknown structure stops and asks Operator, with no enrollment payload.
+Report mark_finished_if_reply, emailer_schedule_id, sequence_by_exact_daytime, wait_time and wait_mode comparisons. The planned payload supplies the mailbox check, not the native sequence.
+Only fields outside the connector schema stay not_checked without blocking enrollment. They do not establish a verified native readback.
 Missing templates stop before enrollment and require Operator's input. Never infer native copy or send without the completed comparison.
 Read `apollo_emailer_campaigns_show` for the exact approved campaign and sequence when accessible. Compare native steps, mailbox, and schedule against Operator's approved snapshot.
 On a permission error only, quote the error and use available Apollo campaign and message search tools with complete pages for counts, active state, stop on reply, and first send.
-When campaigns_show is blocked, take steps, native interval settings, named schedule and timezone from the stored create or update response and compare them with approval.
-Never fabricate absolute send timestamps. Missing required settings or unsupported interval readback stays partial.
-Compare available native scheduled-message timestamps with the approved expected local windows. Report discrepancies before claiming verified timing.
+Attempt the live read on every run. When campaigns_show is blocked on this run, take steps and exact send times from the stored create or update response and compare them with approval.
+The readback receipt names that saved source, `apollo_sequences_create` or `apollo_sequences_update`, its response timestamp, and the quoted current-read failure.
+Never assume live access is unavailable on a later run.
 Take the mailbox from the saved `apollo_emailer_campaigns_add_contact_ids` response if it returns each contact's sending account. After the first send, also check the sender on get_content results.
 If neither shows the mailbox, use the accepted enrollment request's `send_email_from_email_account_id`, labeled "mailbox from accepted enrollment request".
 That mailbox source counts as verified only when the enrollment call succeeded with no errors and the ID matches the approved mailbox. Missing sources or any mismatch stay partial.
@@ -28,12 +35,10 @@ Otherwise state "first send pending, sent-content check not yet run". Never use 
 Reconcile the original approved recipient set as remaining approved Contacts plus reported drops and holds. Compare actual enrolled Contact IDs and email addresses with only the remaining set.
 Report unexpected missing, duplicate, extra, or errored recipients explicitly. Documented reply drops and holds are not unexplained enrollment failures.
 Reconcile scheduled-message counts to the approved steps, actual email steps, and remaining approved recipients. LinkedIn tasks are not email messages.
-Report the native first-send date and time with timezone when available, sending mailbox, enrolled count versus approved count, and stop-on-reply setting.
-With a pending first send and no native timestamp, report pending plus matched intervals, schedule and expected windows. Do not invent an exact datetime.
+Report the native first-send date and time with timezone, sending mailbox, enrolled count versus approved count, and stop-on-reply setting.
 Enrollment may already have sent real email. Say what native evidence proves sent versus scheduled, not that every email is unsent.
 Readback is verified when the create or update response copy, scheduled subjects, counts, active state, stop on reply, and first send all match approval.
 Matching steps, mailbox, schedule, recipient reconciliation, and sent-content checks when applicable are also required.
-First-send matching uses its native timestamp when available, or an explicitly pending first send with verified intervals and named schedule. Unknown native state stays partial.
 Only the matched pre-enrollment copy result plus complete native readback satisfies readback. The permission-error search path changes the read tools, never the copy gate.
 Other gaps make the outcome partial.
 Report native CRM push status from enrichment and enrollment responses or reads when available. If unavailable, say not checked. Never infer a successful Salesforce sync from enrollment counts.
@@ -44,8 +49,9 @@ For partial results show one exact fix proposal and wait for its approval. Never
 | Scope | Event, source list, approved snapshot and link, no direct Salesforce writes, with Apollo CRM sync disclosed |
 | Enrollment | Original approved, remaining after recheck, and actual recipient counts, exact set differences, and returned sequence/campaign references |
 | Reply recheck | When run, window, query shapes, contacts checked, replies found, dropped Contacts and reasons, holds and reasons, and attached saved receipt file |
-| Delivery | Mailbox, intervals, named schedule, timezone, expected windows, native first send when available, exact steps, scheduled-message count and native sent evidence |
+| Delivery | Mailbox, first send with timezone, exact steps, scheduled-message count, and any native sent evidence |
 | Copy | Pre-enrollment comparison result, stored create/update steps, touches and templates, normalized-copy comparison, complete scheduled-subject checks, and sent-content results or first send pending, sent-content check not yet run |
+| Launch check | event_launch_check result, exact mismatches, missing fields, structure errors, normalization notes and full not_checked list, with the unchanged PASS payload saved outside Git |
 | Stop | Native stop-on-reply setting and evidence source |
 | CRM sync | Native CRM push status when available, with its source, otherwise not checked |
 | Holds | Every excluded or needs-input contact, duplicate, mismatch, failure, and applied per-list override |

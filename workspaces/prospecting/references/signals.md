@@ -35,9 +35,11 @@ tiers:
 # Prospect Signals
 
 **Find evidence that a company is planning, funding, hiring for, testing, deploying, or expanding AI.** Search broadly, identify the actual initiative, and connect it to a relevant person
-and potential Example Product use case.
+and potential configured product use case.
 
 A signal establishes a reason to investigate. It does not establish pain, available budget, purchase intent, or permission to contact an account.
+
+This AI-oriented taxonomy is a sample profile. Review its fit with the configured market and product evidence during onboarding. Signal IDs remain stable for lineage.
 
 ## Signals to look for
 
@@ -141,7 +143,7 @@ of vague postings does not fix missing substance.
 Search snippets help locate evidence; read the full source before classifying it. Attribute employee observations and vendor claims to their speakers rather than treating them as
 company-wide commitments.
 
-## Identify Example Product relevance
+## Identify configured product relevance
 
 Capture customer-facing initiatives as well as internal ones. Label each finding:
 
@@ -159,29 +161,9 @@ announcement can remain relevant when current evidence supports it. Mark missing
 
 Count one underlying initiative once, even when several outlets or posts cover it. Preserve updates that show a change in its stage or scope.
 
-## Verified Example Product adoption
-
-These require authorized, privacy-checked warehouse results; public mentions cannot substitute for the account-level checks.
-
-### **Paid individual adoption**
-
-- Meaning and use. Paid individuals are present and no organizational subscription is mapped to the account. Use the completed snapshot and freshness rules in `policy.yaml` and this file's
-  frontmatter. Carries `paid_individuals_present`. Outreach may state `policy.prospecting.user_scan.statements.individuals_only` per the talk-track Claim boundaries.
-
-### **Organizational adoption**
-
-- Meaning and use. Outreach may state `policy.prospecting.user_scan.statements.org_adopted` the same way. Adds context; it does not independently establish an outreach opportunity.
-
-### **No adoption found**
-
-- Meaning and use. Make no adoption claim. An empty result is not proof of absence; account mapping may be incomplete.
-
-
-Do not infer a champion's identity, personal payment, unsanctioned use, or company disapproval. Never expose individual adoption identities, user emails, user or seat counts, queries, or usage timing.
-
 ## Record and use findings
 
-Keep **account · initiative and stage · owner or team · evidence classification · source URL, supporting quote, and dates · Example Product relevance**. Mark unknowns explicitly and separate
+Keep **account · initiative and stage · owner or team · evidence classification · source URL, supporting quote, and dates · configured product relevance**. Mark unknowns explicitly and separate
 observed facts from proposed use cases. Retain useful discovery evidence even when it does not qualify.
 
 ## Qualification for automated stages

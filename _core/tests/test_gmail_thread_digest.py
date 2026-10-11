@@ -33,7 +33,7 @@ class ThreadDigestTests(unittest.TestCase):
 
     def test_string_to_is_not_character_split(self) -> None:
         path = self.save({"email_results": {"emails": [{
-            "date": "2026-09-20T10:00:00Z", "from_": "rep@seller.example", "to": "buyer@example.com",
+            "date": "2026-09-20T10:00:00Z", "from_": "operator@seller.example", "to": "buyer@example.com",
             "subject": "Pilot", "body": "<p>Hello</p>",
         }]}})
         out = self.run_digest(path)
@@ -74,7 +74,7 @@ class ThreadDigestTests(unittest.TestCase):
         filler = "Thanks for the walkthrough. " * 12
         path = self.save({"email_results": {"emails": [{
             "email_id": "m-long", "thread_id": "t-long", "date": "2026-09-20T10:00:00Z", "from_": "buyer@example.com",
-            "to": ["rep@seller.example"], "subject": "Re: order form",
+            "to": ["operator@seller.example"], "subject": "Re: order form",
             "body": filler + "We cannot sign this quarter.",
         }]}})
         out = self.run_digest(path)

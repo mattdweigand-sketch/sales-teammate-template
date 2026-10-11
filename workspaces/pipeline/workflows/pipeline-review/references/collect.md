@@ -1,68 +1,48 @@
 # Collect
 
 Read at the Collect step. Save each query result in the sandbox. Deduplicate SELECT fields before querying.
-For pagination, use only the exact cursor returned by that same search; continue until no `next_cursor` and retain all pages. Salesforce queries must also be complete.
+For Gmail pagination, use only the exact cursor returned by that same search. Continue until no `next_cursor` and retain all pages. Salesforce queries must also be complete.
 Page one call at a time. Print only date, sender, subject, and snippet per message. The saved page stays whole.
 Resume from the last `next_cursor`, never page one. Retry a failed page once with the same cursor, then record a gap per item 5.
 `<userId>` comes from `rules#run_start`.
 
 1. Opportunities. Record the original open count.
-   Find active deal threads by Account name with `pplx project sessions list --search` in the current project.
-   Verify the exact title `<Account> deal` for that Opportunity's Account, the same title check used in Task triage. Keep the verified session id and link.
-   An ambiguous title or unavailable search is needs-input, not proof that no deal thread exists. Hold proposals on that record until ownership is verified.
-   Verify the thread belongs to the resolved Opportunity. An Account title alone never assigns a Task among several possible Opportunities.
-   On weekdays, also select `<policy.forecast.amount_field>` for Top 3 ranking, deduplicating it with the other fields.
-   ```sql
-   SELECT Id, Name, StageName, Amount, CloseDate, Next_Steps__c, ForecastCategoryName, Account.Name, AccountId,
-          <each field under policy.pipeline.required_fields and policy.pipeline.early_required_fields, plus each policy.pipeline.conditional_fields field>
-   FROM Opportunity WHERE OwnerId = '<userId>' AND IsClosed = false ORDER BY CloseDate
-   ```
-2. Tasks, Events, and Contacts for those deals. Retain undated open Tasks for action-reuse review; they do not establish activity. Last touch uses both Opportunity and Account linkage.
-   ```sql
-   SELECT Id, Subject, ActivityDate, Status, IsClosed, WhatId, AccountId, WhoId, Who.Name FROM Task
-   WHERE (WhatId IN (<opp ids>) OR AccountId IN (<account ids>))
-     AND (IsClosed = false OR ActivityDate = LAST_N_DAYS:<policy.pipeline.activity_query_days>)
-
-   SELECT Id, Subject, ActivityDate, StartDateTime, EndDateTime, WhatId, AccountId, WhoId, OwnerId FROM Event
-   WHERE (WhatId IN (<opp ids>) OR AccountId IN (<account ids>))
-     AND (ActivityDate = LAST_N_DAYS:<policy.pipeline.activity_query_days> OR ActivityDate >= TODAY)
-
-   SELECT Id, Name, Email, AccountId FROM Contact WHERE AccountId IN (<account ids>) AND Email != null
-
-   SELECT OpportunityId, ContactId, Contact.Name, Contact.Email, Role, IsPrimary FROM OpportunityContactRole
-   WHERE OpportunityId IN (<opp ids>)
-   ```
+   List all current project sessions with `pplx project sessions list <project> --limit <L> --offset <O>`, starting at 0 and advancing by L until a short page.
+   Save each unchanged raw list bound to its requested offset in `pages` entries with `offset` and `sessions`, plus `limit`, `project_uuid`, and `accounts`.
+   Each Account input has `account_id` and `account_name`. Run `deal_thread_match --input <sandbox.json>` and keep its output, owner session id, and link.
+   The helper matches exact normalized names after legal suffix removal, using only titles ending in " deal". Do not filter the project listing with `--search` or guess a match.
+   For every Account, including listed matches, call `session_list` with type `computer`, search `"<account_name> deal"` and limit `100`. A listing alone never proves absence or uniqueness.
+   Save raw JSON in `account_searches` by account_id (null on failure or unavailable tool). Rerun the helper before routing or proposals. Missing search evidence never establishes an owner or local.
+   Missing, failed, malformed or at-limit searches hold that Account only. Same-project exact matches merge by context_uuid with the listing. Ambiguity and collisions still hold.
+   `owner` routes evidence to the deal thread. `local` keeps the existing review path. `needs_input` or `incomplete` holds proposals on the affected record.
+   Load shared `workspaces/pipeline/references/deal-activity-reads.md` "Opportunities" for the native fields and owned-open query.
+2. Tasks, Events, and Contacts for those deals. Use the shared "Activity" native templates, fully paged, retaining undated open Tasks for review.
    Account domains come from external Contact emails, excluding `policy.tooling.internal_domains` and `policy.tooling.generic_email_domains`.
    Use a verified Contact ID for Task linkage; a name alone is insufficient.
 3. Run `policy.tooling.scripts.hygiene_check <opps> --tasks <tasks> --events <events> --as-of <run start with local offset> --json`.
    Its source receipts own mechanical triggers, last touch, and field checks. Event-only `new_activity` is displayed as elapsed, attendance unverified, never a write basis.
-   Keep `task_review_required` and `open_task_candidates` for Task review per `workspaces/pipeline/workflows/pipeline-review/references/proposals.md` "Task review".
-   `task_gap` is a trigger. Task review decides the fix; review `milestone_task_candidates` per `rules#followup_task` before retaining a later Task alongside the current follow-up.
-4. Collect Gmail, Calendar, and Slack for deals in `policy.pipeline.stages`. Run the Slack section on both branches, even for deals not flagged by Gmail or Salesforce.
-   Friday also includes every deal in `policy.pipeline.early_stages`, even without a mechanical trigger. Review enough dated buyer evidence to test `policy.pipeline.closed_lost_silence_days`.
-   If the activity window is shorter than that threshold, extend the Friday Account-thread read to cover it. Incomplete retrieval never proves silence.
-   After paging finishes, pass all saved output pages for each Gmail query together to `policy.tooling.scripts.gmail_digest`, keeping their paired `input_` files beside them.
-   The digest is an index that cuts each body and marks the cut. Read the full body, by the `email_id` it prints, of any message a proposal rests on.
-   Derive `new_activity` from these results per `workspaces/pipeline/workflows/pipeline-review/references/triggers.md`.
-   For every flagged deal, record the newest message in either direction with its date, whether the user's last message was answered, and the next scheduled Event.
-   No next-step proposal is built without this thread record.
-   The freshest dated evidence across Gmail, Calendar, Salesforce, and Slack wins for each supported fact, not stale wording from another source.
-   Calendar scheduling never proves an outcome. Put unresolved contradictions in questions rather than choosing an unsupported write.
-   - Friday. For every in-scope Account domain, search `(from:@<domain> OR to:@<domain>) after:<policy.pipeline.activity_query_days ago>`, fully paged.
-     Search Calendar by Account name over `policy.tooling.calendar_lookback_days` through `policy.tooling.calendar_lookahead_days`, per `rules#calendar_search`.
-     These complete Account reads cover the narrower inbox scan, so do not run it. Also query the week's field history:
+   `task_gap` is a trigger for triage, not a Task create here. Review `milestone_task_candidates` per `rules#followup_task` before treating a later Task as an extra current-action Task.
+   Identify all Operator-owned open sales Tasks by OwnerId equal to the run user per `rules#task_date_coordination`. Save native Task state and `run.user_id` for the renderer.
+   Split extra Tasks, date mismatches and absent current-action Tasks into read-only `triage` rows. Route only deal-context findings to deal threads, even when the same deal has both.
+   For a triage-only finding, keep the flagged deal in `deals` with its read-only `triage` row, never invent a `routed` deal-context row or approval label.
+   Never propose any Task or next-step change. Missing or unreadable owner evidence holds that finding as needs-input.
+   Future Tasks stay outside `triage` findings. They may name a field-only ownership boundary, never a triage item or deal-thread Task proposal.
+4. Gmail and Calendar, every weekly or requested run, including early stages. Use shared `workspaces/pipeline/references/deal-activity-reads.md` "Account-domain Gmail" for every Account thread.
+   Read Slack even for deals not flagged by Gmail or Salesforce. The freshest dated evidence across Gmail, Calendar, Salesforce, and Slack wins.
+   Search Calendar by Account name over `policy.tooling.calendar_lookback_days` through `policy.tooling.calendar_lookahead_days`, per `rules#calendar_search`.
+   These Account reads cover any inbox scan. Query field history since the previous weekly review:
      ```sql
      SELECT OpportunityId, Opportunity.Name, Opportunity.Account.Name, Field, OldValue, NewValue, CreatedDate
      FROM OpportunityFieldHistory
      WHERE Opportunity.OwnerId = '<userId>' AND CreatedDate > <previous Friday run start> AND Field IN ('created', 'StageName', 'CloseDate')
      ```
-   - Other days, including manual weekend runs. State the window from the previous scheduled run date (Monday starts last Friday).
-     Run one inbox search `after:<that date>` minus `-from:<domain>` for every `policy.tooling.internal_domains`, and Calendar by in-scope Account name
-     from that date through `policy.tooling.calendar_lookahead_days`, per `rules#calendar_search`. Keep only matching external Account domains.
-     This scan finds triggers, not complete deal state. For every flagged deal, also read its domain thread in both directions with
-     `(from:@<domain> OR to:@<domain>) after:<policy.pipeline.activity_query_days ago>`, fully paged, and use its Calendar results.
-5. Coverage. Friday: `policy.tooling.scripts.coverage_check --scope pipeline --since <run start with local offset> --json`.
-   Other days: `policy.tooling.scripts.coverage_check --scope pipeline-daily --since <run start with local offset> --hygiene <step 3 JSON output> --json`.
+   For owned S1 deals, also page all StageName history without a date cutoff to establish a prior S2+ backward move. History alone does not establish its lost-path reason.
+   Review that reason against dated retrieved buyer evidence and existing notes. Missing history or evidence is unknown, not proof of a lost path.
+     ```sql
+     SELECT OpportunityId, Field, OldValue, NewValue, CreatedDate FROM OpportunityFieldHistory
+     WHERE OpportunityId IN (<owned S1 ids>) AND Field = 'StageName' ORDER BY CreatedDate
+     ```
+5. Coverage. `policy.tooling.scripts.coverage_check --scope pipeline --since <run start with local offset> --json`.
    Save the output in the sandbox; the report and notification both render from that file. Rerun and save again after evidence changes or a gap is repaired.
    Reconcile any unmatched or domain-unverified Salesforce Event before proposing on its Account; zero Account-name results cannot pass this check.
    Search its Subject or sweep the date range, splitting below `policy.tooling.calendar_result_cap`, match attendee domains, save results, and rerun per `rules#calendar_search`.
@@ -70,7 +50,7 @@ Resume from the last `next_cursor`, never page one. Retry a failed page once wit
    If a gap cannot be resolved, label the report incomplete, disclose it, and withhold affected proposals. Do not silently exclude test-looking records or invent domains.
 6. `not checked` per `rules#not_checked_means`. Whether the user's last message was answered, and the newest message, are bounded by `rules#absence_conclusions`.
    Preserve errors and reconciliation evidence. Subjects alone support metadata-only notes, not email-body conclusions.
-7. Friday, only when Operator supplies a `pilot-usage` report in this thread. Take the `AccountId` from the item 1 Opportunity the report links or Operator names, never by matching a name.
+7. Friday only, when Operator supplies a `pilot-usage` report in this thread. Take the `AccountId` from the item 1 Opportunity the report links or Operator names, never by matching a name.
    Run `SELECT Id, Name, Admin_Organization_UUID__c, Org_UUID__c FROM Account WHERE Id = '<AccountId>'` and save the result.
    No linked or named Opportunity in item 1, or no Account row returned, makes the report needs-input. This read feeds only the `rules#pilot_handoff` identity check.
    It reads no warehouse data and approves no write.

@@ -4,8 +4,9 @@
 Usage:
   python3 gmail_contact_stats.py <owner_email> <output_json> [<output_json> ...]
                                  --as-of <run start with local offset>
-                                 [--only a@x.test,b@y.test] [--policy PATH]
+                                 [--only a@x.com,b@y.com] [--policy PATH]
                                  [--slack-replies reviewed.json]
+                                 [--send-hold]
 
 Reads explicit JSON files that search_email calls write to
 ~/.perplexity/sessions/<session-id>/tool_calls/call_external_tool/,
@@ -16,6 +17,7 @@ comma-separated list): sent count, last sent date, last inbound date and type
 (substantive, ooo, bounce, calendar), unanswered count = distinct sent
 messages dated after the last substantive inbound, and the newest non-bounce
 message and thread id for reply threading. No bodies are printed.
+DRAFT-labeled messages are excluded from all counts, dates and reply threading.
 A bounce from a relay address is attributed to every tracked address found in
 its text. Subjects starting with Accepted, Declined, Tentative,
 Tentatively accepted, Invitation, Updated invitation, Canceled event,
@@ -23,6 +25,9 @@ Canceled, or Cancelled followed by a colon are calendar notices, not
 substantive. Dates are normalized before comparison; unknown dates stop for review. Summary dates use the explicit --as-of offset.
 Optional reviewed Slack receipts use policy.tooling.slack_lookback_days and
 report only a positive auto-move veto. Missing replies never prove absence.
+Optional --send-hold prints the latest actual sent timestamp and active/cold draft
+holds from policy.followup. Holds use elapsed UTC time, not calendar-date changes.
+Equality releases the hold. A released hold is not recipient or write permission.
 """
 import argparse
 import json
@@ -30,7 +35,7 @@ import math
 import re
 import sys
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.utils import getaddresses
 from pathlib import Path
 
@@ -90,6 +95,8 @@ def internal(a, internal_domains):
 def load_emails(paths):
     emails = {}
     for e in load_email_records(paths):
+        if "DRAFT" in (e.get("labels") or []):
+            continue
         e["_date"] = parse_email_date(e.get("date"))
         emails[e["email_id"]] = e
     return emails
@@ -132,6 +139,23 @@ def slack_reply_blocks_auto_move(last_sent, slack_reply):
     return last_sent is not None and slack_reply is not None and slack_reply >= last_sent
 
 
+def sent_mail_hold_blocks_draft(last_sent: datetime | None, as_of: datetime, hold_days: int) -> bool:
+    """Compare UTC instants so a local DST clock change cannot shorten or extend a hold."""
+    if not isinstance(as_of, datetime) or as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("send hold requires an aware check timestamp; review required")
+    if type(hold_days) is not int or hold_days < 0:
+        raise ValueError("send hold requires a non-negative integer duration; review required")
+    if last_sent is None:
+        return False
+    if not isinstance(last_sent, datetime) or last_sent.tzinfo is None or last_sent.utcoffset() is None:
+        raise ValueError("send hold requires an aware actual sent timestamp; review required")
+    sent_utc = last_sent.astimezone(timezone.utc)
+    check_utc = as_of.astimezone(timezone.utc)
+    if sent_utc > check_utc:
+        raise ValueError("actual sent timestamp is later than the hold check; review required")
+    return check_utc < sent_utc + timedelta(hours=24 * hold_days)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Per-contact sent, inbound, and unanswered counts from saved search_email outputs.")
     parser.add_argument("owner", help="owner email address")
@@ -139,6 +163,7 @@ def main(argv=None):
     parser.add_argument("--as-of", required=True, help="run-start ISO datetime with local offset")
     parser.add_argument("--only", help="comma-separated addresses to report")
     parser.add_argument("--slack-replies", help="reviewed positive Slack reply receipts, a veto only, never proof of no reply")
+    parser.add_argument("--send-hold", action="store_true", help="print active/cold draft holds using aware sent timestamps and policy.followup")
     parser.add_argument("--policy", default=str(CORE / "policy.yaml"))
     args = parser.parse_args(argv)
     try:
@@ -147,7 +172,11 @@ def main(argv=None):
             raise ValueError("--as-of needs a timezone offset")
     except ValueError as exc:
         parser.error(str(exc))
-    tooling = yaml.safe_load(Path(args.policy).read_text())["tooling"]
+    policy = yaml.safe_load(Path(args.policy).read_text())
+    tooling = policy["tooling"]
+    followup = policy.get("followup") if args.send_hold else None
+    if args.send_hold and not isinstance(followup, dict):
+        raise ValueError("--send-hold requires the approved policy.followup settings; review required")
     internal_domains = tuple(tooling["internal_domains"])
     slack_replies = load_slack_replies(args.slack_replies, as_of, tooling["slack_lookback_days"]) if args.slack_replies else {}
     only = {a.strip().lower() for a in args.only.split(",") if a.strip()} if args.only else None
@@ -173,6 +202,7 @@ def main(argv=None):
     for p in sorted(by):
         msgs = sorted(by[p], key=lambda e: e["_date"])
         sent = [e for e in msgs if addr(e["from_"]) == owner]
+        last_sent = sent[-1]["_date"] if sent else None
         inbound = [e for e in msgs if addr(e["from_"]) == p or p in e.get("_bounce_for", ())]
         last_sub = None
         for e in inbound:
@@ -183,6 +213,11 @@ def main(argv=None):
         newest = ([e for e in msgs if kind_of(e) != "bounce"] or msgs)[-1]   # thread for a reply, never the bounce
         print(f"\n{p}")
         print(f"  sent={len(sent)} last_sent={sent[-1]['_date'].astimezone(as_of.tzinfo).date().isoformat() if sent else '-'}")
+        if args.send_hold:
+            print(f"  last_sent_at={last_sent.astimezone(as_of.tzinfo).isoformat() if last_sent else '-'}")
+            for status in ("active", "cold"):
+                held = sent_mail_hold_blocks_draft(last_sent, as_of, followup.get(f"sent_mail_hold_days_{status}"))
+                print(f"  send_hold_{status}={str(held).lower()}")
         if inbound:
             li = inbound[-1]
             print(f"  last_inbound={li['_date'].astimezone(as_of.tzinfo).date().isoformat()} type={kind_of(li)} subject={li.get('subject','')[:60]!r}")

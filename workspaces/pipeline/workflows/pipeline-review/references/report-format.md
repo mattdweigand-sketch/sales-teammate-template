@@ -13,32 +13,19 @@ It is the run's label record, not approval; approval is Operator's reply in the 
 
 ## Routed to deal threads
 
-Use `routed` for records owned by active deal threads, one row per Opportunity with `deal`, `name`, `thread_url`, and a one-line `reason`.
-The section lists Account, deal-thread link, and reason. Count routed records separately from local flagged deals, recommendations, questions, and withheld entries.
-Include routed records in reviewed, never in `deals` or local approval labels. A failed delivery is needs-input, recorded in run gaps, never claimed as delivered.
-Keep the transport and successful-send receipt in the sandbox. The list records ownership and destination, not approval or proof of delivery.
+Use `routed` only for deal-context findings, with `kind: deal_context`, `deal`, `name`, `thread_url`, a one-line `reason` and `delivery`. One row per Opportunity, never Task findings.
+Set `delivery.command` to `mail_send` and `delivery.status` to `delivered` or `failed`, from the actual send result. Retired `session_send` is rejected. A missing delivery record fails rendering.
+The routed section lists Account, deal-thread link, reason, and command for delivered rows only. Failed deliveries appear under needs-input with the attempted command.
+Count both separately from local flagged deals, recommendations, questions, and withheld entries. Include them in reviewed, never in `deals` or local approval labels.
+Keep actual send receipts in the sandbox. The delivery record is not approval. Failed delivery never counts as routed or no-trigger and never suppresses a notification.
 
-## Top 3 actions today
+## Triage findings
 
-On the weekday branch, add `today_actions` to the existing run file, empty when there are no supported candidates. Friday output stays unchanged.
-Use only reviewed deals in `policy.pipeline.stages` and evidence already collected from Salesforce, Gmail, Calendar, and Slack. Do not add searches, writes, or state files for this section.
-Candidate evidence must still match the kind's sources below. Slack does not turn a message into a Gmail `buyer_reply` candidate.
-Include deals with a relevant meeting or due action even when they have no hygiene trigger. Keep flagged-deal counts and proposal labels unchanged.
-Each candidate has `deal` as its Opportunity ID, `name`, `kind`, `date` in YYYY-MM-DD, a one-line `reason`, and `evidence` using the existing Evidence schema below.
-Copy its Salesforce size under the exact field named by `policy.forecast.amount_field`. Null, empty, or absent ranks as blank. Zero is set. Never fall back to Amount when ARR is blank.
-
-- `buyer_reply` uses Gmail evidence of a buyer request needing Operator and the message date. Set `reply_reviewed` true only after reviewing the already retrieved thread in both directions.
-  Say that a reply is needed in the retrieved thread. A missing reply in a partial search is not proof of no reply anywhere. Do not rank an outbound message or an answered request.
-- `meeting` uses a Salesforce Event or Calendar event scheduled today or tomorrow in the run timezone. Use its start date and explain what Operator needs to prepare or attend.
-- `due` uses an open Salesforce Task or the current next step due today or overdue. Use the action deadline, never the note entry date or a proposed replacement date.
-- `date_at_risk` uses the existing hygiene finding and Salesforce CloseDate. Explain the date risk without inventing buyer intent.
-
-The renderer ranks those kinds in the order above, then earlier dates, `policy.forecast.amount_field` descending with blanks last, deal names, IDs, and reasons.
-It keeps the highest-ranked reason per deal and shows at most three deals.
-Top 3 may name a routed deal, marked "in deal thread", without a local proposal.
-It excludes withheld deals and deals affected by coverage gaps. An incomplete process or a coverage gap with unknown scope leaves the section empty.
-Gmail and Calendar IDs resolve against the saved results and their dates must match the candidate date. Salesforce dates and action meaning require review against the saved records.
-Write one short reason per deal with no semicolons, em dashes, or colons. The section uses Priority labels for reading order. Only the proposal labels below it can approve writes.
+Use read-only `triage` rows for extra Operator-owned Tasks, date mismatches and current-action gaps, even when a deal-context row is routed for the same Opportunity.
+Each row has `deal`, `name`, a one-line `reason` and `triage_next_step: true`, native `triage_owned_task` or `triage_task_gap: true`. No `changes` or `delivery`. Findings never carry approval
+labels or send requests.
+Future Tasks never enter these triage findings. They can remain field-only ownership markers, without a Task proposal or delivery to triage.
+Show `Triage owns Task <Id>` or `Triage owns the Task gap`. Gap markers are findings, not proof of complete reads.
 
 ## Approval boundary
 
@@ -49,18 +36,9 @@ A deal may have one clear recommendation and a separate question; hold only the 
 
 ## Next steps display
 
-Every deal block shows three sections: Current next steps, Recommended next steps, and Evidence.
-For a next-step-only change, set the exact current first entry and the exact proposed next-step sentence, not the unchanged history twice.
-The write payload still retains all history per `rules#next_steps_format`. When proposing a history change, or when Operator asks for the full field, set the complete current and proposed fields
-instead.
-Preserve wording, punctuation, dates, and line order. Never replace exact text with an action summary or Unchanged. An empty current field renders as Empty.
-
-Include any proposed new history entry within the proposed field, not a separate History section. The proposed sentence is the actual Salesforce write per `policy.pipeline.note_next_line`.
-Distinguish the action's due date from the entry's written date and CloseDate. Follow `rules#next_steps_review` when the checker cannot resolve a date or owner.
-When a fresh Salesforce read supersedes an earlier draft, mark the old label superseded and cite the evidence for the new one.
-
-Current field text is shown with HTML entities decoded and paragraph and break tags as new lines, for reading only.
-Existing Salesforce history is never rewritten to match, and approved write text stays exact.
+`next_step.current` and `next_step_current` show exact existing text as read-only context. `next_step.proposed` is always null. No proposed_full or history payload.
+HTML entities and paragraph or break tags decode for display only. Never rewrite Salesforce history to match the display.
+Next-step findings use `triage_next_step: true` and `Triage owns the next step`, not a clear recommendation, question option or letter.
 
 ## Evidence
 
@@ -87,10 +65,11 @@ If sources disagree with the checker, withhold the affected proposal and identif
 
 ## Counts
 
-Units are distinct. Open deals is the all-stage Collect count. Reviewed includes `policy.pipeline.stages`, plus `policy.pipeline.early_stages` on Friday. Flagged is unique triggered deals.
+Units are distinct. Open deals is the all-stage Collect count. Reviewed includes `policy.pipeline.stages` and `policy.pipeline.early_stages` on every weekly or requested run.
+Flagged is unique triggered deals.
 Not checked is per `rules#not_checked_means`. Clear recommendations are numbered blocks, one deal each. Questions are Q labels. Records written counts verified record writes.
 
-Identities the helper checks: reviewed = flagged + routed + no trigger + not checked, and every flagged deal has a clear recommendation, a question, or a withheld entry.
+Reviewed = flagged + routed + no trigger + not checked. Each flagged deal has a recommendation, question, withheld entry or triage finding. Mixed findings never double-count a deal.
 A deal may have both, so clear recommendations plus questions can exceed flagged. At Close, open equals the Collect count.
 
 ## Coverage
@@ -115,21 +94,31 @@ A clean render never makes an incomplete run ready.
 
 ## Friday additions
 
+Every weekly or requested run loads these sections and its early-stage qualification inputs. Pilot report input stays Friday-only under `rules#pilot_handoff`.
 Rollup: count and Amount by stage and ForecastCategory, this quarter versus later. Delta since the previous Friday from OpportunityFieldHistory: new, stage moves, CloseDate moves, closed.
 Record proposals per `workspaces/pipeline/workflows/pipeline-review/references/proposals.md` "Friday", lettered in order, one record each.
 Add friday.qualification as the full reviewed early-stage list, empty when none qualify for this scope. Each row carries deal, name, stage, action, and summary.
-Actions are closed_lost, next_step, or needs_input. A next_step row has next_step_date. A closed_lost row has last_buyer_activity, evidence_complete, and upcoming_event.
+Actions are closed_lost, triage, or needs_input. A triage row has a matching read-only triage finding.
+A closed_lost row has last_buyer_activity, evidence_complete, and upcoming_event, or operator_stated_no with quote and date, or lost_path_size below.
 Any row supporting an Amount letter also carries missing_amount true. Amount letters carry buyer_confirmed true after review of buyer evidence.
 List unknowns as existing Q-labeled questions, not silent findings. The renderer prints a Qualification section capped at ten rows and the full reviewed count.
-Its guard rejects upward early-stage moves and Closed Lost without reviewed silence. The list is evidence review, never approval.
+Its guard rejects upward early-stage moves and Closed Lost without a supported reviewed basis. The list is evidence review, never approval.
+Every StageName letter is checked against its current source stage in report and receipt modes. Closed Won and early-stage upward moves fail with or without a qualification row.
+For the lost-path size basis in proposals.md "Every run", lost_path_size carries reason (`buyer_deferral` or `departed_sponsor`), from_stage (`S2` through `S5`), and evidence_complete true.
+It also carries buyer_step_within_three_months false, employees (native Account.NumberOfEmployees, integer or null), and description (exact native Opportunity Description, string or null).
+Review the trigger under `rules#stage_move` and the prior backward move for an existing S1 before setting these facts. Never infer them from S1 or missing retrieval.
+A blank native count can use operator_employee_count with value (integer), quote and ISO date for Operator's dated answer. Keep employees blank rather than claiming his answer is Salesforce data.
+A size-floor StageName letter carries the same lost_path_size as its qualification row when present. An unsupported destination or unknown input blocks that proposal.
+The helper checks fact shape, the numeric floor and marker shape, not buyer intent, complete retrieval, historical reason or authenticity.
+A size-floor exception Description letter carries operator_size_exception with Operator's quote and ISO decision date, mode prepend, the exact current baseline and the exact new dated line.
+Only the marker in proposals.md "Every run" is allowed in that Description letter. No overwrite, duplicate marker, other Description change or inferred approval is accepted.
 
 ## Notification
 
 The helper's notification mode prints whether to send, the status, and the payload.
 
-- Weekday: silent when there are no clear recommendations, no questions, and coverage and the run are complete.
-  Otherwise one in-app line with the counts and the run link, led by the status line when coverage or the run is incomplete.
-- Friday: always one in-app notification. `ready for approval` when coverage and the run are complete, no question is open, and proposals exist. `complete` when those checks pass with no proposals.
+- Every authorized scheduled run: always one in-app notification. `ready for approval` when coverage and the run are complete, no question is open, and proposals exist. `complete` when those checks
+  pass with no proposals.
   Otherwise `incomplete`, naming the coverage gap, failed step, or needed input.
 
 Send the printed payload unchanged, only in an authorized scheduled run.

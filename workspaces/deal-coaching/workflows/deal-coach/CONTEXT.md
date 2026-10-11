@@ -6,7 +6,6 @@ next: Systems repo-maintenance for a repo PR after Operator approves criteria-re
 ---
 
 # Deal Coach
-
 Find the evidence gap and the next move that improves a deal or call. Read-only per `rules#read_only_skills`.
 Call review and pre-meeting coaching run weekdays, deal review weekly, and criteria refresh monthly per `policy.coach.schedule`.
 Select one branch and load only its Inputs rows. These schedules describe the workflow and do not activate automations.
@@ -19,8 +18,9 @@ Select one branch and load only its Inputs rows. These schedules describe the wo
 | Core policy | `_core/policy.yaml` | Deal-review only: `forecast.amount_field` | ARR ranking field |
 | Core policy | `_core/policy.yaml` | All branches load `momentum`, `tooling` | Transcript and Calendar retrieval limits |
 | Core rules | `_core/rules.md` | All branches load `rules#run_start`, `rules#read_only_skills`, `rules#not_checked_means`, `rules#absence_conclusions` | Identity, scope, and evidence limits |
-| Core rules | `_core/rules.md` | All branches load `rules#momentum` | Transcript retrieval |
+| Core rules | `_core/rules.md` | All branches load `rules#momentum`, `rules#handoff_delivery` | Transcript retrieval and handoff results |
 | Core rules | `_core/rules.md` | Call-review, deal-review, pre-meeting load `rules#calendar_search` | Calendar retrieval |
+| Thread lookup | `_core/thread-locators.md` | All branches, "Teammate thread lookup" | Verified runtime Coach destination and prior history |
 | Reference | `references/report-format.md` | All branches load "Scope and evidence", "Output rules" | Branch selection, evidence, and voice |
 | Reference | `references/meddicc.md` | Call-review, deal-review, pre-meeting load "Evidence scores", "Stage gates" | Evidence and current-stage gaps |
 | Reference | `references/strategy.md` | Deal-review and pre-meeting load "Strategy questions" | Power, positioning, and next move |
@@ -48,8 +48,8 @@ Select one branch and load only its Inputs rows. These schedules describe the wo
 2. Call-review collects per `references/call-review.md` "Collect calls" and evaluates "Call checks" against the routed evidence and risk criteria.
 3. Deal-review follows `references/report-format.md` "Deal review", scoring per `references/meddicc.md` "Evidence scores" and "Stage gates" before strategy and risks.
 4. Pre-meeting follows `references/report-format.md` "Pre-meeting", using evidence gaps, strategy, and risks to select questions for the buyer.
-5. Criteria-refresh follows `references/learning.md` "Signals", "Monthly refresh", and "Approval and delivery" for Patterns and supported edits. Only edits need Operator's approval and a repo PR
-handoff.
+5. Criteria-refresh follows `references/learning.md` "Signals", "Monthly refresh", and "Approval and delivery" for Patterns and supported edits.
+Only edits need Operator's approval and a repo PR handoff.
 6. Post only the selected branch's output in the Coach thread per `references/report-format.md` "Output rules". Include evidence limits and confirm nothing written.
 
 ## Checkpoints
@@ -77,4 +77,4 @@ handoff.
 | Criteria edit proposals | Coach thread | "Criteria refresh" layout in `references/report-format.md` |
 | Monthly patterns | Coach thread | Previous-month objections, blockers, and product gaps per `references/report-format.md` "Criteria refresh", even without supported criteria edits |
 | Approved criteria handoff | Coach thread, to Systems repo-maintenance | Exact diff and Operator's approval link per `references/learning.md` "Approval and delivery". A merged repo PR updates the canonical references |
-| Salesforce suggestions | Pipeline thread | One-line notes for Operator's approval per `references/report-format.md` "Output rules" |
+| Salesforce suggestions | Pipeline thread | One-line notes for Operator's approval per `references/report-format.md` "Output rules". Pipeline receives them as evidence under `rules#handoff_delivery` and keeps its own approval scope |

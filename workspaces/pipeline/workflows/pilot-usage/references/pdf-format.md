@@ -58,7 +58,8 @@ Set `approved: true` only on approval. The pipeline refuses an unapproved file.
 
 ## Pipeline
 
-Run from the Project Files checkout. `<dir>` is `policy.pilot_usage.pdf.output_dir`; `<tool_calls>` is this session's saved tool-call directory. Keep the exact handles returned by the three submits.
+Run from the verified Project Files checkout with absolute sandbox paths. `<dir>` is `policy.pilot_usage.pdf.output_dir`; `<tool_calls>` is this session's saved tool-call directory.
+Keep the exact handles returned by the three submits.
 
 After query 4 completes, with org, pilot end and data-through in the draft review:
 

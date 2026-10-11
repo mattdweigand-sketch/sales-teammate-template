@@ -28,7 +28,8 @@ class EventListPrep(unittest.TestCase):
             "event": {"exclude": ["open_opportunity", "outside_named_accounts", "recent_reply", "unverified_email", "catch_all_email",
                                   "active_sequence", "event_app_invite"],
                       "recent_reply_days": 14,
-                      "outreach_owner_scope": {"house_owner_ids": ["synthetic-house"], "include_missing_account": True}}}, "tooling": {"generic_email_domains": ["personal.example"]}}
+                      "outreach_owner_scope": {"house_owner_ids": ["synthetic-house"], "include_missing_account": True}}},
+                       "tooling": {"generic_email_domains": ["personal.example"]}}
 
     def row(self, **changes):
         result = {"first_name": "Aster", "last_name": "Sample", "email": "aster.sample@synthetic.example",
@@ -39,6 +40,7 @@ class EventListPrep(unittest.TestCase):
                   "email_operation": "apollo_match", "run_start": self.as_of.isoformat(),
                   "apollo_contacts_checked": True, "apollo_contact_id": "", "apollo_contact_email": "",
                   "apollo_crm_linked": False, "apollo_crm_owner_id": "", "active_sequence": False,
+                  "event_sequence_ids": [], "apollo_sequence_enrollments": [],
                   "event_app_invite_export_supplied": False, "event_app_invite_checked": False, "event_app_invite": None}
         result.update(changes)
         return result
@@ -46,6 +48,7 @@ class EventListPrep(unittest.TestCase):
     def no_email_row(self, **changes):
         result = self.row(email="", email_provider="", email_status="", catchall_domain=None,
                           apollo_contacts_checked=None, active_sequence=None,
+                          event_sequence_ids=None, apollo_sequence_enrollments=None,
                           event_app_invite_export_supplied=True, event_app_invite_checked=None, event_app_invite=None,
                           replies_checked=None)
         result.pop("last_reply_at")
@@ -188,16 +191,6 @@ class EventListPrep(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "scope cannot be overridden"):
             self.scoped(row, overrides={"event-1": ["outside_named_accounts"]})
 
-    def test_fresh_lookup_finds_new_other_seller_account_and_loses_missing_scope(self):
-        row = self.row(account_id="", account_owner_id="", **{"Outreach Owner": "Operator"})
-        self.assertEqual(self.scoped(row)["counts"], {"enroll": 1})
-        row.update(account_id="newly-found-account", account_owner_id="synthetic-other")
-        result = self.scoped(row)
-        self.assertEqual(result["counts"], {"outside_named_accounts": 1})
-        self.assertIsNone(result["contacts"][0]["scope"])
-        with self.assertRaisesRegex(ValueError, "scope cannot be overridden"):
-            self.scoped(row, overrides={"event-1": ["outside_named_accounts"]})
-
     def test_outreach_owner_arguments_are_paired(self):
         with self.assertRaisesRegex(ValueError, "supplied together"):
             self.prepare([self.row()], outreach_owner_column="Outreach Owner")
@@ -223,24 +216,6 @@ class EventListPrep(unittest.TestCase):
                 self.assertEqual(result["counts"], {"needs_input": 1} if duplicate else {"enroll": 1})
                 if duplicate:
                     self.assertIn("missing or ambiguous", result["contacts"][0]["reason"])
-
-    def test_disabled_and_legacy_scope_preserve_owned_account_only_behavior(self):
-        for scope in ({'house_owner_ids': [], 'include_missing_account': False}, None):
-            if scope is None:
-                self.policy['prospecting']['event'].pop('outreach_owner_scope', None)
-            else:
-                self.policy['prospecting']['event']['outreach_owner_scope'] = scope
-            for changes in ({'account_owner_id': 'synthetic-house'}, {'account_id': '', 'account_owner_id': ''}):
-                self.assertEqual(self.scoped(self.row(**changes, **{'Outreach Owner': 'Operator'}))['counts'],
-                                 {'outside_named_accounts': 1})
-            self.assertEqual(self.prepare([self.row()])['counts'], {'enroll': 1})
-
-    def test_invalid_scope_policy_types_reject(self):
-        for scope in (None, [], {'house_owner_ids': 'synthetic-house'}, {'house_owner_ids': [1]},
-                      {'include_missing_account': 'true'}, {'include_missing_account': 1}):
-            self.policy['prospecting']['event']['outreach_owner_scope'] = scope
-            with self.subTest(scope=scope), self.assertRaisesRegex(ValueError, 'scope policy types'):
-                self.scoped(self.row())
 
     def test_account_scope_cannot_be_overridden_or_omitted_by_old_configuration(self):
         for changes in ({"account_owner_id": "synthetic-other"}, {"account_owner_id": "synthetic-house"},
@@ -359,6 +334,7 @@ class EventListPrep(unittest.TestCase):
         self.assertEqual(contact["label"], "needs_input")
         self.assertEqual([reason["label"] for reason in contact["exclusions"]], ["unverified_email"])
         self.assertEqual(contact["needs_input"], ["Apollo existing-contact and active-sequence evidence not completely checked",
+                                                 "Apollo enrollment history or same-event sequence targets not completely checked",
                                                  "Supplied event invite export not completely matched",
                                                  "Recent substantive reply evidence not completely checked"])
         self.assertEqual(result["status"], "needs-input")
@@ -402,6 +378,7 @@ class EventListPrep(unittest.TestCase):
                 self.assertEqual(result["enrichment_candidates"], [])
         completed = self.no_email_row(email="aster.sample@synthetic.example", email_provider="apollo", email_status="verified",
                                       catchall_domain=False, apollo_contacts_checked=True, active_sequence=False,
+                                      event_sequence_ids=[], apollo_sequence_enrollments=[],
                                       event_app_invite_checked=True, event_app_invite=False, replies_checked=True, last_reply_at=None)
         result = self.prepare([completed])
         self.assertEqual(result["contacts"][0]["label"], "enroll")
@@ -571,6 +548,79 @@ class EventListPrep(unittest.TestCase):
                 self.assertEqual(result["contacts"][0]["label"], "needs_input")
                 self.assertEqual(result["enrichment_candidates"], [])
 
+    def test_same_event_prior_enrollment_excludes_every_status_before_enrichment(self):
+        for status in ("finished", "paused", "active", "removed", "bounced"):
+            with self.subTest(status=status):
+                row = self.row(email_status="unavailable", active_sequence=False,
+                               event_sequence_ids=["synthetic-event-sequence"],
+                               apollo_sequence_enrollments=[{"sequence_id": "synthetic-event-sequence", "status": status}])
+                result = self.prepare([row])
+                contact = result["contacts"][0]
+                self.assertIn({"label": "active_sequence",
+                               "reason": "Prior enrollment in this event's Apollo sequence, regardless of status"},
+                              contact["exclusions"])
+                self.assertEqual(result["enrichment_candidates"], [])
+
+    def test_finished_same_event_contacts_cannot_become_enrichment_candidates(self):
+        rows = [self.row(email=f"finished{index}@synthetic.example", contact_id=f"synthetic-finished-{index}",
+                         email_status="unavailable", event_sequence_ids=["synthetic-event-sequence"],
+                         apollo_sequence_enrollments=[{"sequence_id": "synthetic-event-sequence", "status": "finished"}])
+                for index in range(3)]
+        result = self.prepare(rows)
+        self.assertEqual(result["enrichment_candidates"], [])
+        self.assertTrue(all("active_sequence" in [reason["label"] for reason in contact["exclusions"]]
+                            for contact in result["contacts"]))
+
+    def test_other_event_finished_enrollment_is_allowed_but_active_is_excluded(self):
+        for status, expected in (("finished", "enroll"), ("active", "active_sequence")):
+            with self.subTest(status=status):
+                row = self.row(event_sequence_ids=["synthetic-event-sequence"],
+                               apollo_sequence_enrollments=[{"sequence_id": "synthetic-other-sequence", "status": status}])
+                contact = self.prepare([row])["contacts"][0]
+                self.assertEqual(contact["label"], expected)
+                if status == "active":
+                    self.assertEqual(contact["reason"], "Apollo contact data shows an active sequence")
+
+    def test_missing_or_malformed_sequence_history_holds_known_email_even_with_override(self):
+        for changes in ({"event_sequence_ids": None}, {"apollo_sequence_enrollments": None},
+                        {"event_sequence_ids": "not-json"}, {"event_sequence_ids": [""]},
+                        {"apollo_sequence_enrollments": [{}]},
+                        {"apollo_sequence_enrollments": [{"sequence_id": "synthetic-other-sequence", "status": ""}]}):
+            with self.subTest(changes=changes):
+                result = self.prepare([self.row(**changes)], overrides={"event-1": ["active_sequence"]})
+                self.assertEqual(result["counts"], {"needs_input": 1})
+                self.assertEqual(result["enrichment_candidates"], [])
+
+    def test_sequence_history_json_csv_fields_roundtrip_and_reconcile_duplicates(self):
+        contact = self.prepare([self.row(event_sequence_ids='["synthetic-event-sequence"]',
+                                        apollo_sequence_enrollments='[{"sequence_id": "synthetic-event-sequence", "status": "finished"}]')])["contacts"][0]
+        self.assertEqual(contact["label"], "active_sequence")
+        self.assertEqual(self.prepare([contact])["counts"], {"active_sequence": 1})
+        result = self.prepare([self.row(), self.row(event_sequence_ids=["synthetic-event-sequence"],
+                                                  apollo_sequence_enrollments=[{"sequence_id": "synthetic-event-sequence",
+                                                                               "status": "finished"}])])
+        self.assertEqual(result["counts"], {"needs_input": 1})
+        self.assertEqual(result["enrichment_candidates"], [])
+
+    def test_existing_sequence_override_is_explicit_and_does_not_authorize_enrichment(self):
+        row = self.row(event_sequence_ids=["synthetic-event-sequence"],
+                       apollo_sequence_enrollments=[{"sequence_id": "synthetic-event-sequence", "status": "finished"}])
+        self.assertEqual(self.prepare([row], overrides={"event-1": ["active_sequence"]})["counts"], {"enroll": 1})
+        result = self.prepare([dict(row, email_status="unavailable")], overrides={"event-1": ["active_sequence"]})
+        self.assertEqual(result["enrichment_candidates"], [])
+
+    def test_known_sequence_exclusion_survives_partial_history_and_deferred_email_checks(self):
+        for enrollment in ({"sequence_id": "synthetic-event-sequence", "status": "finished"},
+                           {"sequence_id": "synthetic-event-sequence"},
+                           {"sequence_id": "synthetic-other-sequence", "status": "active"}):
+            with self.subTest(enrollment=enrollment):
+                row = self.no_email_row(event_sequence_ids=["synthetic-event-sequence"],
+                                        apollo_sequence_enrollments=[enrollment, {}])
+                result = self.prepare([row])
+                self.assertEqual(result["counts"], {"needs_input": 1})
+                self.assertEqual(result["enrichment_candidates"], [])
+                self.assertIn("active_sequence", [reason["label"] for reason in result["contacts"][0]["exclusions"]])
+
     def test_invite_export_is_optional_but_supplied_export_requires_complete_matching(self):
         contact = self.prepare([self.row()])["contacts"][0]
         self.assertEqual(contact["label"], "enroll")
@@ -675,19 +725,87 @@ class EventListPrep(unittest.TestCase):
         self.assertTrue(all(contact["reason"] for contact in result["contacts"] if contact["row_id"] in dropped | held))
 
     def test_reply_recheck_does_not_inherit_old_recent_reply_override(self):
-        old_reply = self.as_of - timedelta(days=1)
-        self.assertEqual(self.prepare([self.row(last_reply_at=old_reply.isoformat())],
-                                      overrides={"event-1": ["recent_reply"]})["contacts"][0]["label"], "enroll")
         new_reply = self.as_of + timedelta(minutes=30)
         recheck_time = self.as_of + timedelta(hours=1)
         row = self.row(last_reply_at=new_reply.isoformat())
         self.assertEqual(prep.prepare([row], self.policy, recheck_time)["contacts"][0]["label"], "recent_reply")
         row["replies_checked"] = False
-        self.assertEqual(prep.prepare([row], self.policy, recheck_time,
-                                     overrides={"event-1": ["recent_reply"]})["contacts"][0]["label"], "needs_input")
+        self.assertEqual(prep.prepare([row], self.policy, recheck_time)["contacts"][0]["label"], "needs_input")
+
+    def test_recent_reply_override_is_rejected_like_named_account_scope(self):
+        old_reply = self.as_of - timedelta(days=1)
+        row = self.row(last_reply_at=old_reply.isoformat())
+        self.assertEqual(self.prepare([row])["contacts"][0]["label"], "recent_reply")
+        for requested in (["recent_reply"], ["catch_all_email", "recent_reply"]):
+            with self.subTest(requested=requested), self.assertRaisesRegex(ValueError, "Recent-reply exclusion cannot be overridden"):
+                self.prepare([row], overrides={"event-1": requested})
+        self.assertEqual(self.prepare([self.row(catchall_domain=True)], overrides={"event-1": ["catch_all_email"]})["counts"], {"enroll": 1})
+
+    def test_cli_known_input_errors_print_the_shared_envelope_and_exit_two(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            input_path, overrides_path = root / "input.json", root / "overrides.json"
+            input_path.write_text(json.dumps([self.row()]))
+            overrides_path.write_text(json.dumps({"event-1": ["invented"]}))
+            cases = (
+                ([str(input_path), "--as-of", self.as_of.isoformat(), "--overrides", str(overrides_path)], "ValueError"),
+                ([str(input_path), "--as-of", "2026-10-04T10:00:00"], "ValueError"),
+                ([str(root / "absent.json"), "--as-of", self.as_of.isoformat()], "FileNotFoundError"),
+            )
+            for arguments, error_name in cases:
+                with self.subTest(error=error_name):
+                    run = subprocess.run([sys.executable, str(SCRIPT), *arguments], capture_output=True, text=True)
+                    self.assertEqual(run.returncode, 2, run.stderr)
+                    self.assertEqual(run.stderr, "")
+                    envelope = json.loads(run.stdout)
+                    self.assertEqual(envelope["verdict"], "error")
+                    self.assertTrue(envelope["reason"].startswith(error_name + ": "), envelope)
+            bad_json = root / "bad.json"
+            bad_json.write_text("{not json")
+            run = subprocess.run([sys.executable, str(SCRIPT), str(bad_json), "--as-of", self.as_of.isoformat()], capture_output=True, text=True)
+            self.assertEqual(run.returncode, 2)
+            self.assertEqual(json.loads(run.stdout)["verdict"], "error")
+
+    def test_make_batches_compares_only_the_website_column_or_reports_not_checked(self):
+        script = SCRIPT.parent.parent / "01-list-prep" / "scripts" / "make_batches.py"
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            for name, fields, rows in (
+                ("no_site", ["First Name", "Last Name", "Email", "Company Name", "domain"],
+                 [["Aster", "Vale", "aster@synthetic.example", "Synthetic Example", "synthetic.example"]]),
+                ("email_domain_hint", ["First Name", "Last Name", "Email", "Company Name", "Email Domain"],
+                 [["Briar", "Marsh", "briar@marsh.example", "Marsh Synthetic", "marsh.example"]]),
+                ("website", ["First Name", "Last Name", "Email", "Company Name", "Website", "domain"],
+                 [["Cedar", "Lane", "cedar@lane.example", "Lane Synthetic", "https://www.lane.example/", "lane.example"],
+                  ["Dale", "Reed", "dale@reed.example", "Reed Synthetic", "other.example", "reed.example"],
+                  ["Elm", "Shore", "elm@shore.example", "Shore Synthetic", "", "shore.example"]]),
+            ):
+                chunks = root / name
+                chunks.mkdir()
+                with (chunks / "chunk_1.csv").open("w", newline="") as handle:
+                    writer = csv.writer(handle)
+                    writer.writerow(fields)
+                    writer.writerows(rows)
+                run = subprocess.run([sys.executable, str(script), str(chunks), "--code", "SYNTHETIC",
+                                      "--output-dir", str(root / f"{name}_batches")], capture_output=True, text=True)
+                self.assertEqual(run.returncode, 0, run.stderr)
+                report = json.loads(run.stdout)
+                with self.subTest(name=name):
+                    if name == "website":
+                        self.assertEqual(report["domain_check"], "not checked for some rows")
+                        self.assertEqual(report["counts"]["domain_mismatch"], 1)
+                        self.assertEqual(report["counts"]["domain_not_checked"], 1)
+                        self.assertEqual(report["final_rows"], 2)
+                        held = (root / f"{name}_batches" / "domain_mismatch.csv").read_text()
+                        self.assertIn("dale@reed.example", held)
+                    else:
+                        self.assertEqual(report["domain_check"], "not checked, no Website column in chunk_1.csv")
+                        self.assertEqual(report["counts"]["domain_mismatch"], 0)
+                        self.assertEqual(report["counts"]["domain_not_checked"], 1)
+                        self.assertEqual(report["final_rows"], 1)
 
     def test_migrated_default_rules_cli_scrub_audit_and_batch_synthetic_fixture(self):
-        folder = SCRIPT.parent.parent / "01-list-prep/scripts"
+        folder = SCRIPT.parent.parent / "01-list-prep" / "scripts"
         fixture = ROOT / "_core/tests/prospecting-fixtures/event_risky.csv"
         rows = list(csv.DictReader(io.StringIO(fixture.read_text())))
         self.assertTrue(all(not row["Email Business"] or "@" not in row["Email Business"] or

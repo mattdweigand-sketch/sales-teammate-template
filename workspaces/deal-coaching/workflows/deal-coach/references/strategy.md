@@ -2,7 +2,8 @@
 
 ## Strategy questions
 
-Answer each question in one or two sentences with evidence. Mark unsupported answers unknown.
+Assess all ten questions internally. Mark unsupported answers unknown. Display material supported facts, major gaps, supported risk patterns, and one next move per deal with the person to involve.
+Show all answers on request. Score table, scoring, stakeholder coverage and count evidence unchanged.
 
 1. Why change, why now, and why this product. Which case is weakest?
 2. Power map. Who can say yes, who can say no, and who is missing? Count distinct contacts with Salesforce Contact Roles. One contact means the deal depends on one relationship.

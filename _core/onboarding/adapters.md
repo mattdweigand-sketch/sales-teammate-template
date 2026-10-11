@@ -33,7 +33,7 @@ Use the detailed setup and verification text in the registry. This table is the 
 
 | Surface | Configuration to walk through |
 |---|---|
-| Runtime | Project, deployment root, five teammates and threads, 18 skill pointers, org skills, project tasks/comments, session routing and saved-result paths |
+| Runtime | Project, deployment root, five teammates and threads, 19 skill pointers, org skills, project tasks/comments, session routing and saved-result paths |
 | Credentials and MCP | Actual server or connector name, transport, endpoint or launch command, allowed tools, auth grant or key, secret store, scopes and rotation owner |
 | Salesforce | Tenant and current user, ownership, standard objects, custom field maps and types, stages, picklists, validation, Contact Roles, formulas and CRM guide |
 | Gmail | Operator mailbox, search and full-thread reads, attachments, drafts and readback, assistant sender address |
@@ -98,15 +98,16 @@ These eligibility settings stay in policy. Integration metadata and local setup 
 ## Thread delivery
 
 The included Perplexity adapter verifies current-project thread identity and record linkage before routing evidence.
-Try session send once. On confirmed no delivery, try teammate mail once. Record the native receipt and transport outside Git.
-An ambiguous response needs native reconciliation, never a blind retry. Missing discovery or delivery capabilities hold the affected handoff.
+Use the discovered native teammate mail capability once. Record its actual receipt and transport outside Git.
+A queued or submitted receipt proves submission only.
+Failed, unavailable or unattempted delivery retains the pending destination and text. No automatic retry. Missing discovery or delivery capabilities hold the affected handoff.
 Equivalent adapters use their verified transports and receipts. Local setup performs no test sends and creates no schedule.
 
 ## Deployment and live verification
 
-Local setup produces company settings, all 18 portable pointers and a receipt listing all 21 integration choices. It sets `external_ready` to false.
+Local setup produces company settings, all 19 portable pointers and a receipt listing all 22 integration choices. It sets `external_ready` to false.
 For configured entries, `configure` means selected, never authenticated or verified. Deferred and unused entries keep their reasons and affected workflows visible.
-Review every schedule in policy, including Coach branches, call prep, watch sync, sweep, triage, nudges, daily/Friday pipeline, customer review, forecast, pace and system review.
+Review every schedule in policy, including Coach branches, call prep, watch sync, sweep, triage, nudges, weekly/requested Pipeline review, customer review, forecast, pace and system review.
 Include manager-update delivery, connector watches, dedicated thread requirements, worker messaging, notifications and suppression in the external deployment plan.
 The copied schedule values are inactive proposals. Company timezone replacement is not approval of the times, permissions, recipients or delivery.
 Complete all reversible preparation and present the exact agent, tool-permission, pointer and schedule plan for any deployment authorization still needed.
@@ -118,3 +119,17 @@ Record identity, permissions, tools, schema compatibility, native readback and t
 Keep live receipts outside Git. Local `check` reports pending live verification and never grants external readiness or write approval.
 The selected workflow's approval, fresh-read and native readback gates still govern each external write after connection verification.
 The template ships unconfigured. Only scratch rehearsal uses fictional connector doubles. The source company's accounts, keys, handles, merge permissions and active schedules never transfer.
+
+## Configured instruction deployment
+
+The GitHub integration settings populate `policy.tooling.governing_revision` once. Repository, remote and branch identify the actual configured deployment.
+The separate onboarding copy has no Git metadata. Commit and publish its actual configured bytes to the adopter-owned repository through authorized maintenance before affected external writes.
+The revision helper validates fetch identity, current instructions and target-bound format-2 evidence. It preserves unrelated local edits and holds missing, stale or changed authority.
+A Git-less workspace or deferred Git dependency can run read-only branches. It cannot claim write freshness from the source or factory template.
+
+## Operating policy and optional Slides
+
+`operating_policy_review` is an external review reference for stages, cadence, qualification, targets and criteria. It grants no run write approval.
+`lost_path_min_employees` defaults to null. An approved positive integer enables that size branch. Null holds size-dependent decisions while independent supported proposals remain eligible.
+The sample AI taxonomy needs adopter market review. Source prices, targets, identities, permissions and watch approvals do not transfer.
+Choose configure, defer or not_used for Google Slides. Only its configured optional D branch requires a presentation ID and unique title containing {quarter}.

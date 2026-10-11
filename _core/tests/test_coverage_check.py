@@ -86,15 +86,15 @@ class CoverageFixture(unittest.TestCase):
         self.policy.write_text(json.dumps({
             "tooling": {"internal_domains": ["seller.example", "seller-tools.example"], "calendar_lookahead_days": 30, "calendar_lookback_days":30},
             "pipeline": {"stages": ["S2", "S3", "S4", "S5"], "activity_query_days":30},
-            "forecast": {"quarters": "calendar"},
+            "forecast": {"quarters": "calendar", "amount_field": "ARR__c", "open_min_stage": "S2"},
         }))
         self.opp = {
             "attributes": {"type": "Opportunity"}, "Id": "o1", "AccountId": "a1",
             "Account": {"Name": "Example Buyer"}, "StageName": "S2 - Solutioning",
         }
         self.contact = {"attributes": {"type": "Contact"}, "Id":"c1", "Email": "buyer@example.com", "AccountId": "a1"}
-        self.calendar_start = "2026-09-18T00:00:00-07:00"
-        self.inbox = "after:2026-09-18 -from:seller.example -from:seller-tools.example"
+        self.calendar_start = "2026-08-22T00:00:00-07:00"
+        self.inbox = "(from:@example.com OR to:@example.com) after:2026-08-22"
 
     def pair(self, name: str, tool: str, args: dict, result: dict) -> None:
         self.sequence += 1
@@ -106,11 +106,26 @@ class CoverageFixture(unittest.TestCase):
             path.write_text(json.dumps(data))
             os.utime(path, (self.timestamp + self.sequence, self.timestamp + self.sequence))
 
+    TASK_FIELDS = "Id, Subject, ActivityDate, Status, IsClosed, OwnerId, Description, LastModifiedDate, WhatId, AccountId, WhoId, Who.Name"
+    EVENT_FIELDS = "Id, Subject, ActivityDate, StartDateTime, EndDateTime, WhatId, AccountId, WhoId, OwnerId"
+    ACTIVITY_SCOPE = "(WhatId IN ('o1') OR AccountId IN ('a1'))"
+
+    def task_query(self, scope: str = ACTIVITY_SCOPE, window: str = "(IsClosed = false OR ActivityDate = LAST_N_DAYS:30)",
+                   fields: str = TASK_FIELDS, extra: str = "") -> str:
+        return f"SELECT {fields} FROM Task WHERE {scope} AND {window}{extra}"
+
+    def event_query(self, scope: str = ACTIVITY_SCOPE, window: str = "(ActivityDate = LAST_N_DAYS:30 OR ActivityDate >= TODAY)",
+                    fields: str = EVENT_FIELDS, extra: str = "") -> str:
+        return f"SELECT {fields} FROM Event WHERE {scope} AND {window}{extra}"
+
     def salesforce(self, event_fields: str = "StartDateTime, EndDateTime") -> None:
+        """The documented Opportunity, Contact, Task and Event reads for the fixture deal."""
+        event_select = self.EVENT_FIELDS.replace("StartDateTime, EndDateTime", event_fields).replace(", ,", ",")
+        queries = {"Opportunity": "SELECT Id FROM Opportunity WHERE OwnerId = 'owner' AND IsClosed = false",
+                   "Contact": "SELECT Id FROM Contact", "Task": self.task_query(),
+                   "Event": self.event_query(fields=event_select)}
         for kind, records in (("Opportunity", [self.opp]), ("Contact", [self.contact]), ("Task", []), ("Event", [])):
-            where = " WHERE OwnerId = 'owner' AND IsClosed = false" if kind == "Opportunity" else ""
-            self.pair(kind, "query", {"query": f"SELECT Id{', ' + event_fields if kind == 'Event' and event_fields else ''} FROM {kind}{where}"},
-                      {"records": records, "hasMore": False, "totalSize": len(records)})
+            self.pair(kind, "query", {"query": queries[kind]}, {"records": records, "hasMore": False, "totalSize": len(records)})
         for name, where, rows in (("current", "IsClosed = false AND CloseDate = THIS_QUARTER", [self.opp]),
                                   ("next", "IsClosed = false AND CloseDate = NEXT_QUARTER", []),
                                   ("booked", "StageName = 'Closed Won' AND CloseDate = THIS_QUARTER", [])):
@@ -130,7 +145,7 @@ class CoverageFixture(unittest.TestCase):
             "queries": [query], "start_date": self.calendar_start, "end_date": end,
         }, {"status": "success", "calendar_event_list": {"events": []}})
 
-    def run_check(self, scope: str = "pipeline-daily", *extra: str) -> subprocess.CompletedProcess:
+    def run_check(self, scope: str = "pipeline", *extra: str) -> subprocess.CompletedProcess:
         args = [sys.executable, str(SCRIPTS / "coverage_check.py"), "--scope", scope, "--since", self.since,
                 "--policy", str(self.policy), *extra]
         return subprocess.run(args, cwd=self.root, env=self.env, text=True, capture_output=True)
@@ -156,15 +171,34 @@ class SavedCallsCoverageTests(CoverageFixture):
         self.ready()
         for name in ("older", "newer"):
             (self.home / ".perplexity" / "sessions" / name / "tool_calls" / "call_external_tool").mkdir(parents=True)
-        result = self.run_check("pipeline-daily", "--json")
+        result = self.run_check("pipeline", "--json")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertFalse(json.loads(result.stdout)["ready"])
         self.assertIn("Multiple saved tool-call session directories", result.stdout)
-        explicit = self.run_check("pipeline-daily", "--calls-dir", str(self.calls))
+        explicit = self.run_check("pipeline", "--calls-dir", str(self.calls))
         self.assertEqual(explicit.returncode, 0, explicit.stdout + explicit.stderr)
 
 
 class PipelineDailyCoverageTests(CoverageFixture):
+    def test_pipeline_default_checks_missing_early_stage_evidence(self) -> None:
+        for stage in ("S0 - Prospect", "S1 - Discovery"):
+            with self.subTest(stage=stage):
+                self.opp["StageName"] = stage
+                self.salesforce()
+                result = self.run_check("pipeline", "--json")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                data = json.loads(result.stdout)
+                self.assertEqual(data["affected"], ["o1"])
+                self.assertIn("Gmail missing: Example Buyer", result.stdout)
+                self.assertIn("Calendar missing: Example Buyer", result.stdout)
+
+    def test_pipeline_default_accepts_checked_early_stage_evidence(self) -> None:
+        self.opp["StageName"] = "S1 - Discovery"
+        self.ready()
+        result = self.run_check("pipeline")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("1 deals in scope", result.stdout)
+
     def test_complete_daily_coverage_passes(self) -> None:
         self.ready()
         result = self.run_check()
@@ -180,7 +214,7 @@ class PipelineDailyCoverageTests(CoverageFixture):
     def test_missing_contact_domain_blocks_full_coverage(self) -> None:
         self.contact["Email"] = "internal@seller.example"
         self.ready()
-        self.assertIn("Contact domain unavailable: Example Buyer", self.run_check().stdout)
+        self.assertIn("No Contact domain in evidence: Example Buyer", self.run_check().stdout)
 
     def test_missing_output_is_not_a_successful_check(self) -> None:
         self.ready()
@@ -213,17 +247,19 @@ class PipelineDailyCoverageTests(CoverageFixture):
         self.salesforce(); self.calendar()
         self.mail(emails=[
             {"from_": "Buyer <buyer@example.com>", "email_id": "matched"},
-            {"from_": "Someone <user@unrelated.test>", "email_id": "unmatched"},
+            {"from_": "Someone <user@unrelated.com>", "email_id": "unmatched"},
         ])
         result = self.run_check()
         self.assertEqual(result.returncode, 0)
-        self.assertIn('"email_id": "matched"', result.stdout)
-        self.assertNotIn('"email_id": "unmatched"', result.stdout)
+        self.assertIn("Gmail 1/1", result.stdout)
+        self.assertNotIn("Domain-matched inbox receipts", result.stdout)
 
-    def test_account_filtered_query_does_not_count_as_broad_inbox(self) -> None:
-        self.inbox += " from:example.com"
+    def test_weekly_account_query_needs_no_broad_weekday_inbox(self) -> None:
         self.ready()
-        self.assertIn("Missing successful weekday inbox search", self.run_check().stdout)
+        self.assertEqual(self.run_check().returncode, 0)
+        result = self.run_check("pipeline-daily")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid choice", result.stderr)
 
     def test_corrected_salesforce_retry_does_not_block(self) -> None:
         self.pair("failed", "query", {"query": "SELECT Id, Id FROM Opportunity WHERE OwnerId = 'owner' AND IsClosed = false"}, {"error": "duplicate field"})
@@ -261,7 +297,7 @@ class WeeklyCoverageTests(CoverageFixture):
         self.ready()
         result = self.run_check("pipeline")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("1 deals in scope (open S2+). Gmail 1/1. Calendar 1/1.", result.stdout)
+        self.assertIn("1 deals in scope (open S0+). Gmail 1/1. Calendar 1/1.", result.stdout)
 
     def test_zero_deals_exits_one(self) -> None:
         self.mail(); self.calendar()
@@ -320,6 +356,26 @@ class WeeklyCoverageTests(CoverageFixture):
         result = self.run_check("pipeline", "--list")
         self.assertIn("  Example Buyer\n", result.stdout)
 
+    def test_forecast_floor_is_policy_forecast_open_min_stage_and_pipeline_floor_is_unchanged(self) -> None:
+        """V5. One forecast floor. Mutating it moves forecast scope and leaves Pipeline's every-open-stage floor alone."""
+        self.inbox = "from:@example.com after:2026-07-01"
+        self.opp["CloseDate"] = "2026-09-30"
+        self.ready()
+        self.assertIn("1 deals in scope (S2+ CloseDate this quarter", self.run_check("forecast").stdout)
+        policy = json.loads(self.policy.read_text())
+        policy["forecast"]["open_min_stage"] = "S3"
+        policy["pipeline"]["stages"] = ["S0", "S1", "S2", "S3", "S4", "S5"]
+        self.policy.write_text(json.dumps(policy))
+        forecast = self.run_check("forecast")
+        self.assertIn("0 deals in scope (S3+ CloseDate this quarter", forecast.stdout)
+        self.assertIn("1 deals in scope (open S0+)", self.run_check("pipeline").stdout)
+        del policy["forecast"]["open_min_stage"]
+        self.policy.write_text(json.dumps(policy))
+        missing = self.run_check("forecast")
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("policy.forecast.open_min_stage", missing.stderr + missing.stdout)
+        self.assertIn("1 deals in scope (open S0+)", self.run_check("pipeline").stdout)
+
     def test_forecast_quarter_boundary_comes_from_since(self) -> None:
         self.inbox = "from:@example.com after:2026-07-01"
         self.opp["CloseDate"] = "2026-09-30"
@@ -334,13 +390,30 @@ class WeeklyCoverageTests(CoverageFixture):
         result = self.run_check("forecast")
         self.assertIn("0 deals in scope", result.stdout)
 
-    def test_forecast_next_quarter_needs_amount(self) -> None:
+    def test_forecast_next_quarter_needs_policy_amount_not_standard_amount(self) -> None:
         self.opp["CloseDate"] = "2026-11-15"
         self.ready()
         self.assertIn("0 deals in scope", self.run_check("forecast").stdout)
         self.opp["Amount"] = 5000
         self.ready()
+        self.assertIn("0 deals in scope", self.run_check("forecast").stdout)
+        self.opp["ARR__c"] = 500
+        self.opp["Amount"] = None
+        self.ready()
         self.assertIn("1 deals in scope", self.run_check("forecast").stdout)
+
+    def test_forecast_next_quarter_zero_formula_amount_is_unset(self) -> None:
+        # Salesforce's ARR formula returns numeric zero when its source Amount is blank.
+        for amount in (None, "", 0):
+            with self.subTest(policy_amount=amount):
+                self.opp.update(CloseDate="2026-11-15", ARR__c=amount, Amount=None)
+                self.ready()
+                self.assertIn("0 deals in scope", self.run_check("forecast").stdout)
+
+    def test_forecast_scope_names_policy_amount_field(self) -> None:
+        self.opp.update(CloseDate="2026-09-30", ARR__c=500)
+        self.ready()
+        self.assertIn("next quarter with ARR__c", self.run_check("forecast").stdout)
 
     def test_null_close_date_is_skipped_in_forecast(self) -> None:
         self.opp["CloseDate"] = None
@@ -393,10 +466,10 @@ class CompletenessRegressions(CoverageFixture):
         hygiene=self.root/"hygiene.json"
         hygiene.write_text(json.dumps([{"Id":"o1","Account":"Example Buyer","triggers":["stale"]}]))
         for q in ("from:@example.com to:@example.com after:2026-08-22", "(from:@example.com.evil.test OR to:@example.com.evil.test) after:2026-08-22"):
-            self.pair("thread","search_email",{"queries":[q]},{"email_results":{"emails":[]}})
-            self.assertEqual(self.run_check("pipeline-daily","--hygiene",str(hygiene)).returncode,1)
+            self.pair("mail","search_email",{"queries":[q]},{"email_results":{"emails":[]}})
+            self.assertEqual(self.run_check("pipeline").returncode,1)
         self.pair("thread","search_email",{"queries":["(from:@example.com OR to:@example.com) after:2026-08-22"]},{"email_results":{"emails":[]}})
-        self.assertEqual(self.run_check("pipeline-daily","--hygiene",str(hygiene)).returncode,0)
+        self.assertEqual(self.run_check("pipeline").returncode,0)
 
     def test_calendar_unrelated_short_name_cannot_cover_account(self):
         self.salesforce();self.mail();self.calendar("Buyer")
@@ -410,25 +483,24 @@ class CompletenessRegressions(CoverageFixture):
 
     def test_json_false_readiness_on_incomplete_collection(self):
         self.ready(); self.mail(next_cursor="not-fetched")
-        response=self.run_check("pipeline-daily","--json")
+        response=self.run_check("pipeline","--json")
         self.assertEqual(response.returncode,1)
         self.assertFalse(json.loads(response.stdout)["ready"])
 
     def test_json_affected_names_deals_to_withhold(self):
         self.ready()
-        hygiene=self.root/"hygiene.json"
-        hygiene.write_text(json.dumps([{"Id":"o1","Account":"Example Buyer","triggers":["stale"]}]))
-        response=json.loads(self.run_check("pipeline-daily","--hygiene",str(hygiene),"--json").stdout)
-        self.assertEqual((response["ready"],response["affected"]),(False,["o1"]))
-        self.pair("thread","search_email",{"queries":["(from:@example.com OR to:@example.com) after:2026-08-22"]},{"email_results":{"emails":[]}})
-        response=json.loads(self.run_check("pipeline-daily","--hygiene",str(hygiene),"--json").stdout)
-        self.assertEqual((response["ready"],response["affected"]),(True,[]))
-        self.assertFalse(any(l.startswith("Affected deals") for l in response["lines"]))
+        self.pair("mail", "search_email", {"queries": ["from:@wrong.test after:2026-08-22"]}, {"email_results": {"emails": []}})
+        response = json.loads(self.run_check("pipeline", "--json").stdout)
+        self.assertEqual((response["ready"], response["affected"]), (False, ["o1"]))
+        self.mail()
+        response = json.loads(self.run_check("pipeline", "--json").stdout)
+        self.assertEqual((response["ready"], response["affected"]), (True, []))
+        self.assertFalse(any(line.startswith("Affected deals") for line in response["lines"]))
 
     def test_json_affected_is_whole_scope_for_unattributed_gap(self):
         self.ready()
-        self.pair("tasks","query",{"query":"SELECT Id FROM Task WHERE WhatId IN ('o1')"},{"records":[{"Id":"t1"}],"totalSize":2,"done":False})
-        response=json.loads(self.run_check("pipeline-daily","--json").stdout)
+        self.pair("tasks","query",{"query":self.task_query(scope="WhatId IN ('o1')")},{"records":[{"Id":"t1"}],"totalSize":2,"done":False})
+        response=json.loads(self.run_check("pipeline","--json").stdout)
         self.assertEqual((response["ready"],response["affected"]),(False,["o1"]))
 
 
@@ -492,15 +564,67 @@ class CollectionScopeRegressions(CoverageFixture):
     def test_task_and_event_queries_must_cover_in_scope_accounts(self):
         """A complete Task or Event query scoped to other Ids is not coverage for the reviewed deal."""
         self.ready()
-        self.pair("Task","query",{"query":"SELECT Id FROM Task WHERE AccountId IN ('unrelated')"},{"records":[],"hasMore":False,"totalSize":0})
-        self.pair("Event","query",{"query":"SELECT Id, StartDateTime, EndDateTime FROM Event WHERE WhatId IN ('unrelated')"},{"records":[],"hasMore":False,"totalSize":0})
+        self.pair("Task","query",{"query":self.task_query(scope="AccountId IN ('unrelated')")},{"records":[],"hasMore":False,"totalSize":0})
+        self.pair("Event","query",{"query":self.event_query(scope="WhatId IN ('unrelated')")},{"records":[],"hasMore":False,"totalSize":0})
         result=self.run_check()
         self.assertEqual(result.returncode,1)
         self.assertIn("Task query scope missing: Example Buyer",result.stdout)
         self.assertIn("Event query scope missing: Example Buyer",result.stdout)
-        self.pair("Task2","query",{"query":"SELECT Id FROM Task WHERE (WhatId IN ('o1') OR AccountId IN ('a1'))"},{"records":[],"hasMore":False,"totalSize":0})
-        self.pair("Event2","query",{"query":"SELECT Id, StartDateTime, EndDateTime FROM Event WHERE AccountId IN ('a1')"},{"records":[],"hasMore":False,"totalSize":0})
+        self.pair("Task2","query",{"query":self.task_query()},{"records":[],"hasMore":False,"totalSize":0})
+        self.pair("Event2","query",{"query":self.event_query(scope="AccountId IN ('a1')")},{"records":[],"hasMore":False,"totalSize":0})
         self.assertEqual(self.run_check().returncode,0)
+
+    def test_narrowed_task_or_event_queries_cannot_certify_coverage(self):
+        """A complete query that names the required Ids but narrows by Subject or a shorter window is not coverage."""
+        self.ready()
+        (self.calls / "input_Task.json").unlink(); (self.calls / "output_Task.json").unlink()
+        (self.calls / "input_Event.json").unlink(); (self.calls / "output_Event.json").unlink()
+        cases = {"Subject": (self.task_query(extra=" AND Subject LIKE 'Email:%'"), self.event_query(extra=" AND Subject = 'Kickoff'")),
+                 "LAST_N_DAYS:7": (self.task_query(window="(IsClosed = false OR ActivityDate = LAST_N_DAYS:7)"),
+                                   self.event_query(window="(ActivityDate = LAST_N_DAYS:7 OR ActivityDate >= TODAY)")),
+                 "SELECT Id": (self.task_query(fields="Id"), self.event_query(fields="Id, StartDateTime, EndDateTime")),
+                 "window missing": (self.task_query(window="IsClosed = false"), self.event_query(window="ActivityDate >= TODAY"))}
+        for label, (task, event) in cases.items():
+            with self.subTest(label=label):
+                self.pair("Task", "query", {"query": task}, {"records": [], "hasMore": False, "totalSize": 0})
+                self.pair("Event", "query", {"query": event}, {"records": [], "hasMore": False, "totalSize": 0})
+                response = json.loads(self.run_check("pipeline", "--json").stdout)
+                self.assertEqual((response["ready"], response["affected"]), (False, ["o1"]))
+                self.assertIn("Task query scope missing: Example Buyer", response["lines"])
+                self.assertIn("Event query scope missing: Example Buyer", response["lines"])
+                self.assertTrue(any(line.startswith("input_Task.json: ignored narrowed Task query, ") for line in response["lines"]), response["lines"])
+                self.assertTrue(any(line.startswith("input_Event.json: ignored narrowed Event query, ") for line in response["lines"]), response["lines"])
+
+    def test_forecast_scope_accepts_its_documented_task_form_and_rejects_a_shorter_window(self):
+        self.inbox = "from:@example.com after:2026-07-01"
+        self.opp["CloseDate"] = "2026-09-30"
+        self.ready()
+        forecast_fields = "Id, Subject, ActivityDate, Status, IsClosed, WhatId, AccountId, Who.Name"
+        documented = self.task_query(fields=forecast_fields, extra=" AND ActivityDate != null",
+                                     window="(IsClosed = false OR ActivityDate = LAST_N_DAYS:14)")
+        self.pair("Task", "query", {"query": documented}, {"records": [], "hasMore": False, "totalSize": 0})
+        result = self.run_check("forecast")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        shorter = documented.replace("LAST_N_DAYS:14", "LAST_N_DAYS:7")
+        self.pair("Task", "query", {"query": shorter}, {"records": [], "hasMore": False, "totalSize": 0})
+        result = self.run_check("forecast")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("shorter than the required 14 days", result.stdout)
+        self.assertIn("Task query scope missing: Example Buyer", result.stdout)
+
+    def test_equivalent_formatting_of_documented_activity_queries_passes(self):
+        self.ready()
+        (self.calls / "input_Task.json").unlink(); (self.calls / "output_Task.json").unlink()
+        (self.calls / "input_Event.json").unlink(); (self.calls / "output_Event.json").unlink()
+        task = ("select id,subject,activitydate,status,isclosed,ownerid,description,lastmodifieddate,whatid,accountid,whoid,who.name\n"
+                "FROM Task\nWHERE (WhatId IN ('o1')   OR AccountId IN ('a1'))\n  AND (IsClosed=false OR ActivityDate=LAST_N_DAYS:45) ORDER BY ActivityDate DESC")
+        event = ("SELECT Id, Subject, ActivityDate, StartDateTime, EndDateTime, WhatId, AccountId, WhoId, OwnerId FROM Event "
+                 "WHERE (ActivityDate >= TODAY OR ActivityDate = LAST_N_DAYS:30) AND (AccountId IN ('a1') OR WhatId IN ('o1'))")
+        self.pair("Task", "query", {"query": task}, {"records": [], "hasMore": False, "totalSize": 0})
+        self.pair("Event", "query", {"query": event}, {"records": [], "hasMore": False, "totalSize": 0})
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertNotIn("ignored narrowed", result.stdout)
 
 
 
@@ -514,8 +638,8 @@ class CalendarRetrievalTests(CoverageFixture):
         self.pair(name, "search_calendar", {"queries": [query], "start_date": self.calendar_start, "end_date": "2026-10-21T23:59:59-07:00"},
                   {"status": "success", "calendar_event_list": {"events": events}})
 
-    def salesforce_events(self, rows: list) -> None:
-        self.pair("Event", "query", {"query": "SELECT Id, Subject, StartDateTime, EndDateTime, WhatId, AccountId, OwnerId FROM Event"},
+    def salesforce_events(self, rows: list, scope: str = CoverageFixture.ACTIVITY_SCOPE) -> None:
+        self.pair("Event", "query", {"query": self.event_query(scope=scope)},
                   {"records": rows, "hasMore": False, "totalSize": len(rows)})
 
     def test_other_owner_event_is_not_eligible_for_calendar_corroboration(self) -> None:
@@ -583,15 +707,15 @@ class CalendarRetrievalTests(CoverageFixture):
         e = self.event("e1", "2026-09-22T10:00:00-07:00")
         self.calendar_with([e]); self.calendar_with([e], name="cal2", query="buyer@example.com")
         result = self.run_check()
-        receipts = json.loads(result.stdout.split("Domain-matched calendar receipts: ", 1)[1].splitlines()[0])
-        self.assertEqual(len(receipts), 1)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("Calendar 1/1", result.stdout)
 
     def test_generic_email_domain_is_not_an_account_domain(self) -> None:
         policy = json.loads(self.policy.read_text()); policy["tooling"]["generic_email_domains"] = ["linkedin.com"]; self.policy.write_text(json.dumps(policy))
         self.contact["Email"] = "notify@linkedin.com"
         self.ready()
         result = self.run_check()
-        self.assertIn("Contact domain unavailable: Example Buyer", result.stdout)
+        self.assertIn("No Contact domain in evidence: Example Buyer", result.stdout)
 
     def test_salesforce_event_matched_by_start_and_attendee_domain(self) -> None:
         self.salesforce(); self.mail()
@@ -604,7 +728,7 @@ class CalendarRetrievalTests(CoverageFixture):
     def test_salesforce_event_same_start_without_domain_attendee_is_uncertain(self) -> None:
         self.salesforce(); self.mail()
         self.salesforce_events([{"attributes": {"type": "Event"}, "Id": "ev1", "Subject": "Kickoff", "StartDateTime": "2026-09-22T17:00:00.000+0000", "EndDateTime": "2026-09-22T17:30:00.000+0000", "WhatId": "o1", "AccountId": "a1"}])
-        self.calendar_with([self.event("e1", "2026-09-22T10:00:00-07:00", attendee="someone@other.test")])
+        self.calendar_with([self.event("e1", "2026-09-22T10:00:00-07:00", attendee="someone@other.org")])
         result = self.run_check()
         self.assertIn("Salesforce Events matched 0/1 eligible; uncertain (attendee domain unverified): Example Buyer · Kickoff · 2026-09-22.", result.stdout)
         self.assertEqual(result.returncode, 1, result.stdout)
@@ -619,7 +743,7 @@ class CalendarRetrievalTests(CoverageFixture):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("Calendar 0/1", result.stdout)
         self.assertNotIn("Coverage ready.", result.stdout)
-        payload = json.loads(self.run_check("pipeline-daily", "--json").stdout)
+        payload = json.loads(self.run_check("pipeline", "--json").stdout)
         self.assertFalse(payload["ready"])
         self.assertEqual(payload["affected"], ["o1"])
 
@@ -648,9 +772,11 @@ class CalendarRetrievalTests(CoverageFixture):
         self.pair("Contact", "query", {"query": "SELECT Id, Email FROM Contact"},
                   {"records": [self.contact, dict(self.contact, Id="c2", AccountId="a2")], "done": True})
         self.calendar_with([], name="second", query="Example Two")
+        both = "(WhatId IN ('o1', 'o2') OR AccountId IN ('a1', 'a2'))"
+        self.pair("Task", "query", {"query": self.task_query(scope=both)}, {"records": [], "hasMore": False, "totalSize": 0})
         self.salesforce_events([{"attributes": {"type": "Event"}, "Id": "ev1", "Subject": "Buyer sync",
-                                "StartDateTime": "2026-09-22T17:00:00Z", "WhatId": "o1", "AccountId": "a1"}])
-        payload = json.loads(self.run_check("pipeline-daily", "--json").stdout)
+                                "StartDateTime": "2026-09-22T17:00:00Z", "WhatId": "o1", "AccountId": "a1"}], scope=both)
+        payload = json.loads(self.run_check("pipeline", "--json").stdout)
         self.assertEqual(payload["affected"], ["o1"])
         self.assertTrue(any("Calendar 1/2" in line for line in payload["lines"]))
 
@@ -674,7 +800,7 @@ class CalendarSplitWindowTests(CoverageFixture):
     def test_capped_window_recovered_by_covering_splits(self) -> None:
         self.salesforce(); self.mail()
         self.calendar_with([self.event(f"e{i}", "2026-09-22T10:00:00-07:00") for i in range(50)])
-        self.split("cal_a", "2026-09-18T00:00:00-07:00", "2026-10-04T23:59:59-07:00", [self.event("e1", "2026-09-22T10:00:00-07:00")])
+        self.split("cal_a", "2026-08-22T00:00:00-07:00", "2026-10-04T23:59:59-07:00", [self.event("e1", "2026-09-22T10:00:00-07:00")])
         self.split("cal_b", "2026-10-04T23:59:59-07:00", "2026-10-21T23:59:59-07:00", [self.event("e2", "2026-10-10T10:00:00-07:00")])
         result = self.run_check()
         self.assertEqual(result.returncode, 0, result.stdout)
@@ -682,13 +808,12 @@ class CalendarSplitWindowTests(CoverageFixture):
         self.assertIn("Calendar: result cap reached, recovered by split windows", result.stdout)
         self.assertNotIn("Calendar result cap reached (50 events)", result.stdout)
         self.assertNotIn("Calendar pagination incomplete", result.stdout)
-        receipts = json.loads(result.stdout.split("Domain-matched calendar receipts: ", 1)[1].splitlines()[0])
-        self.assertEqual(sorted(r["event_id"] for r in receipts), ["e1", "e2"])
+        self.assertIn("Calendar 1/1", result.stdout)
 
     def test_splits_with_a_gap_do_not_recover(self) -> None:
         self.salesforce(); self.mail()
         self.calendar_with([self.event(f"e{i}", "2026-09-22T10:00:00-07:00") for i in range(50)])
-        self.split("cal_a", "2026-09-18T00:00:00-07:00", "2026-10-01T00:00:00-07:00")
+        self.split("cal_a", "2026-08-22T00:00:00-07:00", "2026-10-01T00:00:00-07:00")
         self.split("cal_b", "2026-10-05T00:00:00-07:00", "2026-10-21T23:59:59-07:00")
         result = self.run_check()
         self.assertEqual(result.returncode, 1)
@@ -699,11 +824,57 @@ class CalendarSplitWindowTests(CoverageFixture):
 
     def test_splits_alone_cover_without_a_capped_call(self) -> None:
         self.salesforce(); self.mail()
-        self.split("cal_a", "2026-09-18T00:00:00-07:00", "2026-10-04T23:59:59-07:00")
+        self.split("cal_a", "2026-08-22T00:00:00-07:00", "2026-10-04T23:59:59-07:00")
         self.split("cal_b", "2026-10-04T23:59:59-07:00", "2026-10-21T23:59:59-07:00")
         result = self.run_check()
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("Calendar: defined searches completed, no cap detected.", result.stdout)
+
+    def test_supplemental_day_sweep_corroborates_without_full_window(self) -> None:
+        self.salesforce(); self.mail(); self.calendar()
+        event = self.event("buyer-sync", "2026-09-22T10:00:00-07:00")
+        self.pair("Event", "query", {"query": self.event_query()},
+                  {"records": [{"Id": "sf-event", "attributes": {"type": "Event"},
+                                "WhatId": "o1", "StartDateTime": event["start"]}], "done": True})
+        self.pair("day_sweep", "search_calendar",
+                  {"start_date": "2026-09-22T00:00:00-07:00", "end_date": "2026-09-23T00:00:00-07:00"},
+                  {"calendar_event_list": {"events": [event]}})
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("Salesforce Events matched 1/1 eligible", result.stdout)
+
+    def test_supplemental_subject_search_does_not_require_full_window(self) -> None:
+        self.ready()
+        self.split("subject", "2026-09-22T00:00:00-07:00", "2026-09-23T00:00:00-07:00",
+                   query="Buyer sync")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_supplemental_sweep_never_replaces_defined_search(self) -> None:
+        self.salesforce(); self.mail()
+        self.pair("day_sweep", "search_calendar",
+                  {"start_date": "2026-09-22T00:00:00-07:00", "end_date": "2026-09-23T00:00:00-07:00"},
+                  {"calendar_event_list": {"events": []}})
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Calendar missing: Example Buyer", result.stdout)
+
+    def test_capped_supplemental_search_requires_its_own_full_range(self) -> None:
+        self.ready()
+        self.split("supplemental", "2026-09-22T00:00:00-07:00", "2026-09-23T00:00:00-07:00",
+                   [self.event(f"s{i}", "2026-09-22T10:00:00-07:00") for i in range(50)], query="Buyer sync")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.split("supplemental_a", "2026-09-22T00:00:00-07:00", "2026-09-22T12:00:00-07:00", query="Buyer sync")
+        self.split("supplemental_b", "2026-09-22T12:00:00-07:00", "2026-09-23T00:00:00-07:00", query="Buyer sync")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_one_second_gap_is_not_silently_covered(self) -> None:
+        self.salesforce(); self.mail()
+        self.split("cal_a", "2026-08-22T00:00:00-07:00", "2026-10-04T23:59:59-07:00")
+        self.split("cal_b", "2026-10-05T00:00:00-07:00", "2026-10-21T23:59:59-07:00")
+        self.assertEqual(self.run_check().returncode, 1)
 
 if __name__ == "__main__":
     unittest.main()

@@ -91,8 +91,8 @@ class ProspectingNavigationTests(unittest.TestCase):
         trace = contract_trace('event-sequence', f'{EVENT}/CONTEXT.md', ROOT, 'early-close')
         self.assertEqual([path for path in trace['actual_local_reads'] if path.startswith(EVENT)],
                          [f'{EVENT}/CONTEXT.md', f'{EVENT}/references/readback.md'])
-        self.assertEqual([row['scope'] for row in trace['input_scopes'] if row['source'] == 'Reference'],
-                         ['"Handoff and close" only for early no-recipient close'])
+        self.assertEqual([row['scope'] for row in trace['input_scopes'] if row['source'] == 'Close reference'],
+                         ['"Handoff and close" only when closing early'])
 
     def test_unknown_event_entry_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -108,6 +108,33 @@ class ProspectingNavigationTests(unittest.TestCase):
                 self.assertNotIn(f'{SIGNAL}/01-research/references/{excluded}.md', trace['actual_local_reads'])
                 self.assertNotIn(f'{SIGNAL}/CONTEXT.md', trace['actual_local_reads'])
                 self.assertFalse(any('/02-outreach/' in path or '/03-followup/' in path for path in trace['actual_local_reads']))
+
+
+class ForecastNavigationTests(unittest.TestCase):
+    contract = 'workspaces/forecasting/workflows/forecast-weekly/CONTEXT.md'
+
+    def test_manager_update_does_not_preload_forecast_tracking_or_git_gate(self):
+        trace = contract_trace('forecast-weekly', self.contract, ROOT, 'manager-update')
+        reads = trace['actual_local_reads']
+        self.assertIn('workspaces/forecasting/workflows/forecast-weekly/references/manager-update.md', reads)
+        for stem in ('collect', 'buckets', 'compute', 'deck', 'tracking', 'learning'):
+            self.assertNotIn(f'workspaces/forecasting/workflows/forecast-weekly/references/{stem}.md', reads)
+        scopes = ' '.join(row['scope'] for row in trace['input_scopes'])
+        self.assertNotIn('repo_currency', scopes)
+        self.assertNotIn('workflow_revision_check', scopes)
+        self.assertNotIn('load `salesforce`', scopes)
+
+    def test_pace_keeps_read_only_inputs_and_due_learning_is_separate(self):
+        trace = contract_trace('forecast-weekly', self.contract, ROOT, 'pace-and-forward')
+        reads = trace['actual_local_reads']
+        for stem in ('manager-update', 'collect', 'buckets', 'compute', 'deck', 'learning'):
+            self.assertNotIn(f'workspaces/forecasting/workflows/forecast-weekly/references/{stem}.md', reads)
+        self.assertIn('workspaces/forecasting/workflows/forecast-weekly/references/tracking.md', reads)
+        scopes = ' '.join(row['scope'] for row in trace['input_scopes'])
+        self.assertNotIn('repo_currency', scopes)
+        self.assertNotIn('forecast_deck', scopes)
+        due = contract_trace('forecast-weekly', self.contract, ROOT, 'incomplete-and-learning')
+        self.assertIn('workspaces/forecasting/workflows/forecast-weekly/references/learning.md', due['actual_local_reads'])
 
 
 if __name__ == '__main__':

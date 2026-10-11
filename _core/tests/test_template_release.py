@@ -26,7 +26,7 @@ class TemplateReleaseTests(unittest.TestCase):
         policy=yaml.safe_load((ROOT/'_core/policy.yaml').read_text())
         self.assertEqual(policy['template']['mode'],'unconfigured')
         self.assertFalse(policy['template']['external_ready'])
-        self.assertFalse(policy['template']['auto_date_move'])
+        self.assertNotIn('auto_date_move', policy['template'])
         self.assertFalse(policy['prospecting']['approval']['unattended_writes'])
         self.assertEqual(policy['forecast']['targets'],{})
         self.assertEqual(policy['forecast']['target_default'],250000)

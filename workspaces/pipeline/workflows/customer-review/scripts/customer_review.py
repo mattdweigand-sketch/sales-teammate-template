@@ -1,13 +1,14 @@
-"""Read-only customer milestones and independent renewal notices from complete saved evidence.
+"""Read-only customer milestones from complete saved evidence.
 
 Needs policy.pipeline.customer_review: schedule, milestone_months,
-renewal_notice_days, expansion_type and expansion_stage. Scheduled --window-start is
+expansion_type and expansion_stage. Scheduled --window-start is
 the last scheduled receipt's as_of, never a platform completion flag. Without
 it, use the previous policy occurrence. --carry-forward and --reviewed take
 receipt-derived JSON lists; one Account selector runs on-demand, without
 moving the scheduled window. --milestone-months explicitly reassesses a milestone.
 usage_ready requires complete roster, weekly trend and feature mix for a due row.
 Billed seats may be unknown. Buyer context never controls usage readiness.
+Legacy renewal receipt entries are ignored. No renewal notices or holds are produced.
 """
 import argparse
 import calendar
@@ -62,11 +63,14 @@ def schedule_occurrence(moment, schedule, direction, inclusive=False):
     raise ValueError("no policy schedule occurrence found")
 
 
-def receipt_entries(entries, months, reviewed=False):
+def receipt_entries(entries, months, timezone, reviewed=False):
     if not isinstance(entries, list):
         raise ValueError("receipt entries must be a JSON list")
     result = {}
     for entry in entries:
+        # Old receipts remain readable without retaining removed renewal work.
+        if isinstance(entry, dict) and entry.get("kind") == "renewal":
+            continue
         if not isinstance(entry, dict) or not isinstance(entry.get("account_id"), str) or not entry["account_id"]:
             raise ValueError("receipt entry needs account_id")
         count = entry.get("milestone_months")
@@ -80,6 +84,8 @@ def receipt_entries(entries, months, reviewed=False):
             timestamp = datetime.fromisoformat(entry["receipt_date"])
             if timestamp.utcoffset() is None:
                 raise ValueError("reviewed receipt_date needs an offset")
+            if timestamp.astimezone(timezone).date() < date.fromisoformat(milestone_date):
+                raise ValueError("reviewed receipt_date cannot be before its milestone")
         key = (entry["account_id"], count, milestone_date)
         if key not in result or reviewed and datetime.fromisoformat(entry["receipt_date"]) > datetime.fromisoformat(result[key]["receipt_date"]):
             result[key] = dict(entry)
@@ -143,7 +149,6 @@ def review_customers(evidence, as_of, policy, window_start=None, account_id=None
         raise ValueError("--window-start must be before --as-of")
     window = {"window_start": start.isoformat() if start else None, "as_of": moment.isoformat(),
               "source": "on_demand" if on_demand else "scheduled_receipt" if window_start is not None else "previous_policy_occurrence"}
-    next_run = schedule_occurrence(moment, settings["schedule"], 1)
     months = settings["milestone_months"]
     if not isinstance(months, list) or not months:
         raise ValueError("milestone_months must be a nonempty list")
@@ -151,8 +156,8 @@ def review_customers(evidence, as_of, policy, window_start=None, account_id=None
         calendar_months_after(today, count)
     if months != sorted(set(months)) or milestone_months is not None and milestone_months not in months:
         raise ValueError("milestone_months must be unique, increasing policy values")
-    carried = receipt_entries([] if carry_forward is None else carry_forward, months)
-    reviewed_entries = receipt_entries([] if reviewed is None else reviewed, months, reviewed=True)
+    carried = receipt_entries([] if carry_forward is None else carry_forward, months, timezone)
+    reviewed_entries = receipt_entries([] if reviewed is None else reviewed, months, timezone, reviewed=True)
     if any(local_moment(entry["receipt_date"], timezone) > moment for entry in reviewed_entries.values()):
         raise ValueError("reviewed receipt_date cannot be in the future")
     if evidence.get("accounts_complete") is not True or evidence.get("opportunities_complete") is not True:
@@ -191,7 +196,7 @@ def review_customers(evidence, as_of, policy, window_start=None, account_id=None
         if len(owned) != 1:
             raise ValueError("on-demand requires exactly one named owned Account")
     output, handled = [], set()
-    not_due_count = subscription_date_needs_input_count = excluded_count = 0
+    not_due_count = excluded_count = 0
     for account in owned:
         identifier = account["Id"]
         related = by_account.get(identifier, [])
@@ -205,7 +210,7 @@ def review_customers(evidence, as_of, policy, window_start=None, account_id=None
                "won_opportunity_ids": sorted(record["Id"] for record in won), "open_opportunity_ids": open_ids,
                "action_route": "pipeline_hygiene" if open_ids else "customer_review",
                "anchor": None, "anchor_evidence": [], "milestone": None, "superseded": [], "already_reviewed": [],
-               "renewals": [], "usage": None, "usage_ready": False, "needs_input": list(conflicts.get(identifier, []))}
+               "usage": None, "usage_ready": False, "needs_input": list(conflicts.get(identifier, []))}
         dates = []
         if not won:
             row["needs_input"].append("first verified non-trial Closed Won anchor missing")
@@ -220,19 +225,6 @@ def review_customers(evidence, as_of, policy, window_start=None, account_id=None
                 dates.append((closed, record["Id"]))
             except (ValueError, TypeError):
                 row["needs_input"].append(f"{record['Id']}: missing or invalid Closed Won CloseDate or non-trial status")
-            end = record.get("Subscription_Cancel_Date__c")
-            try:
-                end_date = date.fromisoformat(end)
-            except (ValueError, TypeError):
-                row["needs_input"].append(f"{record['Id']}: Subscription End Date missing or invalid")
-                continue
-            notice = end_date - timedelta(days=settings["renewal_notice_days"])
-            notice_moment = datetime.combine(notice, datetime.min.time(), timezone)
-            eligible = on_demand or start < notice_moment <= moment or moment < notice_moment <= next_run
-            status = "notice window passed" if notice < today else "proposal candidate" if eligible else "not_due"
-            row["renewals"].append({"opportunity_id": record["Id"], "subscription_end_date": end_date.isoformat(),
-                                    "notice_date": notice.isoformat(), "status": status, "in_review_window": eligible,
-                                    "task_due_date": notice.isoformat() if eligible and notice >= today else None})
         if not conflicts.get(identifier) and len(dates) == len(won) and dates:
             earliest = min(closed for closed, opportunity_id in dates)
             row["anchor"] = {"date": earliest.isoformat(), "opportunity_ids": sorted(
@@ -246,10 +238,9 @@ def review_customers(evidence, as_of, policy, window_start=None, account_id=None
             if row["milestone"]["status"] == "due" or row["already_reviewed"]:
                 handled.add((identifier, None, None))
         selected = (on_demand or carried_account or row["anchor"] is None or row["already_reviewed"] or row["superseded"]
-                    or row["milestone"]["status"] == "due" or any(item["in_review_window"] for item in row["renewals"]))
+                    or row["milestone"]["status"] == "due")
         if not selected:
             not_due_count += 1
-            subscription_date_needs_input_count += any("Subscription End Date" in reason for reason in row["needs_input"])
             continue
         try:
             row["org_uuid"] = resolve_org(account)
@@ -295,7 +286,7 @@ def review_customers(evidence, as_of, policy, window_start=None, account_id=None
                    for key, entry in carried.items() if key not in handled] if not on_demand else []
     return {"as_of_date": today.isoformat(), "mode": "on_demand" if on_demand else "scheduled", "window": window,
             "accounts": output, "skipped": [], "not_due_count": not_due_count, "excluded_count": excluded_count,
-            "subscription_date_needs_input_count": subscription_date_needs_input_count, "carry_forward_held": outstanding,
+            "carry_forward_held": outstanding,
             "expansion_type": settings["expansion_type"], "expansion_stage": settings["expansion_stage"], "writes": []}
 
 
