@@ -98,6 +98,7 @@ These eligibility settings stay in policy. Integration metadata and local setup 
 ## Thread delivery
 
 The included Perplexity adapter verifies current-project thread identity and record linkage before routing evidence.
+Deal-thread setup follows Pipeline AGENTS.md "Deal thread". Buyer-email and channel watch prompts select their section in `workspaces/pipeline/references/watches.md`.
 Use the discovered native teammate mail capability once. Record its actual receipt and transport outside Git.
 A queued or submitted receipt proves submission only.
 Failed, unavailable or unattempted delivery retains the pending destination and text. No automatic retry. Missing discovery or delivery capabilities hold the affected handoff.

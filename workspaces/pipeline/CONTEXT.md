@@ -53,4 +53,5 @@ Load only the sections named by the selected contract's Inputs or rules.
 | `references/org-lookup.md` | Field mappings and dated evidence behind `rules#org_lookup` | Operator, by hand |
 | `references/pilot-usage-queries.md` | Read-only usage queries shared by pilot-usage and customer-review | Pipeline requirements, Systems implementation |
 | `references/triggers.md`, `references/deal-activity-reads.md` | Shared trigger definitions and native deal-activity reads | Pipeline requirements, Systems implementation |
+| `references/watches.md` | Buyer-email and shared-channel watch procedure. Each prompt selects one section. Runtime IDs, admission lists and exceptions stay in live settings | Pipeline requirements, Systems implementation |
 | `scripts/` | account_usage, deal_thread_match, gmail_contact_stats, task_reschedule_check and top_actions helpers shared by Pipeline workflows. Paths and interfaces stay in the repo-wide helper catalog | Operator, with tests |

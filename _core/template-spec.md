@@ -2,7 +2,7 @@
 
 Approved scope is a new generalized template, local and GitHub repositories, complete onboarding, and a scratch simulation of every workflow.
 The source checkout is unchanged. The template has independent Git history.
-This complete port uses source revision `0e887c70104d5d205a8e03c5a1c10642dee6e4cc`. Source history, tenant configuration, collateral and capture records remain excluded.
+This complete port uses source revision `1485ecfef0e241d62b26c8201b88106e41c1c7ff`. Source history, tenant configuration, collateral and capture records remain excluded.
 
 ## Audience and destination
 
