@@ -49,6 +49,25 @@ Use writer=triage with manual_one_deal for these mechanics, including a future c
 Keep `deal_thread_entry` and include those actually consumed sources in the proposal's revision scope. Changed records or scope stop the old approval.
 Apply only the labeled pair's write mechanics from "Writes". No triage batch approval is implied. Other deal changes keep their applicable evidence, approval and readback gates.
 
+## Deal thread
+
+Each deal in a live decision gets one Computer thread in this project, titled `<Account> deal`. Deal work and buyer emails for that Account go there.
+Start it with the `session_new` tool in this project, then set the title. The starting brief names the Opportunity Id, stage, close date, contacts, and what just happened, then gives these steps.
+
+1. Before drafting anything, read the latest messages in the Gmail thread, including Operator's sent mail, and skip any draft Operator already covered.
+2. Build a short brief from Salesforce, Gmail, Calendar, Momentum, and Slack for the last 60 days.
+   Slack means DMs and shared channels with the Account's named contacts, matched by exact email, bots excluded, read-only, each message cited by permalink.
+   A contact with no Slack match is not checked, never silence. Stakeholders, last touch, who owes the next move, risks, next meeting.
+3. Propose stage, close date, Amount and inbound buyer reply drafts as lettered proposals. Make no unprompted Task or next-step proposals, apart from interaction-sync call logging.
+   Triage owns them under `rules#task_date_coordination`. On Operator's typed command, propose any change for this deal per "Typed deal commands" above.
+   Write nothing until Operator approves in that thread.
+4. Resolve Pipeline in the current project per `_core/thread-locators.md` "Teammate thread lookup".
+   After a major change, send a status of three lines or fewer to the Pipeline thread with `pplx tm mail send <verified Pipeline session id> "<status>"`.
+
+Archive a deal thread when its Account has no open S2 to S5 Opportunity, per `policy.pipeline.stages`, after Operator approves. The Salesforce follow-up Task carries it from there.
+Retained-thread exceptions are runtime evidence in Operator's approving turns, the live watch-sync automation prompt and the live Pipeline profile, never in Git.
+Watch-sync reads them and proposes archives per `workspaces/pipeline/workflows/watch-sync/references/reconcile.md` "Read" and "Compare and route". Thread create or archive needs Operator's approval.
+
 ## Other handoffs
 
 Verified Salesforce corrections from pipeline-review feed Forecasting. That workspace reads the corrected records under its own contract.
